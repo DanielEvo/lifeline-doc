@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Activity, ArrowRight, Heart, Quote, Sparkles } from "lucide-react";
+import { Activity, ArrowRight, Heart, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImpactStatsSection } from "@/components/impact-stats";
+import { TestimonialCarousel } from "@/components/testimonial-carousel";
 
 export const Route = createFileRoute("/sobre")({
   head: () => ({
