@@ -241,7 +241,7 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
             disabled={busy || step < 1 || step >= 2}
             onClick={() => runStep(2)}
             title="Simular envio de PDF de exame"
-            desc="Mariana envia um hemograma. O sistema mostra o badge \"Lendo laudo via OCR e atualizando gráficos…\"."
+            desc="Mariana envia um hemograma. O sistema mostra o badge “Lendo laudo via OCR e atualizando gráficos…”."
           />
           <ActionButton
             n={3}
