@@ -22,7 +22,7 @@ function SobrePage() {
       <Header />
       <Hero />
       <Manifesto />
-      <Testimonial />
+      <TestimonialCarousel />
       <ImpactStatsSection
         eyebrow="O incêndio que ninguém vê"
         title="60% dos dados em saúde, perdidos. 795 mil vidas, por ano."
@@ -150,34 +150,6 @@ function Manifesto() {
   );
 }
 
-function Testimonial() {
-  return (
-    <section className="border-y border-border bg-muted/40 py-24">
-      <div className="mx-auto max-w-4xl px-6">
-        <div className="relative rounded-3xl bg-card p-10 shadow-xl shadow-primary/5 md:p-14">
-          <Quote className="absolute -top-5 left-8 h-12 w-12 rounded-full bg-primary p-3 text-primary-foreground shadow-lg" />
-          <blockquote className="text-2xl font-medium leading-relaxed tracking-tight text-foreground md:text-3xl">
-            "Eu não me tornei médica para passar metade do meu dia digitando em
-            softwares engessados. Eu me tornei médica para{" "}
-            <span className="text-brand-gradient">cuidar de pessoas</span>. O LifeLine
-            me devolveu o tempo de olhar nos olhos dos meus pacientes."
-          </blockquote>
-          <div className="mt-8 flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full brand-gradient text-lg font-semibold text-primary-foreground">
-              HM
-            </div>
-            <div>
-              <div className="font-semibold">Dra. Helena Moraes</div>
-              <div className="text-sm text-muted-foreground">
-                Endocrinologista · Consultório próprio em São Paulo
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function Founders() {
   const team = [
