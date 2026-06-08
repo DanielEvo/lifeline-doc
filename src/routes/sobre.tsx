@@ -153,9 +153,9 @@ function Manifesto() {
 
 function Founders() {
   const team = [
-    { name: "Rafael Andrade", role: "Engenharia & IA", initials: "RA", tint: "from-cyan-400 to-teal-500" },
-    { name: "Júlia Mendonça", role: "Produto & Design Clínico", initials: "JM", tint: "from-violet-400 to-indigo-500" },
-    { name: "Bruno Tavares", role: "Infraestrutura & Segurança", initials: "BT", tint: "from-emerald-400 to-teal-500" },
+    { name: "Daniel Evo", role: "Engenharia & IA", initials: "DE", tint: "from-cyan-400 to-teal-500" },
+    { name: "Bruno Correia", role: "Produto & Design Clínico", initials: "BC", tint: "from-violet-400 to-indigo-500" },
+    { name: "Gabriel Patryck", role: "Infraestrutura & Segurança", initials: "GP", tint: "from-emerald-400 to-teal-500" },
   ];
   return (
     <section className="py-24">
@@ -166,8 +166,9 @@ function Founders() {
             Três fundadores. Um compromisso clínico.
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Engenheiros, designers e pesquisadores que escolheram dedicar suas
-            carreiras a uma única pergunta: como devolver tempo a quem cuida?
+            Engenheiros que escolheram dedicar suas carreiras a uma única
+            pergunta: como devolver tempo a quem cuida e qualidade a quem é
+            cuidado?
           </p>
         </div>
         <div className="mt-14 grid gap-6 md:grid-cols-3">
@@ -197,7 +198,7 @@ function CTASection() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-muted/40 to-background" />
       <div className="mx-auto max-w-3xl px-6 text-center">
         <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          Junte-se ao movimento que devolve o tempo à medicina.
+          Junte-se ao movimento que devolve tempo aos médicos e qualidade à medicina .
         </h2>
         <p className="mt-4 text-muted-foreground">
           Veja em 3 minutos como o LifeLine elimina o turno invisível.
