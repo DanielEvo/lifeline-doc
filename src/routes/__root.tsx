@@ -81,10 +81,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "LifeLine — Ecossistema médico inteligente para consultórios" },
       { name: "description", content: "Triagem por IA via WhatsApp, prontuário SOAP em linha do tempo e Kanban clínico. Tudo integrado em uma plataforma." },
       { name: "author", content: "LifeLine" },
-      { property: "og:title", content: "LifeLine — Ecossistema médico inteligente" },
-      { property: "og:description", content: "Elimine o trabalho administrativo invisível do seu consultório." },
+      { property: "og:title", content: "LifeLine — Ecossistema médico inteligente para consultórios" },
+      { property: "og:description", content: "Triagem por IA via WhatsApp, prontuário SOAP em linha do tempo e Kanban clínico. Tudo integrado em uma plataforma." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "LifeLine — Ecossistema médico inteligente para consultórios" },
+      { name: "twitter:description", content: "Triagem por IA via WhatsApp, prontuário SOAP em linha do tempo e Kanban clínico. Tudo integrado em uma plataforma." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/669276ed-c95a-4eba-abe1-f7ffba144d92/id-preview-6b4bae29--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app-1780888911004.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/669276ed-c95a-4eba-abe1-f7ffba144d92/id-preview-6b4bae29--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app-1780888911004.png" },
     ],
     links: [
       {
