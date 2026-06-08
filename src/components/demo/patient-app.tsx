@@ -180,7 +180,7 @@ export function PatientAppMockup({ onRestart }: { onRestart: () => void }) {
                 </div>
               </div>
 
-              <div className="min-h-[640px]">
+              <div className="h-[640px] overflow-y-auto overscroll-contain [scrollbar-width:thin]">
                 {screen === "home" && (
                   <HomeScreen
                     totalXP={totalXP}
