@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -275,15 +275,34 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
-export function PatientTimelineSOAP({ onSeal }: { onSeal: () => void }) {
+export function PatientTimelineSOAP({
+  onSeal,
+  initialQuest,
+  initialPanel,
+}: {
+  onSeal: () => void;
+  initialQuest?: string;
+  initialPanel?: string;
+}) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
   const [diag, setDiag] = useState("");
   const [plano, setPlano] = useState("");
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
-  const [activeQuest, setActiveQuest] = useState<string>("q2026");
-  const [activePanel, setActivePanel] = useState<string>("hemo");
+  const [activeQuest, setActiveQuest] = useState<string>(initialQuest ?? "q2026");
+  const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
+  const [arrivalPulse, setArrivalPulse] = useState<boolean>(
+    Boolean(initialQuest || initialPanel),
+  );
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!arrivalPulse) return;
+    timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t = setTimeout(() => setArrivalPulse(false), 2400);
+    return () => clearTimeout(t);
+  }, [arrivalPulse]);
 
   const panel = useMemo(
     () => PANELS.find((p) => p.id === activePanel)!,
