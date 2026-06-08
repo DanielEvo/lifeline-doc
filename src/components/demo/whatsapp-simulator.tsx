@@ -193,7 +193,7 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
               {/* Messages */}
               <div
                 ref={scrollRef}
-                className="h-[480px] space-y-2 overflow-y-auto bg-[#e5ddd5] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><circle cx=%2210%22 cy=%2210%22 r=%221%22 fill=%22%23d4cdc4%22/></svg>')] px-3 py-4"
+                className="h-[480px] space-y-2 overflow-y-auto bg-[#e5ddd5] px-3 py-4"
               >
                 {messages.length === 0 && (
                   <div className="mt-12 text-center text-xs text-slate-500">
