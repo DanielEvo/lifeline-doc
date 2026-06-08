@@ -20,13 +20,23 @@ import { useDemo } from "@/lib/demo-store";
 
 const TAB_IDS = ["whatsapp", "kanban", "timeline", "patient"] as const;
 type TabId = (typeof TAB_IDS)[number];
+const QUEST_IDS = ["q2023", "q2024", "q2025", "q2026"] as const;
+type QuestId = (typeof QUEST_IDS)[number];
+const PANEL_IDS = ["hemo", "vit", "bio"] as const;
+type PanelId = (typeof PANEL_IDS)[number];
 
 export const Route = createFileRoute("/demo")({
-  validateSearch: (search: Record<string, unknown>): { tab?: TabId } => {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: TabId; quest?: QuestId; panel?: PanelId } => {
+    const out: { tab?: TabId; quest?: QuestId; panel?: PanelId } = {};
     const t = search.tab;
-    return typeof t === "string" && (TAB_IDS as readonly string[]).includes(t)
-      ? { tab: t as TabId }
-      : {};
+    if (typeof t === "string" && (TAB_IDS as readonly string[]).includes(t)) out.tab = t as TabId;
+    const q = search.quest;
+    if (typeof q === "string" && (QUEST_IDS as readonly string[]).includes(q)) out.quest = q as QuestId;
+    const p = search.panel;
+    if (typeof p === "string" && (PANEL_IDS as readonly string[]).includes(p)) out.panel = p as PanelId;
+    return out;
   },
   head: () => ({
     meta: [
@@ -46,7 +56,7 @@ function DemoPage() {
 }
 
 function DemoShell() {
-  const { tab: initialTab } = Route.useSearch();
+  const { tab: initialTab, quest: initialQuest, panel: initialPanel } = Route.useSearch();
   const [tab, setTab] = useState<TabId>(initialTab ?? "whatsapp");
   const { resetChat } = useDemo();
 
@@ -145,7 +155,13 @@ function DemoShell() {
       <main className="flex-1 overflow-x-hidden">
         {tab === "whatsapp" && <WhatsAppSimulator onComplete={() => setTab("kanban")} />}
         {tab === "kanban" && <KanbanBoard onOpenPatient={() => setTab("timeline")} />}
-        {tab === "timeline" && <PatientTimelineSOAP onSeal={() => setTab("patient")} />}
+        {tab === "timeline" && (
+          <PatientTimelineSOAP
+            onSeal={() => setTab("patient")}
+            initialQuest={initialQuest}
+            initialPanel={initialPanel}
+          />
+        )}
         {tab === "patient" && <PatientAppMockup onRestart={() => setTab("whatsapp")} />}
       </main>
     </div>
