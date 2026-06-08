@@ -395,7 +395,7 @@ export function PatientTimelineSOAP({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[460px_1fr]">
         {/* ---------- LEFT: Gamified vertical timeline ---------- */}
-        <div className="rounded-3xl border border-border bg-gradient-to-b from-card via-card to-cyan-50/40 p-6">
+        <div ref={timelineRef} className="rounded-3xl border border-border bg-gradient-to-b from-card via-card to-cyan-50/40 p-6">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
