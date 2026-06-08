@@ -22,7 +22,11 @@ export const IMPACT_STATS: ImpactStat[] = [
     description: "Silos, papel e softwares que não conversam entre si. A informação existe — mas nunca chega na hora da decisão.",
     icon: Database,
     tint: "from-cyan-400 to-teal-500",
-    cta: { label: "Ver a Linha do Tempo do LifeLine", to: "/demo", search: { tab: "timeline" } },
+    cta: {
+      label: "Ver a Linha do Tempo completa (3 anos)",
+      to: "/demo",
+      search: { tab: "timeline", quest: "q2023", panel: "hemo" },
+    },
   },
   {
     value: 48,
@@ -31,7 +35,11 @@ export const IMPACT_STATS: ImpactStat[] = [
     description: "O paradoxo da informação: instituições enviam, poucas integram. O paciente vira mensageiro do próprio prontuário.",
     icon: HeartPulse,
     tint: "from-violet-400 to-indigo-500",
-    cta: { label: "Ver o App do Paciente unificado", to: "/demo", search: { tab: "patient" } },
+    cta: {
+      label: "Ver o App do Paciente unificado",
+      to: "/demo",
+      search: { tab: "patient" },
+    },
   },
   {
     value: 42,
@@ -40,7 +48,11 @@ export const IMPACT_STATS: ImpactStat[] = [
     description: "O fenômeno do '1.2 FTE': jornadas extras invisíveis (pajama time) só para digitar papelada. Cuidar virou minoria do dia.",
     icon: Brain,
     tint: "from-emerald-400 to-teal-500",
-    cta: { label: "Ver o Kanban que devolve tempo", to: "/demo", search: { tab: "kanban" } },
+    cta: {
+      label: "Ver o Kanban que devolve tempo",
+      to: "/demo",
+      search: { tab: "kanban" },
+    },
   },
   {
     value: 795000,
@@ -48,7 +60,11 @@ export const IMPACT_STATS: ImpactStat[] = [
     description: "A maioria evitável com cruzamento histórico de exames. Quando a linha do tempo está completa, o diagnóstico chega antes.",
     icon: AlertTriangle,
     tint: "from-rose-400 to-orange-500",
-    cta: { label: "Simular triagem por IA no WhatsApp", to: "/demo", search: { tab: "whatsapp" } },
+    cta: {
+      label: "Ver o checkpoint de alerta (Hb · 2026)",
+      to: "/demo",
+      search: { tab: "timeline", quest: "q2026", panel: "hemo" },
+    },
   },
 ];
 
