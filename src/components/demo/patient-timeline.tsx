@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -275,15 +275,34 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
-export function PatientTimelineSOAP({ onSeal }: { onSeal: () => void }) {
+export function PatientTimelineSOAP({
+  onSeal,
+  initialQuest,
+  initialPanel,
+}: {
+  onSeal: () => void;
+  initialQuest?: string;
+  initialPanel?: string;
+}) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
   const [diag, setDiag] = useState("");
   const [plano, setPlano] = useState("");
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
-  const [activeQuest, setActiveQuest] = useState<string>("q2026");
-  const [activePanel, setActivePanel] = useState<string>("hemo");
+  const [activeQuest, setActiveQuest] = useState<string>(initialQuest ?? "q2026");
+  const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
+  const [arrivalPulse, setArrivalPulse] = useState<boolean>(
+    Boolean(initialQuest || initialPanel),
+  );
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!arrivalPulse) return;
+    timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t = setTimeout(() => setArrivalPulse(false), 2400);
+    return () => clearTimeout(t);
+  }, [arrivalPulse]);
 
   const panel = useMemo(
     () => PANELS.find((p) => p.id === activePanel)!,
@@ -376,7 +395,7 @@ export function PatientTimelineSOAP({ onSeal }: { onSeal: () => void }) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[460px_1fr]">
         {/* ---------- LEFT: Gamified vertical timeline ---------- */}
-        <div className="rounded-3xl border border-border bg-gradient-to-b from-card via-card to-cyan-50/40 p-6">
+        <div ref={timelineRef} className="rounded-3xl border border-border bg-gradient-to-b from-card via-card to-cyan-50/40 p-6">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -409,7 +428,7 @@ export function PatientTimelineSOAP({ onSeal }: { onSeal: () => void }) {
                     onClick={() => setActiveQuest(q.id)}
                     className={`group relative flex w-full items-stretch gap-4 rounded-2xl border p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
                       isActive
-                        ? "border-cyan-400 bg-white shadow-md ring-2 ring-cyan-200"
+                        ? `border-cyan-400 bg-white shadow-md ring-2 ring-cyan-200 ${arrivalPulse ? "ring-4 ring-cyan-400 animate-pulse" : ""}`
                         : "border-border bg-white/70 hover:border-cyan-300"
                     }`}
                   >
