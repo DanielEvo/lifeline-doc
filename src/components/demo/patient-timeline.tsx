@@ -428,7 +428,7 @@ export function PatientTimelineSOAP({
                     onClick={() => setActiveQuest(q.id)}
                     className={`group relative flex w-full items-stretch gap-4 rounded-2xl border p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
                       isActive
-                        ? "border-cyan-400 bg-white shadow-md ring-2 ring-cyan-200"
+                        ? `border-cyan-400 bg-white shadow-md ring-2 ring-cyan-200 ${arrivalPulse ? "ring-4 ring-cyan-400 animate-pulse" : ""}`
                         : "border-border bg-white/70 hover:border-cyan-300"
                     }`}
                   >
