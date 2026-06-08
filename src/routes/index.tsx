@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ImpactStatsSection } from "@/components/impact-stats";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -35,6 +36,7 @@ function Landing() {
       <Header />
       <Hero />
       <ValueGrid />
+      <ImpactStatsSection />
       <FlowStrip />
       <LeadForm />
       <Footer />
@@ -55,7 +57,7 @@ function Header() {
         <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
           <a href="#features" className="transition hover:text-foreground">Features</a>
           <a href="#flow" className="transition hover:text-foreground">Como funciona</a>
-          <a href="#pricing" className="transition hover:text-foreground">Pricing</a>
+          <Link to="/sobre" className="transition hover:text-foreground">Sobre</Link>
           <a href="#lead" className="transition hover:text-foreground">Contato</a>
         </nav>
         <Link to="/demo">

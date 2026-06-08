@@ -18,7 +18,16 @@ import { PatientTimelineSOAP } from "@/components/demo/patient-timeline";
 import { PatientAppMockup } from "@/components/demo/patient-app";
 import { useDemo } from "@/lib/demo-store";
 
+const TAB_IDS = ["whatsapp", "kanban", "timeline", "patient"] as const;
+type TabId = (typeof TAB_IDS)[number];
+
 export const Route = createFileRoute("/demo")({
+  validateSearch: (search: Record<string, unknown>): { tab?: TabId } => {
+    const t = search.tab;
+    return typeof t === "string" && (TAB_IDS as readonly string[]).includes(t)
+      ? { tab: t as TabId }
+      : {};
+  },
   head: () => ({
     meta: [
       { title: "LifeLine · Demo Interativa" },
@@ -27,8 +36,6 @@ export const Route = createFileRoute("/demo")({
   }),
   component: DemoPage,
 });
-
-type TabId = "whatsapp" | "kanban" | "timeline" | "patient";
 
 function DemoPage() {
   return (
@@ -39,7 +46,8 @@ function DemoPage() {
 }
 
 function DemoShell() {
-  const [tab, setTab] = useState<TabId>("whatsapp");
+  const { tab: initialTab } = Route.useSearch();
+  const [tab, setTab] = useState<TabId>(initialTab ?? "whatsapp");
   const { resetChat } = useDemo();
 
   const nav = [
