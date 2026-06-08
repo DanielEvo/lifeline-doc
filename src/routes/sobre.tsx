@@ -91,7 +91,7 @@ function Hero() {
           <span className="text-white/60">existe um médico exausto.</span>
         </h1>
         <p className="mt-8 max-w-2xl text-lg leading-relaxed text-white/65">
-          O LifeLine não nasceu de uma planilha de negócios. Nasceu da incredulidade
+          O LifeLine não nasceu de uma planilha de negócios. Nasceu da indignação
           de ver pessoas que dedicam a vida a cuidar dos outros sendo consumidas por
           papelada, softwares engessados e dados desconectados.
         </p>
