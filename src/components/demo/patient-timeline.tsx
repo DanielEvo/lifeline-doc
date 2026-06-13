@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Lightbulb,
   Lock,
+  KeyRound,
   Mail,
   Mic,
   MicOff,
