@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, FileCheck2, MessageSquareText, MoreHorizontal, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, FileCheck2, MessageSquareText, MoreHorizontal, Pill, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useDemo, COLUMNS, type KanbanColumnId, type PatientCard } from "@/lib/demo-store";
