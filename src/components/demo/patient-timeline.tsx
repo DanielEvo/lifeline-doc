@@ -501,6 +501,17 @@ export function PatientTimelineSOAP({
                 </span>
               );
             })}
+            <button
+              onClick={() => setAccessModal(true)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 transition ${
+                historyUnlocked
+                  ? "bg-emerald-500/20 text-emerald-100 ring-emerald-300/40"
+                  : "bg-white/10 text-white/90 ring-white/20 hover:bg-white/20"
+              }`}
+            >
+              <KeyRound className="h-3 w-3" />
+              {historyUnlocked ? "Histórico autorizado" : "Solicitar acesso ao histórico"}
+            </button>
           </div>
 
         </div>
