@@ -13,7 +13,8 @@ export type KanbanColumnId =
   | "triagem"
   | "atendimento"
   | "aguardando"
-  | "recebidos";
+  | "retorno"
+  | "estavel";
 
 export type PatientCard = {
   id: string;
@@ -26,6 +27,8 @@ export type PatientCard = {
   examsCount: number;
   initials: string;
   tint: string;
+  criticalFlag?: string;
+  adherence?: number;
 };
 
 type Store = {
