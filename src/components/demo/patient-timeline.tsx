@@ -1176,7 +1176,7 @@ function SoapBlock({
               : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
           }`}
         >
-          <Save className="h-3 w-3" />
+          {locked ? <Pencil className="h-3 w-3" /> : <Save className="h-3 w-3" />}
           {locked ? "Editar" : "Salvar"}
         </button>
       </div>
