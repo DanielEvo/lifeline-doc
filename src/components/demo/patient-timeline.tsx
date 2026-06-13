@@ -294,7 +294,7 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
-const STATUS_FILTERS: EventStatus[] = ["Saudável", "Em atendimento", "Atenção"];
+
 
 export function PatientTimelineSOAP({
   onSeal,
