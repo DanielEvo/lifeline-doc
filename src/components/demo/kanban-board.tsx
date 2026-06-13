@@ -129,8 +129,14 @@ function Card({
         </div>
       </div>
 
-      {(p.hasBriefing || p.hasExams) && (
+      {(p.hasBriefing || p.hasExams || p.criticalFlag || typeof p.adherence === "number") && (
         <div className="mt-3 flex flex-wrap gap-1.5">
+          {p.criticalFlag && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-800 ring-1 ring-red-200">
+              <AlertTriangle className="h-2.5 w-2.5" />
+              Parâmetro crítico · {p.criticalFlag}
+            </span>
+          )}
           {p.hasBriefing && (
             <span className="inline-flex items-center gap-1 rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-medium text-cyan-800 ring-1 ring-cyan-200 animate-pulse">
               <Sparkles className="h-2.5 w-2.5" />
@@ -141,6 +147,18 @@ function Card({
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800 ring-1 ring-emerald-200">
               <FileCheck2 className="h-2.5 w-2.5" />
               {p.examsCount} exame{p.examsCount > 1 ? "s" : ""} anexado{p.examsCount > 1 ? "s" : ""}
+            </span>
+          )}
+          {typeof p.adherence === "number" && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${
+                p.adherence < 60
+                  ? "bg-amber-100 text-amber-800 ring-amber-200"
+                  : "bg-slate-100 text-slate-700 ring-slate-200"
+              }`}
+            >
+              <Pill className="h-2.5 w-2.5" />
+              {p.adherence}% adesão hoje
             </span>
           )}
         </div>
