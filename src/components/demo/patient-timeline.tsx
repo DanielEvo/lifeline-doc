@@ -402,33 +402,27 @@ export function PatientTimelineSOAP({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {STATUS_FILTERS.map((s) => {
-              const active = s === currentStatus;
-              const color =
-                s === "Saudável"
-                  ? active
-                    ? "bg-emerald-500/30 text-emerald-100 ring-emerald-300/60"
-                    : "bg-white/5 text-white/40 ring-white/10"
-                  : s === "Em acompanhamento" as never
-                  ? active
-                    ? "bg-sky-500/30 text-sky-100 ring-sky-300/60"
-                    : "bg-white/5 text-white/40 ring-white/10"
-                  : s === "Atenção"
-                  ? active
-                    ? "bg-orange-500/30 text-orange-100 ring-orange-300/60"
-                    : "bg-white/5 text-white/40 ring-white/10"
-                  : "bg-white/5 text-white/40 ring-white/10";
-              const label = s === "Em atendimento" ? "Em acompanhamento" : s;
+            {(
+              [
+                { key: "Saudável", active: "bg-emerald-500/30 text-emerald-100 ring-emerald-300/60" },
+                { key: "Em acompanhamento", active: "bg-sky-500/30 text-sky-100 ring-sky-300/60" },
+                { key: "Atenção", active: "bg-orange-500/30 text-orange-100 ring-orange-300/60" },
+              ] as const
+            ).map((p) => {
+              const isActive = p.key === currentStatus;
               return (
                 <span
-                  key={s}
-                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 ${color}`}
+                  key={p.key}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 ${
+                    isActive ? p.active : "bg-white/5 text-white/40 ring-white/10"
+                  }`}
                 >
-                  {label}
+                  {p.key}
                 </span>
               );
             })}
           </div>
+
         </div>
       </div>
 
