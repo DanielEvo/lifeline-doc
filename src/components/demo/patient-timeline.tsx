@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Lightbulb,
   Lock,
+  KeyRound,
   Mail,
   Mic,
   MicOff,
@@ -376,6 +377,24 @@ export function PatientTimelineSOAP({
     Boolean(initialQuest || initialPanel),
   );
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [accessModal, setAccessModal] = useState(false);
+  const [tokenA, setTokenA] = useState("");
+  const [tokenB, setTokenB] = useState("");
+  const [historyUnlocked, setHistoryUnlocked] = useState(false);
+
+  const validateToken = () => {
+    const a = tokenA.trim().toUpperCase();
+    const b = tokenB.trim().toUpperCase();
+    if (a.length >= 3 && b.length >= 3) {
+      setHistoryUnlocked(true);
+      setAccessModal(false);
+      toast.success("Acesso autorizado ✓", {
+        description: "Histórico completo de Mariana carregado.",
+      });
+    } else {
+      toast.error("Token expirado. Peça ao paciente gerar um novo.");
+    }
+  };
 
   useEffect(() => {
     if (!subjective) setSubjective(PREFILL_S);
@@ -482,6 +501,17 @@ export function PatientTimelineSOAP({
                 </span>
               );
             })}
+            <button
+              onClick={() => setAccessModal(true)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 transition ${
+                historyUnlocked
+                  ? "bg-emerald-500/20 text-emerald-100 ring-emerald-300/40"
+                  : "bg-white/10 text-white/90 ring-white/20 hover:bg-white/20"
+              }`}
+            >
+              <KeyRound className="h-3 w-3" />
+              {historyUnlocked ? "Histórico autorizado" : "Solicitar acesso ao histórico"}
+            </button>
           </div>
 
         </div>
@@ -942,6 +972,58 @@ export function PatientTimelineSOAP({
 
       {kbOpen && (
         <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />
+      )}
+
+      {accessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4" onClick={() => setAccessModal(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <KeyRound className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">Solicitar acesso ao histórico</div>
+                <div className="text-[11px] text-muted-foreground">Validação via token LifeLine</div>
+              </div>
+              <button onClick={() => setAccessModal(false)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+              Peça ao paciente que abra o app LifeLine e gere um token em
+              <span className="font-semibold text-foreground"> Perfil → Gerar token para médico</span>.
+              Digite o código de 3 partes abaixo:
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <div className="flex h-10 items-center justify-center rounded-lg bg-muted px-3 font-mono text-sm font-bold text-muted-foreground">
+                LFL
+              </div>
+              <span className="text-muted-foreground">·</span>
+              <input
+                value={tokenA}
+                onChange={(e) => setTokenA(e.target.value.toUpperCase().slice(0, 4))}
+                placeholder="7H2A"
+                className="h-10 w-20 rounded-lg border border-border bg-background text-center font-mono text-sm font-bold tracking-wider focus:border-primary focus:outline-none"
+              />
+              <span className="text-muted-foreground">·</span>
+              <input
+                value={tokenB}
+                onChange={(e) => setTokenB(e.target.value.toUpperCase().slice(0, 4))}
+                placeholder="9KB1"
+                className="h-10 w-20 rounded-lg border border-border bg-background text-center font-mono text-sm font-bold tracking-wider focus:border-primary focus:outline-none"
+              />
+              <button
+                onClick={validateToken}
+                className="ml-auto h-10 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                Validar
+              </button>
+            </div>
+            <p className="mt-3 text-[10px] text-muted-foreground">
+              Tokens expiram em 10 minutos por segurança. Se inválido, peça ao paciente gerar um novo.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
