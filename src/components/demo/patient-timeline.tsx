@@ -2,23 +2,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  Award,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Droplet,
   FileText,
   FlaskConical,
-  Heart,
   Lock,
+  Mic,
+  MicOff,
+  Pencil,
   Pill,
+  Save,
   Search,
   Sparkles,
-  Star,
   Stethoscope,
-  Target,
   TestTube,
-  Trophy,
-  Zap,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -27,6 +27,7 @@ import {
   CartesianGrid,
   ReferenceArea,
   ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -40,45 +41,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDemo } from "@/lib/demo-store";
 import { PageHeader } from "./whatsapp-simulator";
 
-// ---------- Quest checkpoints ----------
-type QuestState = "completed" | "current" | "alert";
-type Quest = {
+// ---------- Clinical timeline entries ----------
+type EventStatus = "Saudável" | "Atenção" | "Alerta" | "Em atendimento";
+type EventType = "consulta" | "exames" | "retorno" | "alerta";
+
+type ClinicalEvent = {
   id: string;
   year: string;
   date: string;
   title: string;
-  subtitle: string;
-  state: QuestState;
-  xp: number;
-  badge: string;
-  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+  type: EventType;
+  status: EventStatus;
   summary: string;
 };
 
-const QUESTS: Quest[] = [
+const EVENTS: ClinicalEvent[] = [
   {
     id: "q2023",
     year: "2023",
     date: "Mar 2023",
-    title: "Check-up de Rotina",
-    subtitle: "Painel anual completo",
-    state: "completed",
-    xp: 120,
-    badge: "Saudável",
-    icon: Heart,
+    title: "Check-up de rotina",
+    description: "Hemograma + bioquímica + vitaminas",
+    type: "exames",
+    status: "Saudável",
     summary:
-      "Painel metabólico completo dentro da faixa ótima. Hb 13.4 · Ferritina 78 · Vit D 38.",
+      "Painel metabólico completo dentro da faixa de referência. Hb 13.4 · Ferritina 78 · Vit D 38.",
   },
   {
     id: "q2024",
     year: "2024",
     date: "Set 2024",
-    title: "Investigação de Fadiga",
-    subtitle: "Hemograma + perfil de ferro",
-    state: "completed",
-    xp: 200,
-    badge: "Alerta inicial",
-    icon: FlaskConical,
+    title: "Investigação de fadiga",
+    description: "Hemograma + perfil de ferro",
+    type: "exames",
+    status: "Atenção",
     summary:
       "Primeira queda significativa de hemoglobina. Ferritina caindo · Vit D limítrofe.",
   },
@@ -86,29 +83,51 @@ const QUESTS: Quest[] = [
     id: "q2025",
     year: "2025",
     date: "Mai 2025",
-    title: "Acompanhamento Metabólico",
-    subtitle: "Bioquímica + vitaminas",
-    state: "completed",
-    xp: 260,
-    badge: "Watchlist",
-    icon: TestTube,
+    title: "Retorno · acompanhamento metabólico",
+    description: "Bioquímica + vitaminas",
+    type: "retorno",
+    status: "Atenção",
     summary:
       "Suplementação iniciada. B12 e Zinco abaixo do ideal. EAS com leucócitos +.",
   },
   {
     id: "q2026",
     year: "2026",
-    date: "Agora · Jun 2026",
-    title: "Triagem Atual",
-    subtitle: "Briefing WhatsApp + 2 exames",
-    state: "alert",
-    xp: 340,
-    badge: "Quest ativa",
-    icon: AlertTriangle,
+    date: "Jun 2026",
+    title: "Consulta atual",
+    description: "Briefing WhatsApp + 2 exames recentes",
+    type: "consulta",
+    status: "Em atendimento",
     summary:
-      "Hb 11.2 · Ferritina 18 · Vit D 19. Queixa de fadiga + dispneia.",
+      "Hb 11.2 · Ferritina 18 · Vit D 19. Queixa de fadiga + dispneia aos esforços.",
   },
 ];
+
+const TYPE_ICON: Record<EventType, React.ComponentType<{ className?: string }>> = {
+  consulta: Stethoscope,
+  exames: FlaskConical,
+  retorno: ClipboardList,
+  alerta: AlertTriangle,
+};
+
+const STATUS_STYLE: Record<EventStatus, { pill: string; node: string }> = {
+  Saudável: {
+    pill: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+    node: "from-emerald-400 to-emerald-600 ring-emerald-100",
+  },
+  Atenção: {
+    pill: "bg-amber-100 text-amber-700 ring-amber-200",
+    node: "from-amber-400 to-orange-500 ring-amber-100",
+  },
+  Alerta: {
+    pill: "bg-rose-100 text-rose-700 ring-rose-200",
+    node: "from-rose-400 to-rose-600 ring-rose-100",
+  },
+  "Em atendimento": {
+    pill: "bg-sky-100 text-sky-700 ring-sky-200",
+    node: "from-sky-400 to-cyan-500 ring-sky-100",
+  },
+};
 
 // ---------- Multi-parameter biomarker data ----------
 type Series = {
@@ -275,6 +294,8 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
+const STATUS_FILTERS: EventStatus[] = ["Saudável", "Em atendimento", "Atenção"];
+
 export function PatientTimelineSOAP({
   onSeal,
   initialQuest,
@@ -290,8 +311,10 @@ export function PatientTimelineSOAP({
   const [plano, setPlano] = useState("");
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
-  const [activeQuest, setActiveQuest] = useState<string>(initialQuest ?? "q2026");
+  const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
   const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
+  const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
   const [arrivalPulse, setArrivalPulse] = useState<boolean>(
     Boolean(initialQuest || initialPanel),
   );
@@ -309,15 +332,34 @@ export function PatientTimelineSOAP({
     [activePanel],
   );
 
-  const totalXp = QUESTS.reduce((a, q) => a + q.xp, 0);
-  const progressPct = Math.min(
-    100,
-    (QUESTS.filter((q) => q.state === "completed").length / QUESTS.length) * 100,
-  );
+  const expanded = useMemo(() => {
+    if (!expandedSeries) return null;
+    for (const p of PANELS) {
+      const s = p.series.find((x) => x.key === expandedSeries);
+      if (s) return s;
+    }
+    return null;
+  }, [expandedSeries]);
 
   const filtered = MED_OPTIONS.filter((m) =>
     m.name.toLowerCase().includes(medSearch.toLowerCase()),
   );
+
+  // Patient overall status — based on most recent event
+  const currentStatus: EventStatus = "Atenção";
+
+  const toggleRecording = () => {
+    setRecording((r) => {
+      const next = !r;
+      toast.success(next ? "Gravação iniciada" : "Gravação finalizada", {
+        description: next
+          ? "Áudio da consulta sendo capturado para transcrição."
+          : "Transcrição será anexada ao prontuário.",
+        icon: next ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />,
+      });
+      return next;
+    });
+  };
 
   const seal = () => {
     setSealed(true);
@@ -328,172 +370,147 @@ export function PatientTimelineSOAP({
     setTimeout(onSeal, 1200);
   };
 
+  // Group events by year for the anchor display
+  const grouped = useMemo(() => {
+    const map = new Map<string, ClinicalEvent[]>();
+    for (const e of EVENTS) {
+      if (!map.has(e.year)) map.set(e.year, []);
+      map.get(e.year)!.push(e);
+    }
+    return Array.from(map.entries());
+  }, []);
+
   return (
     <div className="mx-auto max-w-[1500px] p-6 lg:p-10">
       <PageHeader
         eyebrow="Step C · Mariana Silva · 38 anos"
-        title="Health Quest Timeline & Prontuário SOAP"
-        desc="Toda a jornada clínica de Mariana em um mapa gamificado — checkpoints anuais, biomarcadores multidimensionais e prontuário SOAP ao vivo."
+        title="Linha do Tempo do Paciente & Prontuário SOAP"
+        desc="Histórico clínico longitudinal de Mariana — consultas, exames e biomarcadores — integrado ao prontuário SOAP em tempo real."
       />
 
-      {/* Patient hero / XP bar */}
+      {/* Patient header */}
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 p-6 text-white shadow-xl">
         <div className="flex flex-wrap items-center gap-5">
-          <div className="relative">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-400 to-pink-500 text-xl font-bold shadow-lg ring-4 ring-white/10">
-              MS
-            </div>
-            <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-slate-900 shadow-md">
-              <Trophy className="h-3.5 w-3.5" />
-            </div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-400 to-pink-500 text-xl font-bold shadow-lg ring-4 ring-white/10">
+            MS
           </div>
           <div className="flex-1 min-w-[220px]">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold">Mariana Silva</span>
-              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                LVL 4 · Paciente Engajada
-              </span>
-            </div>
+            <div className="text-lg font-semibold">Mariana Silva</div>
             <div className="text-xs text-white/60">
-              38 anos · F · 3 anos de histórico clínico digital
-            </div>
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-[11px] text-white/70">
-                <span>Quest Progress · {QUESTS.filter((q) => q.state === "completed").length}/{QUESTS.length} checkpoints</span>
-                <span className="flex items-center gap-1">
-                  <Star className="h-3 w-3 text-amber-300" />
-                  {totalXp} XP
-                </span>
-              </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-teal-300 transition-all duration-700"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
+              38 anos · F · Histórico desde Mar 2023
             </div>
           </div>
-          <div className="flex gap-2">
-            {["Saudável", "Watchlist", "Quest ativa"].map((b, i) => (
-              <div
-                key={b}
-                className={`flex flex-col items-center justify-center rounded-xl px-3 py-2 text-[10px] font-medium ${
-                  i === 2
-                    ? "bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40"
-                    : i === 1
-                    ? "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40"
-                    : "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
-                }`}
-              >
-                <Award className="mb-1 h-4 w-4" />
-                {b}
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((s) => {
+              const active = s === currentStatus;
+              const color =
+                s === "Saudável"
+                  ? active
+                    ? "bg-emerald-500/30 text-emerald-100 ring-emerald-300/60"
+                    : "bg-white/5 text-white/40 ring-white/10"
+                  : s === "Em acompanhamento" as never
+                  ? active
+                    ? "bg-sky-500/30 text-sky-100 ring-sky-300/60"
+                    : "bg-white/5 text-white/40 ring-white/10"
+                  : s === "Atenção"
+                  ? active
+                    ? "bg-orange-500/30 text-orange-100 ring-orange-300/60"
+                    : "bg-white/5 text-white/40 ring-white/10"
+                  : "bg-white/5 text-white/40 ring-white/10";
+              const label = s === "Em atendimento" ? "Em acompanhamento" : s;
+              return (
+                <span
+                  key={s}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 ${color}`}
+                >
+                  {label}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[460px_1fr]">
-        {/* ---------- LEFT: Gamified vertical timeline ---------- */}
-        <div ref={timelineRef} className="rounded-3xl border border-border bg-gradient-to-b from-card via-card to-cyan-50/40 p-6">
+        {/* ---------- LEFT: Clinical timeline ---------- */}
+        <div
+          ref={timelineRef}
+          className="rounded-3xl border border-border bg-card p-6"
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Health Quest Map
+                Histórico clínico
               </div>
-              <div className="text-base font-semibold">Linha do Tempo · 2023 → 2026</div>
+              <div className="text-base font-semibold">Linha do tempo · 2023 → 2026</div>
             </div>
-            <div className="flex items-center gap-1 rounded-full bg-cyan-100 px-2.5 py-1 text-[10px] font-medium text-cyan-800">
-              <Target className="h-3 w-3" />
-              4 checkpoints
+            <div className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
+              {EVENTS.length} registros
             </div>
           </div>
 
-          <div className="relative mt-8 pl-2">
-            {/* Central track */}
-            <div className="absolute left-[34px] top-2 bottom-2 w-1.5 rounded-full bg-gradient-to-b from-emerald-300 via-cyan-300 to-rose-300" />
-            <div className="space-y-5">
-              {QUESTS.map((q, idx) => {
-                const Icon = q.icon;
-                const isActive = activeQuest === q.id;
-                const tone =
-                  q.state === "completed"
-                    ? "from-emerald-400 to-emerald-600 ring-emerald-200"
-                    : q.state === "current"
-                    ? "from-cyan-400 to-teal-500 ring-cyan-200"
-                    : "from-rose-400 to-orange-500 ring-rose-200 animate-pulse";
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setActiveQuest(q.id)}
-                    className={`group relative flex w-full items-stretch gap-4 rounded-2xl border p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
-                      isActive
-                        ? `border-cyan-400 bg-white shadow-md ring-2 ring-cyan-200 ${arrivalPulse ? "ring-4 ring-cyan-400 animate-pulse" : ""}`
-                        : "border-border bg-white/70 hover:border-cyan-300"
-                    }`}
-                  >
-                    {/* Node */}
-                    <div className="relative z-10 flex flex-col items-center">
-                      <div
-                        className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${tone} text-white shadow-md ring-4`}
+          <div className="mt-6 space-y-6">
+            {grouped.map(([year, items]) => (
+              <div key={year} className="relative pl-12">
+                {/* Year anchor */}
+                <div className="absolute left-0 top-1 flex h-8 w-9 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white shadow">
+                  {year}
+                </div>
+                <div className="absolute left-[18px] top-10 bottom-0 w-px bg-border" />
+
+                <div className="space-y-3">
+                  {items.map((e) => {
+                    const Icon = TYPE_ICON[e.type];
+                    const isActive = activeEvent === e.id;
+                    const st = STATUS_STYLE[e.status];
+                    return (
+                      <button
+                        key={e.id}
+                        onClick={() => setActiveEvent(e.id)}
+                        className={`relative flex w-full items-stretch gap-3 rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                          isActive
+                            ? `border-cyan-400 bg-white shadow-sm ring-2 ring-cyan-100 ${
+                                arrivalPulse ? "ring-4 ring-cyan-300 animate-pulse" : ""
+                              }`
+                            : "border-border bg-white/70 hover:border-cyan-200"
+                        }`}
                       >
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <span className="mt-1 rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                        {q.year}
-                      </span>
-                    </div>
-                    {/* Card */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold leading-tight">
-                            {q.title}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">{q.date}</div>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                            q.state === "completed"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : q.state === "current"
-                              ? "bg-cyan-100 text-cyan-700"
-                              : "bg-rose-100 text-rose-700"
-                          }`}
+                        <div
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${st.node} text-white shadow ring-4`}
                         >
-                          {q.badge}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-[11px] text-foreground/75">
-                        {q.subtitle}
-                      </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600">
-                          <Zap className="h-3 w-3" />
-                          +{q.xp} XP
+                          <Icon className="h-5 w-5" />
                         </div>
-                        {isActive && (
-                          <span className="rounded-full bg-cyan-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-                            Selecionado
-                          </span>
-                        )}
-                      </div>
-                      {isActive && (
-                        <div className="mt-2 rounded-lg bg-cyan-50 p-2 text-[11px] text-cyan-900 ring-1 ring-cyan-200 animate-fade-in">
-                          {q.summary}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold leading-tight">
+                                {e.title}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {e.date}
+                              </div>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${st.pill}`}
+                            >
+                              {e.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-foreground/75">
+                            {e.description}
+                          </div>
+                          {isActive && (
+                            <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700 ring-1 ring-border">
+                              {e.summary}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    {/* Connector check */}
-                    {idx < QUESTS.length - 1 && q.state === "completed" && (
-                      <div className="absolute -bottom-3 left-[34px] z-20 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500 text-white shadow ring-2 ring-white">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -504,10 +521,10 @@ export function PatientTimelineSOAP({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Biomarker Dashboard
+                  Painel de biomarcadores
                 </div>
                 <div className="text-base font-semibold">
-                  Painel multiparamétrico · 4 anos
+                  Tendência multiparamétrica · 4 anos
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -534,58 +551,140 @@ export function PatientTimelineSOAP({
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {panel.series.map((s) => (
-                <BiomarkerChart key={s.key} series={s} activeQuest={activeQuest} />
+                <BiomarkerChart
+                  key={s.key}
+                  series={s}
+                  activeQuest={activeEvent}
+                  onExpand={() => setExpandedSeries(s.key)}
+                />
               ))}
             </div>
+
+            {expanded && (
+              <ExpandedSeries
+                series={expanded}
+                onClose={() => setExpandedSeries(null)}
+              />
+            )}
           </div>
 
           {/* SOAP */}
+          <div className="rounded-2xl border border-border bg-card p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Prontuário SOAP
+              </div>
+              <div className="text-sm font-semibold">Consulta atual · Mariana Silva</div>
+            </div>
+            <Button
+              onClick={toggleRecording}
+              variant={recording ? "default" : "outline"}
+              size="sm"
+              className={
+                recording
+                  ? "bg-rose-500 text-white hover:bg-rose-600"
+                  : ""
+              }
+            >
+              {recording ? (
+                <>
+                  <MicOff className="mr-1.5 h-4 w-4" />
+                  Parar gravação
+                </>
+              ) : (
+                <>
+                  <Mic className="mr-1.5 h-4 w-4" />
+                  Gravar consulta
+                </>
+              )}
+            </Button>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <SoapBlock letter="S" name="Subjetivo" icon={Stethoscope} tone="cyan">
-              <Textarea
-                value={subjective}
-                onChange={(e) => setSubjective(e.target.value)}
-                rows={4}
-                placeholder="Anote a queixa principal..."
-                maxLength={1500}
-                className="resize-none"
-              />
-              {subjective && (
-                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-100 px-2.5 py-1 text-[11px] font-medium text-cyan-800">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Pré-preenchido a partir do WhatsApp
-                </div>
+              {(locked) => (
+                <>
+                  <Textarea
+                    value={subjective}
+                    onChange={(e) => setSubjective(e.target.value)}
+                    rows={4}
+                    placeholder="Anote a queixa principal..."
+                    maxLength={1500}
+                    disabled={locked}
+                    className="resize-none"
+                  />
+                  {subjective && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-100 px-2.5 py-1 text-[11px] font-medium text-cyan-800">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Pré-preenchido a partir do WhatsApp
+                    </div>
+                  )}
+                </>
               )}
             </SoapBlock>
 
             <SoapBlock letter="O" name="Objetivo" icon={Activity} tone="emerald">
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="PA (mmHg)" value={objetivo.pa} onChange={(v) => setObjetivo({ ...objetivo, pa: v })} />
-                <Field label="Peso (kg)" value={objetivo.peso} onChange={(v) => setObjetivo({ ...objetivo, peso: v })} />
-                <Field label="FC (bpm)" value={objetivo.fc} onChange={(v) => setObjetivo({ ...objetivo, fc: v })} />
-              </div>
+              {(locked) => (
+                <div className="grid grid-cols-3 gap-3">
+                  <Field
+                    label="PA (mmHg)"
+                    value={objetivo.pa}
+                    disabled={locked}
+                    onChange={(v) => setObjetivo({ ...objetivo, pa: v })}
+                  />
+                  <Field
+                    label="Peso (kg)"
+                    value={objetivo.peso}
+                    disabled={locked}
+                    onChange={(v) => setObjetivo({ ...objetivo, peso: v })}
+                  />
+                  <Field
+                    label="FC (bpm)"
+                    value={objetivo.fc}
+                    disabled={locked}
+                    onChange={(v) => setObjetivo({ ...objetivo, fc: v })}
+                  />
+                </div>
+              )}
             </SoapBlock>
 
-            <SoapBlock letter="A" name="Avaliação" icon={FileText} tone="amber">
-              <Textarea
-                value={diag}
-                onChange={(e) => setDiag(e.target.value)}
-                rows={3}
-                placeholder="Hipótese diagnóstica (ex.: anemia ferropriva CID D50.9)"
-                maxLength={500}
-                className="resize-none"
-              />
+            <SoapBlock
+              letter="A"
+              name="Avaliação"
+              icon={FileText}
+              tone="amber"
+              headerNote={
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                  <Lock className="h-3 w-3" />
+                  Visível apenas para o médico
+                </span>
+              }
+            >
+              {(locked) => (
+                <Textarea
+                  value={diag}
+                  onChange={(e) => setDiag(e.target.value)}
+                  rows={3}
+                  placeholder="Impressão clínica e hipóteses"
+                  maxLength={500}
+                  disabled={locked}
+                  className="resize-none"
+                />
+              )}
             </SoapBlock>
 
             <SoapBlock letter="P" name="Plano + Memed" icon={Pill} tone="violet">
-              <Textarea
-                value={plano}
-                onChange={(e) => setPlano(e.target.value)}
-                rows={3}
-                placeholder="Conduta clínica e orientações"
-                maxLength={500}
-                className="resize-none"
-              />
+              {(locked) => (
+                <Textarea
+                  value={plano}
+                  onChange={(e) => setPlano(e.target.value)}
+                  rows={3}
+                  placeholder="Conduta clínica e orientações"
+                  maxLength={500}
+                  disabled={locked}
+                  className="resize-none"
+                />
+              )}
             </SoapBlock>
           </div>
 
@@ -687,20 +786,26 @@ export function PatientTimelineSOAP({
 function BiomarkerChart({
   series,
   activeQuest,
+  onExpand,
 }: {
   series: Series;
   activeQuest: string;
+  onExpand: () => void;
 }) {
   const activePoint = series.data.find((d) => d.quest === activeQuest);
   const latest = series.data[series.data.length - 1].value;
   const inRange = latest >= series.min && latest <= series.max;
   return (
-    <div className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50 p-3 transition-all hover:shadow-md">
+    <button
+      type="button"
+      onClick={onExpand}
+      className="text-left rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50 p-3 transition-all hover:shadow-md hover:border-cyan-300"
+    >
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs font-semibold">{series.label}</div>
           <div className="text-[10px] text-muted-foreground">
-            Faixa ótima: {series.min}–{series.max} {series.unit}
+            Ref: {series.min}–{series.max} {series.unit}
           </div>
         </div>
         <div
@@ -759,6 +864,103 @@ function BiomarkerChart({
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      <div className="mt-1 text-right text-[10px] text-muted-foreground">
+        clique para expandir série histórica
+      </div>
+    </button>
+  );
+}
+
+function ExpandedSeries({
+  series,
+  onClose,
+}: {
+  series: Series;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mt-5 rounded-2xl border border-cyan-200 bg-gradient-to-b from-cyan-50/40 to-white p-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wider text-cyan-700">
+            Série histórica completa
+          </div>
+          <div className="text-sm font-semibold">
+            {series.label}{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              · referência {series.min}–{series.max} {series.unit}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Fechar série expandida"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3 h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={series.data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+            <defs>
+              <linearGradient id={`gx-${series.key}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="oklch(0.92 0.01 240)" strokeDasharray="3 3" />
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="oklch(0.5 0.02 250)" />
+            <YAxis tick={{ fontSize: 11 }} stroke="oklch(0.5 0.02 250)" domain={series.domain} />
+            <Tooltip
+              contentStyle={{
+                borderRadius: 8,
+                border: "1px solid oklch(0.92 0.01 240)",
+                fontSize: 12,
+              }}
+              formatter={(v: number) => [`${v} ${series.unit}`, series.label]}
+            />
+            <ReferenceLine
+              y={series.min}
+              stroke="oklch(0.6 0.15 150)"
+              strokeDasharray="4 4"
+              label={{ value: `mín ${series.min}`, position: "insideTopLeft", fontSize: 10, fill: "oklch(0.45 0.15 150)" }}
+            />
+            <ReferenceLine
+              y={series.max}
+              stroke="oklch(0.6 0.15 150)"
+              strokeDasharray="4 4"
+              label={{ value: `máx ${series.max}`, position: "insideTopLeft", fontSize: 10, fill: "oklch(0.45 0.15 150)" }}
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="oklch(0.55 0.14 200)"
+              strokeWidth={2.5}
+              fill={`url(#gx-${series.key})`}
+              dot={{ r: 4, fill: "oklch(0.55 0.14 200)", stroke: "white", strokeWidth: 2 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+        {series.data.map((d) => {
+          const out = d.value < series.min || d.value > series.max;
+          return (
+            <div
+              key={d.date}
+              className={`rounded-lg border px-2 py-1.5 ${
+                out
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              <div className="text-[10px] text-muted-foreground">{d.date}</div>
+              <div className="text-sm font-semibold">{d.value}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -768,44 +970,92 @@ function SoapBlock({
   name,
   icon: Icon,
   tone,
+  headerNote,
   children,
 }: {
   letter: string;
   name: string;
   icon: React.ComponentType<{ className?: string }>;
   tone: "cyan" | "emerald" | "amber" | "violet";
-  children: React.ReactNode;
+  headerNote?: React.ReactNode;
+  children: (locked: boolean) => React.ReactNode;
 }) {
+  const [locked, setLocked] = useState(false);
   const tones: Record<string, string> = {
     cyan: "from-cyan-500 to-teal-500",
     emerald: "from-emerald-500 to-teal-500",
     amber: "from-amber-500 to-orange-500",
     violet: "from-violet-500 to-indigo-500",
   };
+
+  const toggle = () => {
+    if (!locked) {
+      toast.success(`${name} salvo`);
+    }
+    setLocked((l) => !l);
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <div className="mb-3 flex items-center gap-3">
         <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${tones[tone]} text-white font-semibold`}>
           {letter}
         </div>
-        <div>
+        <div className="flex-1">
           <div className="text-sm font-semibold">{name}</div>
           <div className="text-[11px] text-muted-foreground flex items-center gap-1">
             <Icon className="h-3 w-3" />
             SOAP
           </div>
         </div>
+        {headerNote}
+        <button
+          onClick={toggle}
+          type="button"
+          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+            locked
+              ? "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          }`}
+        >
+          {locked ? (
+            <>
+              <Pencil className="h-3 w-3" />
+              Editar
+            </>
+          ) : (
+            <>
+              <Save className="h-3 w-3" />
+              Salvar
+            </>
+          )}
+        </button>
       </div>
-      {children}
+      {children(locked)}
     </div>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="text-[11px] text-muted-foreground">{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} maxLength={20} />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={20}
+        disabled={disabled}
+      />
     </div>
   );
 }
