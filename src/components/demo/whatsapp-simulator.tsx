@@ -137,7 +137,7 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
           markExams();
         }
         if (n === 3) {
-          movePatient("mariana", "recebidos");
+          movePatient("mariana", "retorno");
         }
         setBusy(false);
       }

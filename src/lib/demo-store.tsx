@@ -13,7 +13,8 @@ export type KanbanColumnId =
   | "triagem"
   | "atendimento"
   | "aguardando"
-  | "recebidos";
+  | "retorno"
+  | "estavel";
 
 export type PatientCard = {
   id: string;
@@ -26,6 +27,8 @@ export type PatientCard = {
   examsCount: number;
   initials: string;
   tint: string;
+  criticalFlag?: string;
+  adherence?: number;
 };
 
 type Store = {
@@ -56,6 +59,8 @@ const initialPatients: PatientCard[] = [
     examsCount: 0,
     initials: "MS",
     tint: "from-rose-400 to-pink-500",
+    criticalFlag: "Hb 11.2 g/dL · abaixo do ref",
+    adherence: 40,
   },
   {
     id: "carlos",
@@ -68,6 +73,7 @@ const initialPatients: PatientCard[] = [
     examsCount: 0,
     initials: "CA",
     tint: "from-cyan-400 to-teal-500",
+    adherence: 82,
   },
   {
     id: "juliana",
@@ -86,12 +92,25 @@ const initialPatients: PatientCard[] = [
     name: "Roberto Lima",
     age: 61,
     reason: "Diabetes — retorno",
-    column: "recebidos",
+    column: "retorno",
     hasBriefing: true,
     hasExams: true,
     examsCount: 3,
     initials: "RL",
     tint: "from-emerald-400 to-teal-500",
+    adherence: 91,
+  },
+  {
+    id: "sofia",
+    name: "Sofia Ramos",
+    age: 45,
+    reason: "Check-up anual · sem queixas",
+    column: "estavel",
+    hasBriefing: false,
+    hasExams: false,
+    examsCount: 0,
+    initials: "SR",
+    tint: "from-violet-400 to-indigo-500",
   },
 ];
 
@@ -147,6 +166,7 @@ export function useDemo() {
 export const COLUMNS: { id: KanbanColumnId; title: string; hint: string }[] = [
   { id: "triagem", title: "Triagem / Pré-Consulta", hint: "Aguardando atendimento" },
   { id: "atendimento", title: "Em Atendimento", hint: "Consulta em andamento" },
-  { id: "aguardando", title: "Aguardando Exames / Retorno", hint: "Solicitações enviadas" },
-  { id: "recebidos", title: "Exames Recebidos (Pronto p/ Retorno)", hint: "Pronto para análise" },
+  { id: "aguardando", title: "Aguardando Exames", hint: "Solicitações enviadas" },
+  { id: "retorno", title: "Retorno Agendado", hint: "Exames recebidos · retorno marcado" },
+  { id: "estavel", title: "Estável / Check-up", hint: "Acompanhamento sem queixa" },
 ];
