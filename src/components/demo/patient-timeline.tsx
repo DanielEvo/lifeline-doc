@@ -346,7 +346,8 @@ export function PatientTimelineSOAP({
   );
 
   // Patient overall status — based on most recent event
-  const currentStatus: EventStatus = "Atenção";
+  const currentStatus: "Saudável" | "Em acompanhamento" | "Atenção" = "Em acompanhamento";
+
 
   const toggleRecording = () => {
     setRecording((r) => {
