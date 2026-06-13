@@ -377,6 +377,24 @@ export function PatientTimelineSOAP({
     Boolean(initialQuest || initialPanel),
   );
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [accessModal, setAccessModal] = useState(false);
+  const [tokenA, setTokenA] = useState("");
+  const [tokenB, setTokenB] = useState("");
+  const [historyUnlocked, setHistoryUnlocked] = useState(false);
+
+  const validateToken = () => {
+    const a = tokenA.trim().toUpperCase();
+    const b = tokenB.trim().toUpperCase();
+    if (a.length >= 3 && b.length >= 3) {
+      setHistoryUnlocked(true);
+      setAccessModal(false);
+      toast.success("Acesso autorizado ✓", {
+        description: "Histórico completo de Mariana carregado.",
+      });
+    } else {
+      toast.error("Token expirado. Peça ao paciente gerar um novo.");
+    }
+  };
 
   useEffect(() => {
     if (!subjective) setSubjective(PREFILL_S);
