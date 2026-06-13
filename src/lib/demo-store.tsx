@@ -166,6 +166,7 @@ export function useDemo() {
 export const COLUMNS: { id: KanbanColumnId; title: string; hint: string }[] = [
   { id: "triagem", title: "Triagem / Pré-Consulta", hint: "Aguardando atendimento" },
   { id: "atendimento", title: "Em Atendimento", hint: "Consulta em andamento" },
-  { id: "aguardando", title: "Aguardando Exames / Retorno", hint: "Solicitações enviadas" },
-  { id: "recebidos", title: "Exames Recebidos (Pronto p/ Retorno)", hint: "Pronto para análise" },
+  { id: "aguardando", title: "Aguardando Exames", hint: "Solicitações enviadas" },
+  { id: "retorno", title: "Retorno Agendado", hint: "Exames recebidos · retorno marcado" },
+  { id: "estavel", title: "Estável / Check-up", hint: "Acompanhamento sem queixa" },
 ];
