@@ -1132,14 +1132,12 @@ function ExpandedSeries({
 function SoapBlock({
   letter,
   name,
-  icon: Icon,
   tone,
   headerNote,
   children,
 }: {
   letter: string;
   name: string;
-  icon: React.ComponentType<{ className?: string }>;
   tone: "cyan" | "emerald" | "amber" | "violet";
   headerNote?: React.ReactNode;
   children: (locked: boolean) => React.ReactNode;
@@ -1153,24 +1151,20 @@ function SoapBlock({
   };
 
   const toggle = () => {
-    if (!locked) {
-      toast.success(`${name} salvo`);
-    }
+    if (!locked) toast.success(`${name} salvo`);
     setLocked((l) => !l);
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl border border-border bg-card p-5 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-colors">
       <div className="mb-3 flex items-center gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${tones[tone]} text-white font-semibold`}>
+        <div
+          className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${tones[tone]} text-white font-semibold`}
+        >
           {letter}
         </div>
         <div className="flex-1">
           <div className="text-sm font-semibold">{name}</div>
-          <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-            <Icon className="h-3 w-3" />
-            SOAP
-          </div>
         </div>
         {headerNote}
         <button
@@ -1182,17 +1176,8 @@ function SoapBlock({
               : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
           }`}
         >
-          {locked ? (
-            <>
-              <Pencil className="h-3 w-3" />
-              Editar
-            </>
-          ) : (
-            <>
-              <Save className="h-3 w-3" />
-              Salvar
-            </>
-          )}
+          <Save className="h-3 w-3" />
+          {locked ? "Editar" : "Salvar"}
         </button>
       </div>
       {children(locked)}
@@ -1223,3 +1208,209 @@ function Field({
     </div>
   );
 }
+
+function AutoTextarea({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  minHeight = 100,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  minHeight?: number;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.max(minHeight, el.scrollHeight) + "px";
+  }, [value, minHeight]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      placeholder={placeholder}
+      style={{ minHeight }}
+      className="block w-full resize-none overflow-hidden rounded-lg border border-input bg-background p-3 text-[13px] leading-[1.7] outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 disabled:opacity-60"
+    />
+  );
+}
+
+function SubjectiveBody({
+  value,
+  onChange,
+  locked,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  locked: boolean;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [showSuggestion, setShowSuggestion] = useState(false);
+
+  useEffect(() => {
+    if (!recording) return;
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [recording]);
+
+  const fmt = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+  const toggle = () => {
+    if (recording) {
+      setRecording(false);
+      setShowSuggestion(true);
+    } else {
+      setElapsed(0);
+      setRecording(true);
+      setShowSuggestion(false);
+    }
+  };
+
+  const suggestion =
+    "Paciente menciona melhora com repouso. Piora ao caminhar mais de 100m.";
+
+  return (
+    <div className="space-y-2">
+      <AutoTextarea value={value} onChange={onChange} disabled={locked} />
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={locked}
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          recording
+            ? "border-rose-300 bg-rose-50 text-rose-700"
+            : "border-border bg-background text-foreground/80 hover:bg-muted"
+        } disabled:opacity-50`}
+      >
+        {recording ? (
+          <>
+            <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+            Gravando · {fmt(elapsed)}
+          </>
+        ) : (
+          <>
+            <Mic className="h-3 w-3" />
+            Gravar e transcrever
+          </>
+        )}
+      </button>
+      {showSuggestion && (
+        <SuggestionBox
+          title="Sugestão da transcrição"
+          text={`"${suggestion}"`}
+          onAccept={() => {
+            onChange((value ? value + " " : "") + suggestion);
+            setShowSuggestion(false);
+            toast.success("Sugestão incorporada ao S");
+          }}
+          onIgnore={() => setShowSuggestion(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SuggestionBox({
+  title,
+  text,
+  onAccept,
+  onIgnore,
+}: {
+  title: string;
+  text: string;
+  onAccept: () => void;
+  onIgnore: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-800">
+        <Lightbulb className="h-3.5 w-3.5" />
+        {title}
+      </div>
+      <div className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-slate-700">
+        {text}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" onClick={onAccept} className="h-7 bg-sky-600 text-white hover:bg-sky-700 text-[11px]">
+          Aceitar
+        </Button>
+        <Button size="sm" variant="outline" onClick={onIgnore} className="h-7 text-[11px]">
+          Ignorar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Collapsible({
+  icon: Icon,
+  title,
+  badge,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+      >
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className="flex-1 text-sm font-medium">{title}</span>
+        {badge && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {badge}
+          </span>
+        )}
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="border-t border-border px-4 py-3">{children}</div>}
+    </div>
+  );
+}
+
+function KbModal({ item, onClose }: { item: KbItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-700">
+              Base de conhecimento
+            </div>
+            <div className="mt-0.5 text-base font-semibold">{item.title}</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 text-sm leading-relaxed text-slate-700">{item.body}</div>
+        <div className="mt-5 flex justify-end">
+          <Button size="sm" onClick={onClose}>Fechar</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
