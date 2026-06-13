@@ -38,7 +38,7 @@ export function KanbanBoard({ onOpenPatient }: { onOpenPatient: () => void }) {
         </Button>
       </div>
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-4">
+      <div className="mt-8 grid gap-4 lg:grid-cols-3 xl:grid-cols-5">
         {COLUMNS.map((col) => {
           const cards = patients.filter((p) => p.column === col.id);
           const isHover = hoverCol === col.id;
