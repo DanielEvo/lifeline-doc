@@ -429,7 +429,7 @@ export function PatientTimelineSOAP({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[460px_1fr]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)_360px]">
         {/* ---------- LEFT: Clinical timeline ---------- */}
         <div
           ref={timelineRef}
@@ -450,7 +450,6 @@ export function PatientTimelineSOAP({
           <div className="mt-6 space-y-6">
             {grouped.map(([year, items]) => (
               <div key={year} className="relative pl-12">
-                {/* Year anchor */}
                 <div className="absolute left-0 top-1 flex h-8 w-9 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white shadow">
                   {year}
                 </div>
@@ -512,61 +511,8 @@ export function PatientTimelineSOAP({
           </div>
         </div>
 
-        {/* ---------- RIGHT: Biomarker dashboard + SOAP ---------- */}
+        {/* ---------- MIDDLE: SOAP vertical stack ---------- */}
         <div className="space-y-5">
-          {/* Panel tabs */}
-          <div className="rounded-3xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Painel de biomarcadores
-                </div>
-                <div className="text-base font-semibold">
-                  Tendência multiparamétrica · 4 anos
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {PANELS.map((p) => {
-                  const Icon = p.icon;
-                  const isActive = activePanel === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setActivePanel(p.id)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                        isActive
-                          ? `bg-gradient-to-r ${p.tint} text-white shadow-md`
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {panel.series.map((s) => (
-                <BiomarkerChart
-                  key={s.key}
-                  series={s}
-                  activeQuest={activeEvent}
-                  onExpand={() => setExpandedSeries(s.key)}
-                />
-              ))}
-            </div>
-
-            {expanded && (
-              <ExpandedSeries
-                series={expanded}
-                onClose={() => setExpandedSeries(null)}
-              />
-            )}
-          </div>
-
-          {/* SOAP */}
           <div className="rounded-2xl border border-border bg-card p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -578,11 +524,7 @@ export function PatientTimelineSOAP({
               onClick={toggleRecording}
               variant={recording ? "default" : "outline"}
               size="sm"
-              className={
-                recording
-                  ? "bg-rose-500 text-white hover:bg-rose-600"
-                  : ""
-              }
+              className={recording ? "bg-rose-500 text-white hover:bg-rose-600" : ""}
             >
               {recording ? (
                 <>
@@ -598,31 +540,31 @@ export function PatientTimelineSOAP({
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <SoapBlock letter="S" name="Subjetivo" icon={Stethoscope} tone="cyan">
-              {(locked) => (
-                <>
-                  <Textarea
-                    value={subjective}
-                    onChange={(e) => setSubjective(e.target.value)}
-                    rows={4}
-                    placeholder="Anote a queixa principal..."
-                    maxLength={1500}
-                    disabled={locked}
-                    className="resize-none"
-                  />
-                  {subjective && (
-                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-100 px-2.5 py-1 text-[11px] font-medium text-cyan-800">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Pré-preenchido a partir do WhatsApp
-                    </div>
-                  )}
-                </>
-              )}
-            </SoapBlock>
+          {/* S */}
+          <SoapBlock
+            letter="S"
+            name="Subjetivo"
+            tone="cyan"
+            headerNote={
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-sky-200">
+                <RefreshCw className="h-3 w-3" />
+                Pré-preenchido via WhatsApp
+              </span>
+            }
+          >
+            {(locked) => (
+              <SubjectiveBody
+                value={subjective}
+                onChange={setSubjective}
+                locked={locked}
+              />
+            )}
+          </SoapBlock>
 
-            <SoapBlock letter="O" name="Objetivo" icon={Activity} tone="emerald">
-              {(locked) => (
+          {/* O */}
+          <SoapBlock letter="O" name="Objetivo" tone="emerald">
+            {(locked) => (
+              <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <Field
                     label="PA (mmHg)"
@@ -643,143 +585,310 @@ export function PatientTimelineSOAP({
                     onChange={(v) => setObjetivo({ ...objetivo, fc: v })}
                   />
                 </div>
-              )}
-            </SoapBlock>
-
-            <SoapBlock
-              letter="A"
-              name="Avaliação"
-              icon={FileText}
-              tone="amber"
-              headerNote={
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                  <Lock className="h-3 w-3" />
-                  Visível apenas para o médico
-                </span>
-              }
-            >
-              {(locked) => (
-                <Textarea
-                  value={diag}
-                  onChange={(e) => setDiag(e.target.value)}
-                  rows={3}
-                  placeholder="Impressão clínica e hipóteses"
-                  maxLength={500}
+                <AutoTextarea
+                  value={objetivoNotes}
+                  onChange={setObjetivoNotes}
                   disabled={locked}
-                  className="resize-none"
+                  placeholder="Exame físico e dados objetivos adicionais..."
                 />
-              )}
-            </SoapBlock>
-
-            <SoapBlock letter="P" name="Plano + Memed" icon={Pill} tone="violet">
-              {(locked) => (
-                <Textarea
-                  value={plano}
-                  onChange={(e) => setPlano(e.target.value)}
-                  rows={3}
-                  placeholder="Conduta clínica e orientações"
-                  maxLength={500}
-                  disabled={locked}
-                  className="resize-none"
-                />
-              )}
-            </SoapBlock>
-          </div>
-
-          {/* Memed */}
-          <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-indigo-500 text-white">
-                  <Pill className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold">Prescrever via Memed</div>
-                  <div className="text-[11px] text-muted-foreground">ICP-Brasil · nativo</div>
-                </div>
               </div>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                Integrado
+            )}
+          </SoapBlock>
+
+          {/* A */}
+          <SoapBlock
+            letter="A"
+            name="Avaliação"
+            tone="amber"
+            headerNote={
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
+                <Lock className="h-3 w-3" />
+                Visível apenas para o médico
               </span>
-            </div>
-            <div className="relative mt-3">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={medSearch}
-                onChange={(e) => setMedSearch(e.target.value)}
-                placeholder="Buscar medicamento..."
-                className="pl-9"
-                maxLength={80}
+            }
+          >
+            {(locked) => (
+              <AutoTextarea
+                value={diag}
+                onChange={setDiag}
+                disabled={locked}
+                placeholder="Impressão clínica e hipóteses diagnósticas..."
               />
-            </div>
-            {medSearch && (
-              <div className="mt-2 space-y-1 rounded-lg border border-violet-200 bg-card">
-                {filtered.length === 0 && (
-                  <div className="p-3 text-xs text-muted-foreground">Nenhum medicamento encontrado.</div>
-                )}
-                {filtered.map((m) => (
+            )}
+          </SoapBlock>
+
+          {/* P */}
+          <SoapBlock
+            letter="P"
+            name="Plano"
+            tone="violet"
+            headerNote={
+              planTab === "memed" ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                  ICP-Brasil · nativo
+                </span>
+              ) : null
+            }
+          >
+            {(locked) => (
+              <div className="space-y-3">
+                <div className="inline-flex rounded-lg bg-muted p-1 text-xs">
                   <button
-                    key={m.name}
                     type="button"
-                    onClick={() => {
-                      if (!selectedMeds.includes(m.name)) setSelectedMeds([...selectedMeds, m.name]);
-                      setMedSearch("");
-                    }}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-violet-50"
+                    onClick={() => setPlanTab("clinico")}
+                    className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                      planTab === "clinico"
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <div>
-                      <div className="font-medium">{m.name}</div>
-                      <div className="text-[11px] text-muted-foreground">{m.desc}</div>
-                    </div>
+                    Plano clínico
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setPlanTab("memed")}
+                    className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                      planTab === "memed"
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Prescrição Memed
+                  </button>
+                </div>
+
+                {planTab === "clinico" ? (
+                  <div className="space-y-2">
+                    <AutoTextarea
+                      value={plano}
+                      onChange={setPlano}
+                      disabled={locked}
+                      placeholder="Condutas, orientações e solicitações de exame..."
+                    />
+                    {!locked && !planSuggested && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPlanSuggested(true)}
+                        className="text-xs"
+                      >
+                        <Lightbulb className="mr-1.5 h-3.5 w-3.5" />
+                        Sugerir plano com base no S/O
+                      </Button>
+                    )}
+                    {planSuggested && (
+                      <SuggestionBox
+                        title="Sugestão da IA"
+                        text={`1. Considerar reposição de ferro oral (Sulfato Ferroso 40mg/dia).
+2. Solicitar ferritina de controle em 60 dias.
+3. Orientar hidratação e repouso relativo.
+4. Retorno em 45 dias ou antes se piora.`}
+                        onAccept={() => {
+                          setPlano(
+                            (p) =>
+                              (p ? p + "\n\n" : "") +
+                              "1. Considerar reposição de ferro oral (Sulfato Ferroso 40mg/dia).\n2. Solicitar ferritina de controle em 60 dias.\n3. Orientar hidratação e repouso relativo.\n4. Retorno em 45 dias ou antes se piora.",
+                          );
+                          setPlanSuggested(false);
+                          toast.success("Sugestão aplicada ao plano");
+                        }}
+                        onIgnore={() => setPlanSuggested(false)}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={medSearch}
+                        onChange={(e) => setMedSearch(e.target.value)}
+                        placeholder="Buscar medicamento..."
+                        className="pl-9"
+                        maxLength={80}
+                        disabled={locked}
+                      />
+                    </div>
+                    {medSearch && (
+                      <div className="space-y-1 rounded-lg border border-violet-200 bg-card">
+                        {filtered.length === 0 && (
+                          <div className="p-3 text-xs text-muted-foreground">
+                            Nenhum medicamento encontrado.
+                          </div>
+                        )}
+                        {filtered.map((m) => (
+                          <button
+                            key={m.name}
+                            type="button"
+                            onClick={() => {
+                              if (!selectedMeds.includes(m.name))
+                                setSelectedMeds([...selectedMeds, m.name]);
+                              setMedSearch("");
+                            }}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-violet-50"
+                          >
+                            <div>
+                              <div className="font-medium">{m.name}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {m.desc}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedMeds.length > 0 && (
+                      <div className="space-y-1.5">
+                        {selectedMeds.map((m) => (
+                          <div
+                            key={m}
+                            className="flex items-center justify-between rounded-md bg-violet-50 px-3 py-1.5 text-xs ring-1 ring-violet-200"
+                          >
+                            <span className="font-medium">{m}</span>
+                            <button
+                              onClick={() =>
+                                setSelectedMeds(selectedMeds.filter((s) => s !== m))
+                              }
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              remover
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
-            {selectedMeds.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                {selectedMeds.map((m) => (
-                  <div key={m} className="flex items-center justify-between rounded-md bg-card px-3 py-1.5 text-xs ring-1 ring-violet-200">
-                    <span className="font-medium">{m}</span>
-                    <button
-                      onClick={() => setSelectedMeds(selectedMeds.filter((s) => s !== m))}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      remover
-                    </button>
-                  </div>
-                ))}
+          </SoapBlock>
+        </div>
+
+        {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
+        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          <div className="rounded-3xl border border-border bg-card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Painel de biomarcadores
+                </div>
+                <div className="text-sm font-semibold">Tendência · 4 anos</div>
               </div>
+              <div className="flex flex-wrap gap-1">
+                {PANELS.map((p) => {
+                  const Icon = p.icon;
+                  const isActive = activePanel === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setActivePanel(p.id)}
+                      className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-all ${
+                        isActive
+                          ? `bg-gradient-to-r ${p.tint} text-white shadow`
+                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+                      }`}
+                      title={p.label}
+                    >
+                      <Icon className="h-3 w-3" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {panel.series.map((s) => (
+                <BiomarkerChart
+                  key={s.key}
+                  series={s}
+                  activeQuest={activeEvent}
+                  onExpand={() => setExpandedSeries(s.key)}
+                />
+              ))}
+            </div>
+
+            {expanded && (
+              <ExpandedSeries
+                series={expanded}
+                onClose={() => setExpandedSeries(null)}
+              />
             )}
           </div>
 
-          {/* Seal */}
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2 text-sm">
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Atendimento iniciado às 14:18 · 12 min</span>
+          <Collapsible
+            icon={Users}
+            title="Casos com perfil similar"
+            badge="3 pacientes"
+          >
+            <div className="space-y-2">
+              {SIMILAR_CASES.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-lg border border-border bg-white p-2.5 text-[11px]"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{c.age} anos · {c.sex}</span>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                      {c.outcome}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-muted-foreground">{c.condition}</div>
+                  <div className="mt-0.5 text-foreground/80">{c.treatment}</div>
+                </div>
+              ))}
+              <div className="text-[10px] italic text-muted-foreground">
+                Dados anonimizados · mesma médica
+              </div>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              {sealed && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-800">
-                  <Lock className="h-3 w-3" />
-                  Selado · ICP-Brasil
-                </span>
-              )}
-              <Button
-                onClick={seal}
-                disabled={sealed}
-                className="brand-gradient text-primary-foreground shadow-md"
-              >
-                <Lock className="mr-1.5 h-4 w-4" />
-                {sealed ? "Prontuário selado" : "Salvar e Selar Prontuário"}
-              </Button>
+          </Collapsible>
+
+          <Collapsible
+            icon={BookOpen}
+            title="Minha base de conhecimento"
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={kbSearch}
+                  onChange={(e) => setKbSearch(e.target.value)}
+                  placeholder="Buscar protocolos..."
+                  className="h-8 pl-7 text-xs"
+                />
+              </div>
+              {KB_ITEMS.map((k) => (
+                <button
+                  key={k.title}
+                  type="button"
+                  onClick={() => setKbOpen(k)}
+                  className="block w-full rounded-lg border border-border bg-white px-2.5 py-2 text-left text-[11px] hover:border-cyan-300 hover:bg-cyan-50"
+                >
+                  <div className="font-medium">{k.title}</div>
+                </button>
+              ))}
             </div>
-          </div>
+          </Collapsible>
+
+          <Button
+            onClick={finalize}
+            disabled={sealed}
+            className="w-full bg-teal-600 text-white shadow-md hover:bg-teal-700"
+            size="lg"
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            {sealed ? "Consulta finalizada" : "Finalizar consulta e enviar ao paciente"}
+          </Button>
         </div>
       </div>
+
+      {kbOpen && (
+        <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />
+      )}
     </div>
   );
 }
+
 
 function BiomarkerChart({
   series,
