@@ -297,7 +297,55 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
+const PREFILL_S =
+  "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas). Sem dor torácica ou edema. Nega febre. Hemograma de mar/2025 anexado via WhatsApp — Hb 11.2 g/dL, Ferritina 18 ng/mL.";
 
+const SIMILAR_CASES = [
+  {
+    id: "c1",
+    age: 35,
+    sex: "F",
+    condition: "Anemia ferropriva · fadiga",
+    treatment: "Sulfato ferroso 40mg + Vit C · 90 dias",
+    outcome: "Resolvido",
+  },
+  {
+    id: "c2",
+    age: 42,
+    sex: "F",
+    condition: "Anemia + Vit D baixa",
+    treatment: "Ferro EV + Colecalciferol 50.000UI",
+    outcome: "Resolvido",
+  },
+  {
+    id: "c3",
+    age: 39,
+    sex: "F",
+    condition: "Fadiga crônica · ferritina 22",
+    treatment: "Sulfato ferroso + B12 + reavaliação 60d",
+    outcome: "Em acompanh.",
+  },
+];
+
+const KB_ITEMS = [
+  {
+    title: "Kit anemia ferropriva — protocolo Dra. Helena",
+    body:
+      "Sulfato Ferroso 40mg 1cp 2x/dia em jejum + Vit C 500mg. Reavaliar ferritina e hemograma em 60 dias. Se intolerância gástrica, fracionar dose. Considerar Ferro EV se Hb < 9 ou má adesão.",
+  },
+  {
+    title: "Orientações para paciente com fadiga crônica",
+    body:
+      "Higiene do sono · atividade física leve progressiva · suplementação conforme déficit · investigar hipotireoidismo e síndrome depressiva. Diário de sintomas por 14 dias.",
+  },
+  {
+    title: "Quando indicar ferro EV vs oral",
+    body:
+      "Ferro EV: intolerância oral comprovada, má absorção (DII, bariátrica), perdas continuadas, necessidade de correção rápida (Hb < 8 sintomático). Caso contrário, via oral é primeira escolha.",
+  },
+];
+
+type KbItem = (typeof KB_ITEMS)[number];
 
 export function PatientTimelineSOAP({
   onSeal,
@@ -310,18 +358,28 @@ export function PatientTimelineSOAP({
 }) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
+  const [objetivoNotes, setObjetivoNotes] = useState("");
   const [diag, setDiag] = useState("");
   const [plano, setPlano] = useState("");
+  const [planTab, setPlanTab] = useState<"clinico" | "memed">("clinico");
+  const [planSuggested, setPlanSuggested] = useState(false);
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
   const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
   const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
   const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [kbSearch, setKbSearch] = useState("");
+  const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
   const [arrivalPulse, setArrivalPulse] = useState<boolean>(
     Boolean(initialQuest || initialPanel),
   );
   const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!subjective) setSubjective(PREFILL_S);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!arrivalPulse) return;
@@ -348,9 +406,7 @@ export function PatientTimelineSOAP({
     m.name.toLowerCase().includes(medSearch.toLowerCase()),
   );
 
-  // Patient overall status — based on most recent event
   const currentStatus: "Saudável" | "Em acompanhamento" | "Atenção" = "Em acompanhamento";
-
 
   const toggleRecording = () => {
     setRecording((r) => {
@@ -365,14 +421,15 @@ export function PatientTimelineSOAP({
     });
   };
 
-  const seal = () => {
+  const finalize = () => {
     setSealed(true);
-    toast.success("Prontuário selado com sucesso", {
-      description: "Assinatura ICP-Brasil aplicada · imutabilidade legal garantida.",
-      icon: <Lock className="h-4 w-4" />,
+    toast.success("Receita e orientações enviadas para Mariana via WhatsApp ✓", {
+      description: "Link para o app LifeLine incluído na mensagem.",
+      icon: <Mail className="h-4 w-4" />,
     });
-    setTimeout(onSeal, 1200);
+    setTimeout(onSeal, 1400);
   };
+
 
   // Group events by year for the anchor display
   const grouped = useMemo(() => {
