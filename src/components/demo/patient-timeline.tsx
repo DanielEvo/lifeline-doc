@@ -13,6 +13,7 @@ import {
   Mail,
   Mic,
   MicOff,
+  Pencil,
   Pill,
   RefreshCw,
   Save,
