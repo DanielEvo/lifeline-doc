@@ -207,7 +207,7 @@ export function PatientAppMockup({ onRestart }: { onRestart: () => void }) {
     setMetrics((arr) => arr.map((m) => (m.id === id ? { ...m, value } : m)));
 
   return (
-    <div className="mx-auto max-w-[1300px] p-6 lg:p-10">
+    <div className="mx-auto max-w-[1300px] p-3 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <PageHeader
           eyebrow="Step D · Visão do paciente"
@@ -220,21 +220,21 @@ export function PatientAppMockup({ onRestart }: { onRestart: () => void }) {
         </Button>
       </div>
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-[380px_1fr]">
+      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[300px_1fr]">
         {/* Phone */}
-        <div className="mx-auto w-full max-w-[380px]">
+        <div className="mx-auto w-full max-w-[300px]">
           <div className="relative rounded-[2.5rem] border-[10px] border-slate-900 bg-slate-900 shadow-2xl">
             <div className="absolute left-1/2 top-0 z-10 h-6 w-32 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
             <div className="overflow-hidden rounded-[2rem] bg-background">
               {!onboarded ? (
-                <div className="h-[700px]">
+                <div className="h-[480px]">
                   <OnboardingScreen onEnter={() => setOnboarded(true)} />
                 </div>
               ) : (
                 <>
                   <PhoneStatusBar />
                   <PhoneHeader screen={screen} />
-                  <div className="h-[600px] overflow-y-auto overscroll-contain [scrollbar-width:thin]">
+                  <div className="h-[400px] overflow-y-auto overscroll-contain [scrollbar-width:thin]">
                     {screen === "home" && (
                       <HomeScreen
                         metrics={metrics}
