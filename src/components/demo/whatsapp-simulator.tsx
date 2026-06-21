@@ -168,16 +168,16 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl p-6 lg:p-10">
+    <div className="mx-auto max-w-7xl p-3 lg:p-5">
       <PageHeader
         eyebrow="Step A · Bot multi-agente"
         title="Bot multi-agente · Triagem inteligente"
         desc="Para pacientes novos: coleta cadastro, queixa e exames. Para retornos: identifica o paciente e atualiza o prontuário automaticamente — sem o médico precisar fazer nada."
       />
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-[380px_1fr]">
+      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[300px_1fr]">
         {/* Phone — same proportions as Step D */}
-        <div className="mx-auto w-full max-w-[380px]">
+        <div className="mx-auto w-full max-w-[300px]">
           <div className="relative rounded-[2.5rem] border-[10px] border-slate-900 bg-slate-900 shadow-2xl shadow-slate-900/40">
             <div className="absolute left-1/2 top-0 z-10 h-6 w-32 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
             <div className="overflow-hidden rounded-[2rem] bg-[#e5ddd5]">
