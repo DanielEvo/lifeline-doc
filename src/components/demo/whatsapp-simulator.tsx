@@ -197,7 +197,7 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
               {/* Messages */}
               <div
                 ref={scrollRef}
-                className="h-[420px] space-y-2 overflow-y-auto bg-[#e5ddd5] px-3 py-4"
+                className="h-[340px] space-y-2 overflow-y-auto bg-[#e5ddd5] px-3 py-3"
               >
                 {messages.length === 0 && (
                   <div className="mt-16 text-center text-xs text-slate-500">
