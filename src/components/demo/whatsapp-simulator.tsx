@@ -443,9 +443,9 @@ export function PageHeader({
 }) {
   return (
     <div className="max-w-3xl">
-      <div className="text-xs font-semibold uppercase tracking-wider text-primary">{eyebrow}</div>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">{title}</h1>
-      <p className="mt-3 text-muted-foreground">{desc}</p>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">{eyebrow}</div>
+      <h1 className="mt-0.5 text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
+      <p className="mt-1 text-xs text-muted-foreground md:text-sm">{desc}</p>
     </div>
   );
 }
