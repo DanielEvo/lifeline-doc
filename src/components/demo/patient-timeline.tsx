@@ -462,7 +462,7 @@ export function PatientTimelineSOAP({
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6 lg:p-10">
+    <div className="mx-auto max-w-[1500px] p-3 lg:p-5">
       <PageHeader
         eyebrow="Step C · Mariana Silva · 38 anos"
         title="Linha do Tempo do Paciente & Prontuário SOAP"
