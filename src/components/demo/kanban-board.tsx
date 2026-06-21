@@ -19,7 +19,7 @@ export function KanbanBoard({ onOpenPatient }: { onOpenPatient: () => void }) {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px] p-6 lg:p-10">
+    <div className="mx-auto max-w-[1400px] p-3 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <PageHeader
           eyebrow="Step B · Pipeline clínico"
