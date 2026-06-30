@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   BookOpen,
   ChevronDown,
   ClipboardList,
-  FileText,
   FlaskConical,
-  Lightbulb,
-  Lock,
   KeyRound,
   Mail,
   MessageCircle,
@@ -16,7 +12,6 @@ import {
   MicOff,
   Pencil,
   Pill,
-  RefreshCw,
   Save,
   Search,
   Sparkles,
@@ -33,7 +28,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDemo } from "@/lib/demo-store";
-import { PageHeader } from "./whatsapp-simulator";
 
 // ---------- Clinical timeline entries ----------
 type EventStatus = "Saudável" | "Atenção" | "Alerta" | "Em atendimento";
@@ -93,6 +87,14 @@ const EVENTS: ClinicalEvent[] = [
   },
 ];
 
+// Quais biomarcadores foram efetivamente coletados em cada evento (drill-down)
+const EVENT_BIOMARKERS: Record<string, string[]> = {
+  q2023: ["Hemoglobina", "Ferritina", "Vitamina D", "Vitamina B12", "Zinco", "Creatinina"],
+  q2024: ["Hemoglobina", "Ferritina"],
+  q2025: ["Creatinina", "Vitamina D", "Vitamina B12", "Zinco"],
+  q2026: ["Hemoglobina", "Ferritina"],
+};
+
 const TYPE_ICON: Record<EventType, React.ComponentType<{ className?: string }>> = {
   consulta: Stethoscope,
   exames: FlaskConical,
@@ -136,9 +138,6 @@ const MED_OPTIONS = [
   { name: "Ácido Fólico 5mg", desc: "1cp/dia · 60 dias" },
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
-
-const PREFILL_S =
-  "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas). Sem dor torácica ou edema. Nega febre. Hemograma de mar/2025 anexado via WhatsApp — Hb 11.2 g/dL, Ferritina 18 ng/mL.";
 
 const SIMILAR_CASES = [
   {
@@ -184,58 +183,78 @@ const KB_ITEMS = [
 
 type KbItem = (typeof KB_ITEMS)[number];
 
+// ---------- Suggestion blocks (gravação → transcrição → validação) ----------
+type SuggestionStatus = "pending" | "accepted" | "discarded";
+type SuggestionBlock = {
+  id: string;
+  label: string;
+  text: string;
+  status: SuggestionStatus;
+};
+
+// Conteúdo de demonstração retornado pela "transcrição" ao parar a gravação
+const TRANSCRIPT_BLOCKS: Omit<SuggestionBlock, "status">[] = [
+  {
+    id: "qp",
+    label: "Queixa",
+    text: "Paciente refere fadiga progressiva e dispneia aos esforços, há 3 meses.",
+  },
+  {
+    id: "hda",
+    label: "Histórico",
+    text: "Piora nas últimas semanas. Hemograma de maio mostra Hb em queda contínua — 11.2 g/dL.",
+  },
+  {
+    id: "plano",
+    label: "Conduta",
+    text: "Manter sulfato ferroso 40mg 2x/dia em jejum. Solicitar ferro sérico e ferritina de controle. Retorno em 60 dias.",
+  },
+];
+
+const EVOLUCAO_DEFAULT =
+  "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas). Sem dor torácica ou edema. Nega febre. Exames anexados via WhatsApp: Hb 11.2 g/dL · Ferritina 18 ng/mL · Vit D 19 ng/mL.";
+
+const PLANO_DEFAULT =
+  "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.";
+
 export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => void; initialQuest?: string }) {
-  const { subjective, setSubjective, sealed, setSealed } = useDemo();
-  const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
-  const [objetivoNotes, setObjetivoNotes] = useState("");
-  const [diag, setDiag] = useState("");
-  const [plano, setPlano] = useState("");
-  const [planTab, setPlanTab] = useState<"clinico" | "memed">("clinico");
-  const [planSuggested, setPlanSuggested] = useState(false);
+  const { sealed, setSealed } = useDemo();
+
+  // ---- Campo único de evolução ----
+  const [evolucaoText, setEvolucaoText] = useState(EVOLUCAO_DEFAULT);
+  const [evolucaoEditing, setEvolucaoEditing] = useState(false);
+  const evolucaoRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ---- Gravação + confirmação ----
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [confirmPopover, setConfirmPopover] = useState<"start" | "stop" | null>(null);
+  const [suggestionBlocks, setSuggestionBlocks] = useState<SuggestionBlock[]>([]);
+
+  // ---- Plano terapêutico + Memed ----
+  const [planoText, setPlanoText] = useState(PLANO_DEFAULT);
+  const [planoEditing, setPlanoEditing] = useState(false);
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<{ name: string; dosage: string; duration: string }[]>([]);
   const [memedOpen, setMemedOpen] = useState(false);
+
+  // ---- Timeline + biomarcadores ----
   const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
-  const [recording, setRecording] = useState(false);
+  const [showAllBiomarkers, setShowAllBiomarkers] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [arrivalPulse, setArrivalPulse] = useState<boolean>(Boolean(initialQuest));
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  // ---- Casos similares + Knowledge Base ----
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
   const [activeChips, setActiveChips] = useState<string[]>(["Fadiga", "Ferritina <20"]);
-  const [arrivalPulse, setArrivalPulse] = useState<boolean>(Boolean(initialQuest));
-  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  // ---- Acesso via token ----
   const [accessModal, setAccessModal] = useState(false);
   const [tokenA, setTokenA] = useState("");
   const [tokenB, setTokenB] = useState("");
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
-  const [historyExpanded, setHistoryExpanded] = useState(true);
-
-  // ---- New central zone state ----
-  const BRIEFING_DEFAULT =
-    "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas).\nSem dor torácica ou edema. Nega febre.\nExames anexados: Hb 11.2 g/dL · Ferritina 18 ng/mL · Vit D 19 ng/mL";
-  const NOTES_DEFAULT =
-    "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
-  const TRANSCRIPT_DEMO =
-    "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
-  const SOAP_DEMO = {
-    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nPiora nas últimas semanas. Hb 11.2 · Ferritina 18 via WhatsApp.",
-    o: "PA 118/76 mmHg · Peso 62kg · FC 82bpm.\nBiomarcadores: Hb 11.2 · Ferritina 18 · Vit D 19.",
-    a: "Anemia ferropriva em evolução. Queda contínua de Hb, Ferritina e Vitamina D nos últimos 3 anos.",
-    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.",
-  };
-  const [briefingText] = useState(BRIEFING_DEFAULT);
-  const [notesText, setNotesText] = useState(NOTES_DEFAULT);
-  const [notesEditing, setNotesEditing] = useState(false);
-  const PLANO_DEFAULT =
-    "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.";
-  const [planoText, setPlanoText] = useState(PLANO_DEFAULT);
-  const [planoEditing, setPlanoEditing] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
-  const [showTranscript, setShowTranscript] = useState(false);
-  const [soapOpen, setSoapOpen] = useState(false);
-  const [soapEditing, setSoapEditing] = useState(false);
-  const [soapFields, setSoapFields] = useState(SOAP_DEMO);
-  const [soapPulse, setSoapPulse] = useState(false);
-  const [soapBadgeUpdated, setSoapBadgeUpdated] = useState(false);
-  const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!recording) return;
@@ -243,55 +262,13 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
     return () => clearInterval(id);
   }, [recording]);
 
-  // Auto-resize notes textarea
+  // Auto-resize do campo de evolução
   useEffect(() => {
-    const el = notesRef.current;
+    const el = evolucaoRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
-  }, [notesText, notesEditing]);
-
-  const triggerSoapUpdate = () => {
-    setSoapOpen(true);
-    setSoapPulse(true);
-    setTimeout(() => setSoapPulse(false), 400);
-    setSoapBadgeUpdated(true);
-    setTimeout(() => setSoapBadgeUpdated(false), 3000);
-    setSoapFields(SOAP_DEMO);
-  };
-
-  const saveNotes = () => {
-    setNotesEditing(false);
-    toast.success("Anotações salvas ✓");
-    triggerSoapUpdate();
-  };
-
-  const savePlano = () => {
-    setPlanoEditing(false);
-    toast.success("Plano terapêutico salvo ✓");
-    triggerSoapUpdate();
-  };
-
-  const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-  const validateToken = () => {
-    const a = tokenA.trim().toUpperCase();
-    const b = tokenB.trim().toUpperCase();
-    if (a.length >= 3 && b.length >= 3) {
-      setHistoryUnlocked(true);
-      setAccessModal(false);
-      toast.success("Acesso autorizado ✓", {
-        description: "Histórico completo de Mariana carregado.",
-      });
-    } else {
-      toast.error("Token expirado. Peça ao paciente gerar um novo.");
-    }
-  };
-
-  useEffect(() => {
-    if (!subjective) setSubjective(PREFILL_S);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [evolucaoText, evolucaoEditing]);
 
   useEffect(() => {
     if (!arrivalPulse) return;
@@ -300,22 +277,67 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
     return () => clearTimeout(t);
   }, [arrivalPulse]);
 
-  const filtered = MED_OPTIONS.filter((m) => m.name.toLowerCase().includes(medSearch.toLowerCase()));
+  const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-  const currentStatus: "Saudável" | "Em acompanhamento" | "Atenção" = "Em acompanhamento";
+  // ---- Gravação: pedir confirmação antes de iniciar/parar ----
+  const requestStart = () => setConfirmPopover("start");
+  const requestStop = () => setConfirmPopover("stop");
+  const cancelConfirm = () => setConfirmPopover(null);
 
-  const toggleRecording = () => {
-    setRecording((r) => {
-      const next = !r;
-      if (next) {
-        setRecordSeconds(0);
-        setShowTranscript(false);
-      } else {
-        setShowTranscript(true);
-      }
-      return next;
-    });
+  const confirmStart = () => {
+    setRecording(true);
+    setRecordSeconds(0);
+    setSuggestionBlocks([]);
+    setConfirmPopover(null);
   };
+
+  const confirmStop = () => {
+    setRecording(false);
+    setConfirmPopover(null);
+    setSuggestionBlocks(TRANSCRIPT_BLOCKS.map((b) => ({ ...b, status: "pending" as SuggestionStatus })));
+    toast.message("Transcrição gerada", { description: "Revise os blocos antes de incorporar à evolução." });
+  };
+
+  // ---- Blocos de sugestão: aceitar / editar / descartar ----
+  const acceptBlock = (id: string) => {
+    const block = suggestionBlocks.find((b) => b.id === id);
+    if (!block) return;
+    setEvolucaoText((prev) => (prev ? prev.trim() + "\n\n" : "") + block.text);
+    setSuggestionBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, status: "accepted" } : b)));
+  };
+
+  const discardBlock = (id: string) => {
+    setSuggestionBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, status: "discarded" } : b)));
+  };
+
+  const editBlock = (id: string, text: string) => {
+    setSuggestionBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, text } : b)));
+  };
+
+  const saveEvolucao = () => {
+    setEvolucaoEditing(false);
+    toast.success("Evolução salva ✓");
+  };
+
+  const savePlano = () => {
+    setPlanoEditing(false);
+    toast.success("Plano terapêutico salvo ✓");
+  };
+
+  const validateToken = () => {
+    const a = tokenA.trim().toUpperCase();
+    const b = tokenB.trim().toUpperCase();
+    if (a.length >= 3 && b.length >= 3) {
+      setHistoryUnlocked(true);
+      setAccessModal(false);
+      toast.success("Acesso autorizado ✓", { description: "Histórico completo de Mariana carregado." });
+    } else {
+      toast.error("Token expirado. Peça ao paciente gerar um novo.");
+    }
+  };
+
+  const filtered = MED_OPTIONS.filter((m) => m.name.toLowerCase().includes(medSearch.toLowerCase()));
+  const currentStatus: "Saudável" | "Em acompanhamento" | "Atenção" = "Em acompanhamento";
 
   const finalize = () => {
     setSealed(true);
@@ -326,15 +348,12 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
     setTimeout(onSeal, 1400);
   };
 
-  // Group events by year for the anchor display
-  const grouped = useMemo(() => {
-    const map = new Map<string, ClinicalEvent[]>();
-    for (const e of EVENTS) {
-      if (!map.has(e.year)) map.set(e.year, []);
-      map.get(e.year)!.push(e);
-    }
-    return Array.from(map.entries());
-  }, []);
+  // Biomarcadores visíveis: só os do evento ativo, a menos que "Mostrar tudo" esteja ativo
+  const visibleBiomarkers = useMemo(() => {
+    if (showAllBiomarkers) return BIOMARKERS;
+    const allowed = EVENT_BIOMARKERS[activeEvent] ?? BIOMARKERS.map((b) => b.name);
+    return BIOMARKERS.filter((b) => allowed.includes(b.name));
+  }, [activeEvent, showAllBiomarkers]);
 
   return (
     <div className="mx-auto max-w-[1500px] p-3 lg:p-5">
@@ -352,7 +371,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
           </div>
           <div className="flex-1 min-w-[220px]">
             <div className="text-lg font-semibold">Mariana Silva</div>
-            <div className="text-xs text-white/60">38 anos · F · Histórico desde Mar 2023</div>
+            <div className="text-xs text-white/70">38 anos · F · Histórico desde Mar 2023</div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(
@@ -367,7 +386,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 <span
                   key={p.key}
                   className={`rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 ${
-                    isActive ? p.active : "bg-white/5 text-white/40 ring-white/10"
+                    isActive ? p.active : "bg-white/5 text-white/50 ring-white/10"
                   }`}
                 >
                   {p.key}
@@ -406,7 +425,6 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
               </button>
             </div>
             <div className="relative mt-5 pt-2 pb-2">
-              {/* Horizontal LifeLine */}
               <div className="absolute left-3 right-3 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-emerald-300 via-cyan-400 to-rose-400" />
               <div className="absolute left-3 right-3 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[radial-gradient(circle,white_1.5px,transparent_2px)] bg-[length:8px_3px] opacity-40" />
 
@@ -418,7 +436,10 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                   return (
                     <button
                       key={e.id}
-                      onClick={() => setActiveEvent(e.id)}
+                      onClick={() => {
+                        setActiveEvent(e.id);
+                        setShowAllBiomarkers(false);
+                      }}
                       className="group relative flex min-w-0 flex-1 flex-col items-center"
                       title={e.summary}
                     >
@@ -463,7 +484,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
+        {/* ---------- MIDDLE: Briefing + Evolução (campo único) + Plano/Memed ---------- */}
         <div className="space-y-4">
           {/* CAMADA 1 — Briefing WhatsApp (read-only) */}
           <TooltipProvider delayDuration={150}>
@@ -479,7 +500,10 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                       📋 Via WhatsApp
                     </span>
                   </div>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">{briefingText}</p>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                    Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas). Sem dor torácica ou
+                    edema. Nega febre. Hemograma de mar/2025 anexado via WhatsApp — Hb 11.2 g/dL, Ferritina 18 ng/mL.
+                  </p>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
@@ -490,50 +514,52 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
 
           <div className="border-t border-border" />
 
-          {/* CAMADA 2 — Campo livre + gravação */}
+          {/* CAMADA 2 — Evolução (campo único) + gravação com confirmação */}
           <div>
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-medium text-muted-foreground">Anotações da consulta</Label>
-              {notesEditing ? (
+              <Label className="text-xs font-medium text-muted-foreground">Evolução</Label>
+              {evolucaoEditing ? (
                 <Button
                   type="button"
                   size="sm"
-                  onClick={saveNotes}
+                  onClick={saveEvolucao}
                   className="h-7 bg-teal-600 text-xs text-white hover:bg-teal-700"
                 >
                   <Save className="mr-1 h-3.5 w-3.5" />
-                  Salvar anotações
+                  Salvar evolução
                 </Button>
               ) : (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setNotesEditing(true)}
+                  onClick={() => setEvolucaoEditing(true)}
                   className="h-7 text-xs"
                 >
                   <Pencil className="mr-1 h-3.5 w-3.5" />
-                  Editar anotações
+                  Editar evolução
                 </Button>
               )}
             </div>
             <Textarea
-              ref={notesRef}
-              value={notesText}
-              readOnly={!notesEditing}
-              onChange={(e) => setNotesText(e.target.value)}
+              ref={evolucaoRef}
+              value={evolucaoText}
+              readOnly={!evolucaoEditing}
+              onChange={(e) => setEvolucaoText(e.target.value)}
               placeholder="Escreva livremente ou grave a consulta abaixo..."
               style={{ overflowY: "hidden" }}
               className={`mt-1.5 min-h-[140px] resize-none bg-white text-sm focus-visible:ring-cyan-300 ${
-                notesEditing ? "border-cyan-400 ring-2 ring-cyan-100" : ""
+                evolucaoEditing ? "border-cyan-400 ring-2 ring-cyan-100" : ""
               }`}
             />
-            <div className="mt-2">
+
+            {/* Botão de gravação com confirmação */}
+            <div className="relative mt-2 inline-block">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={toggleRecording}
+                onClick={recording ? requestStop : requestStart}
                 className={recording ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100" : ""}
               >
                 {recording ? (
@@ -549,38 +575,60 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                   </>
                 )}
               </Button>
+
+              {confirmPopover && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-border bg-white p-3 shadow-lg">
+                  <p className="text-xs font-medium text-foreground">
+                    {confirmPopover === "start"
+                      ? "Iniciar gravação da consulta?"
+                      : "Parar gravação e gerar transcrição?"}
+                  </p>
+                  <div className="mt-2.5 flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={confirmPopover === "start" ? confirmStart : confirmStop}
+                      className="h-7 bg-teal-600 text-[11px] text-white hover:bg-teal-700"
+                    >
+                      {confirmPopover === "start" ? "Iniciar" : "Parar"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelConfirm}
+                      className="h-7 text-[11px]"
+                    >
+                      {confirmPopover === "start" ? "Cancelar" : "Continuar gravando"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {showTranscript && (
-              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-sky-800">
+            {/* Blocos de sugestão da transcrição */}
+            {suggestionBlocks.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-800">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Transcrição — revise e confirme
+                  Sugestões da transcrição — revise cada bloco
                 </div>
-                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{TRANSCRIPT_DEMO}</p>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setNotesText((t) => (t ? t + "\n\n" : "") + TRANSCRIPT_DEMO);
-                      setNotesEditing(true);
-                      setShowTranscript(false);
-                      toast.success("Transcrição inserida no campo");
-                    }}
-                  >
-                    Inserir no campo
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowTranscript(false)}>
-                    Descartar
-                  </Button>
-                </div>
+                {suggestionBlocks.map((block) => (
+                  <SuggestionCard
+                    key={block.id}
+                    block={block}
+                    onAccept={() => acceptBlock(block.id)}
+                    onDiscard={() => discardBlock(block.id)}
+                    onEdit={(text) => editBlock(block.id, text)}
+                  />
+                ))}
               </div>
             )}
           </div>
 
           <div className="border-t border-border" />
 
-          {/* CAMADA 2.5 — Plano Terapêutico + Prescrição Memed */}
+          {/* CAMADA 3 — Plano Terapêutico + Prescrição Memed */}
           <div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
@@ -612,19 +660,12 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             </div>
 
             {planoEditing ? (
-              <AutoTextarea
-                value={planoText}
-                onChange={setPlanoText}
-                placeholder="Descreva o plano terapêutico..."
-                minHeight={80}
-              />
+              <AutoTextarea value={planoText} onChange={setPlanoText} placeholder="Descreva o plano terapêutico..." minHeight={80} />
             ) : (
-              <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-                {planoText}
-              </p>
+              <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/80">{planoText}</p>
             )}
 
-            {/* Prescrição Memed — embedded below plan text */}
+            {/* Prescrição Memed */}
             <div className="mt-4">
               <div className="mb-2 flex items-center gap-1.5">
                 <Pill className="h-3.5 w-3.5 text-muted-foreground" />
@@ -649,32 +690,22 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                       <input
                         value={entry.dosage}
                         onChange={(e) =>
-                          setSelectedMeds((prev) =>
-                            prev.map((x, i) => (i === idx ? { ...x, dosage: e.target.value } : x))
-                          )
+                          setSelectedMeds((prev) => prev.map((x, i) => (i === idx ? { ...x, dosage: e.target.value } : x)))
                         }
                         placeholder="Ex: 1 comprimido, 2 vezes ao dia"
                         className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
                       />
-                      <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                        Será exibido ao paciente exatamente como escrito aqui
-                      </p>
                     </div>
                     <div>
                       <label className="text-[11px] font-medium text-muted-foreground">Duração do tratamento</label>
                       <input
                         value={entry.duration}
                         onChange={(e) =>
-                          setSelectedMeds((prev) =>
-                            prev.map((x, i) => (i === idx ? { ...x, duration: e.target.value } : x))
-                          )
+                          setSelectedMeds((prev) => prev.map((x, i) => (i === idx ? { ...x, duration: e.target.value } : x)))
                         }
                         placeholder="Ex: 90 dias"
                         className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
                       />
-                      <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                        Use linguagem clara, ex: '90 dias' ou '3 meses'
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -684,18 +715,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 <button
                   type="button"
                   onClick={() => setMemedOpen(true)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    border: "0.5px dashed var(--border-strong)",
-                    borderRadius: "8px",
-                    padding: "10px 12px",
-                    textAlign: "center",
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                    cursor: "pointer",
-                    background: "transparent",
-                  }}
+                  className="block w-full rounded-lg border border-dashed border-border-strong px-3 py-2.5 text-center text-xs text-muted-foreground"
                 >
                   + Adicionar medicamento à prescrição
                 </button>
@@ -716,10 +736,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                         onClick={() => {
                           if (!selectedMeds.find((x) => x.name === m.name)) {
                             const parts = m.desc.split(" · ");
-                            setSelectedMeds((prev) => [
-                              ...prev,
-                              { name: m.name, dosage: parts[0] ?? "", duration: parts[1] ?? "" },
-                            ]);
+                            setSelectedMeds((prev) => [...prev, { name: m.name, dosage: parts[0] ?? "", duration: parts[1] ?? "" }]);
                           }
                           setMedSearch("");
                           setMemedOpen(false);
@@ -733,7 +750,10 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setMemedOpen(false); setMedSearch(""); }}
+                    onClick={() => {
+                      setMemedOpen(false);
+                      setMedSearch("");
+                    }}
                     className="mt-1.5 w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
                   >
                     Fechar
@@ -742,107 +762,31 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
               )}
             </div>
           </div>
-
-          <div className="border-t border-border" />
-
-          {/* CAMADA 3 — SOAP accordion */}
-          <div
-            className={`rounded-2xl border border-border bg-card transition-opacity duration-300 ${
-              soapPulse ? "opacity-60" : "opacity-100"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setSoapOpen((v) => !v)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold">Estrutura SOAP</span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                    soapBadgeUpdated
-                      ? "bg-teal-100 text-teal-700 ring-1 ring-teal-200"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {soapBadgeUpdated ? "Atualizado agora" : "Gerado automaticamente"}
-                </span>
-              </div>
-              <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${soapOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {soapOpen && (
-              <div className="space-y-3 border-t border-border p-4">
-                {(
-                  [
-                    { key: "s", letter: "S", name: "Subjetivo", locked: false },
-                    { key: "o", letter: "O", name: "Objetivo", locked: false },
-                    { key: "a", letter: "A", name: "Avaliação", locked: true },
-                    { key: "p", letter: "P", name: "Plano", locked: false },
-                  ] as const
-                ).map((f) => (
-                  <div key={f.key} className="rounded-lg border border-border bg-slate-50/60 p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
-                        {f.letter}
-                      </span>
-                      <span className="text-xs font-semibold">{f.name}</span>
-                      {f.locked && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
-                          <Lock className="h-3 w-3" />
-                          Visível apenas para o médico
-                        </span>
-                      )}
-                    </div>
-                    {soapEditing ? (
-                      <Textarea
-                        value={soapFields[f.key]}
-                        onChange={(e) => setSoapFields({ ...soapFields, [f.key]: e.target.value })}
-                        className="mt-2 min-h-[70px] bg-white text-sm"
-                      />
-                    ) : (
-                      <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-                        {soapFields[f.key]}
-                      </p>
-                    )}
-
-                  </div>
-                ))}
-                <div className="flex justify-end">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setSoapEditing((v) => !v)}>
-                    {soapEditing ? (
-                      <>
-                        <Save className="mr-1.5 h-3.5 w-3.5" />
-                        Salvar edição
-                      </>
-                    ) : (
-                      <>
-                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                        Editar SOAP manualmente
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
+        {/* ---------- RIGHT: Biomarkers (drill-down) + collapsibles + sticky CTA ---------- */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-3xl border border-border bg-card p-5">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                PAINEL DE BIOMARCADORES
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  PAINEL DE BIOMARCADORES
+                </div>
+                <div className="text-sm font-semibold">
+                  {showAllBiomarkers ? "Todos os biomarcadores" : `Coletados em ${EVENTS.find((e) => e.id === activeEvent)?.date ?? ""}`}
+                </div>
               </div>
-              <div className="text-sm font-semibold">Histórico · 4 anos</div>
+              <button
+                type="button"
+                onClick={() => setShowAllBiomarkers((v) => !v)}
+                className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {showAllBiomarkers ? "Ver só este evento" : "Mostrar tudo"}
+              </button>
             </div>
 
             <div className="mt-4">
-              {BIOMARKERS.map((b, idx) => {
+              {visibleBiomarkers.map((b, idx) => {
                 const eventIds = ["q2023", "q2024", "q2025", "q2026"];
                 const selIdx = Math.max(0, eventIds.indexOf(activeEvent));
                 const current = b.series[selIdx];
@@ -852,18 +796,14 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 const inRef = !below && !above;
                 const diff = current - prev;
                 const diffAbs = Math.abs(diff);
-                const diffStr =
-                  diffAbs % 1 === 0 ? String(Math.round(diffAbs)) : diffAbs.toFixed(1).replace(/\.0$/, "");
+                const diffStr = diffAbs % 1 === 0 ? String(Math.round(diffAbs)) : diffAbs.toFixed(1).replace(/\.0$/, "");
                 const statusColor = inRef ? "#639922" : "#E24B4A";
                 const valueColor = inRef ? "var(--text-success)" : "var(--text-danger)";
                 const badgeBg = inRef ? "var(--bg-success)" : "var(--bg-danger)";
                 const badgeText = inRef ? "var(--text-success)" : "var(--text-danger)";
                 const badgeLabel = inRef || selIdx === 0 ? "✓ ref" : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
 
-                const data = b.series.map((v, i) => ({
-                  date: BIOMARKER_DATES[i],
-                  value: v,
-                }));
+                const data = b.series.map((v, i) => ({ date: BIOMARKER_DATES[i], value: v }));
                 const yMin = Math.min(b.min, ...b.series) * 0.9;
                 const yMax = Math.max(b.max, ...b.series) * 1.05;
                 const selectedDate = BIOMARKER_DATES[selIdx];
@@ -872,9 +812,9 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                   <div
                     key={b.name}
                     style={{
-                      marginBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
-                      paddingBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
-                      borderBottom: idx === BIOMARKERS.length - 1 ? "none" : "0.5px solid var(--border)",
+                      marginBottom: idx === visibleBiomarkers.length - 1 ? 0 : 12,
+                      paddingBottom: idx === visibleBiomarkers.length - 1 ? 0 : 12,
+                      borderBottom: idx === visibleBiomarkers.length - 1 ? "none" : "0.5px solid var(--border)",
                     }}
                   >
                     <div className="flex items-center justify-between">
@@ -887,14 +827,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                       </div>
                       <span
                         className="font-medium"
-                        style={{
-                          fontSize: 11,
-                          borderRadius: 20,
-                          padding: "2px 8px",
-                          background: badgeBg,
-                          color: badgeText,
-                          whiteSpace: "nowrap",
-                        }}
+                        style={{ fontSize: 11, borderRadius: 20, padding: "2px 8px", background: badgeBg, color: badgeText, whiteSpace: "nowrap" }}
                       >
                         {badgeLabel}
                       </span>
@@ -903,26 +836,14 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data} margin={{ top: 6, right: 8, bottom: 4, left: 8 }}>
                           <YAxis hide domain={[yMin, yMax]} />
-                          <XAxis
-                            dataKey="date"
-                            tick={{ fontSize: 10, fill: "var(--text-muted)" }}
-                            axisLine={false}
-                            tickLine={false}
-                            interval={0}
-                          />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} interval={0} />
                           <ReferenceArea y1={b.min} y2={b.max} fill="#22c55e" fillOpacity={0.08} />
                           <ReferenceLine y={b.max} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
                           <ReferenceLine y={b.min} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
                           <ReferenceLine x={selectedDate} stroke="var(--border-strong)" strokeDasharray="4 4" />
                           <Tooltip
                             cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
-                            contentStyle={{
-                              fontSize: 11,
-                              borderRadius: 8,
-                              border: "1px solid var(--border)",
-                              background: "var(--card)",
-                              padding: "4px 8px",
-                            }}
+                            contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)", padding: "4px 8px" }}
                             formatter={(v: number) => [`${v} ${b.unit}`, ""]}
                             labelStyle={{ fontSize: 10, color: "var(--text-muted)" }}
                             separator=""
@@ -936,17 +857,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                               const { cx, cy, index, key } = props;
                               if (cx == null || cy == null) return <g key={key ?? `empty-${index}`} />;
                               if (index === selIdx) {
-                                return (
-                                  <circle
-                                    key={key ?? `sel-${index}`}
-                                    cx={cx}
-                                    cy={cy}
-                                    r={7}
-                                    fill={statusColor}
-                                    stroke="#fff"
-                                    strokeWidth={2}
-                                  />
-                                );
+                                return <circle key={key ?? `sel-${index}`} cx={cx} cy={cy} r={7} fill={statusColor} stroke="#fff" strokeWidth={2} />;
                               }
                               if (index === data.length - 1) {
                                 return <circle key={key ?? `dot-${index}`} cx={cx} cy={cy} r={4} fill={statusColor} />;
@@ -971,11 +882,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 return (
                   <button
                     key={label}
-                    onClick={() =>
-                      setActiveChips((prev) =>
-                        prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
-                      )
-                    }
+                    onClick={() => setActiveChips((prev) => (prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]))}
                     style={{
                       fontSize: "11px",
                       padding: "3px 10px",
@@ -999,9 +906,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                     <span className="font-semibold">
                       {c.age} anos · {c.sex}
                     </span>
-                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                      {c.outcome}
-                    </span>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{c.outcome}</span>
                   </div>
                   <div className="mt-1 text-muted-foreground">{c.condition}</div>
                   <div className="mt-0.5 text-foreground/80">{c.treatment}</div>
@@ -1015,12 +920,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             <div className="space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={kbSearch}
-                  onChange={(e) => setKbSearch(e.target.value)}
-                  placeholder="Buscar protocolos..."
-                  className="h-8 pl-7 text-xs"
-                />
+                <Input value={kbSearch} onChange={(e) => setKbSearch(e.target.value)} placeholder="Buscar protocolos..." className="h-8 pl-7 text-xs" />
               </div>
               {KB_ITEMS.map((k) => (
                 <button
@@ -1035,12 +935,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             </div>
           </Collapsible>
 
-          <Button
-            onClick={finalize}
-            disabled={sealed}
-            className="w-full bg-teal-600 text-white shadow-md hover:bg-teal-700"
-            size="lg"
-          >
+          <Button onClick={finalize} disabled={sealed} className="w-full bg-teal-600 text-white shadow-md hover:bg-teal-700" size="lg">
             <Mail className="mr-2 h-4 w-4" />
             {sealed ? "Consulta finalizada" : "Finalizar consulta e enviar ao paciente"}
           </Button>
@@ -1050,14 +945,8 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
       {kbOpen && <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />}
 
       {accessModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4"
-          onClick={() => setAccessModal(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4" onClick={() => setAccessModal(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 <KeyRound className="h-4 w-4" />
@@ -1066,22 +955,16 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 <div className="text-sm font-semibold">Solicitar acesso ao histórico</div>
                 <div className="text-[11px] text-muted-foreground">Validação via token LifeLine</div>
               </div>
-              <button
-                onClick={() => setAccessModal(false)}
-                className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted"
-              >
+              <button onClick={() => setAccessModal(false)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
               Peça ao paciente que abra o app LifeLine e gere um token em
-              <span className="font-semibold text-foreground"> Perfil → Gerar token para médico</span>. Digite o código
-              de 3 partes abaixo:
+              <span className="font-semibold text-foreground"> Perfil → Gerar token para médico</span>. Digite o código de 3 partes abaixo:
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <div className="flex h-10 items-center justify-center rounded-lg bg-muted px-3 font-mono text-sm font-bold text-muted-foreground">
-                LFL
-              </div>
+              <div className="flex h-10 items-center justify-center rounded-lg bg-muted px-3 font-mono text-sm font-bold text-muted-foreground">LFL</div>
               <span className="text-muted-foreground">·</span>
               <input
                 value={tokenA}
@@ -1096,16 +979,11 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                 placeholder="9KB1"
                 className="h-10 w-20 rounded-lg border border-border bg-background text-center font-mono text-sm font-bold tracking-wider focus:border-primary focus:outline-none"
               />
-              <button
-                onClick={validateToken}
-                className="ml-auto h-10 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-              >
+              <button onClick={validateToken} className="ml-auto h-10 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
                 Validar
               </button>
             </div>
-            <p className="mt-3 text-[10px] text-muted-foreground">
-              Tokens expiram em 10 minutos por segurança. Se inválido, peça ao paciente gerar um novo.
-            </p>
+            <p className="mt-3 text-[10px] text-muted-foreground">Tokens expiram em 10 minutos por segurança. Se inválido, peça ao paciente gerar um novo.</p>
           </div>
         </div>
       )}
@@ -1113,77 +991,61 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   );
 }
 
-function SoapBlock({
-  letter,
-  name,
-  tone,
-  headerNote,
-  children,
+// ---------- Suggestion card (gravação → transcrição → validação por bloco) ----------
+function SuggestionCard({
+  block,
+  onAccept,
+  onDiscard,
+  onEdit,
 }: {
-  letter: string;
-  name: string;
-  tone: "cyan" | "emerald" | "amber" | "violet";
-  headerNote?: React.ReactNode;
-  children: (locked: boolean) => React.ReactNode;
+  block: SuggestionBlock;
+  onAccept: () => void;
+  onDiscard: () => void;
+  onEdit: (text: string) => void;
 }) {
-  const [locked, setLocked] = useState(false);
-  const tones: Record<string, string> = {
-    cyan: "from-cyan-500 to-teal-500",
-    emerald: "from-emerald-500 to-teal-500",
-    amber: "from-amber-500 to-orange-500",
-    violet: "from-violet-500 to-indigo-500",
-  };
-
-  const toggle = () => {
-    if (!locked) toast.success(`${name} salvo`);
-    setLocked((l) => !l);
-  };
+  const [editing, setEditing] = useState(false);
+  const isResolved = block.status !== "pending";
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-colors">
-      <div className="mb-3 flex items-center gap-3">
-        <div
-          className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${tones[tone]} text-white font-semibold`}
-        >
-          {letter}
-        </div>
-        <div className="flex-1">
-          <div className="text-sm font-semibold">{name}</div>
-        </div>
-        {headerNote}
-        <button
-          onClick={toggle}
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-            locked
-              ? "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          }`}
-        >
-          {locked ? <Pencil className="h-3 w-3" /> : <Save className="h-3 w-3" />}
-          {locked ? "Editar" : "Salvar"}
-        </button>
+    <div
+      className={`rounded-lg border p-3 transition-opacity ${
+        isResolved ? "border-border bg-slate-50 opacity-50" : "border-sky-200 bg-sky-50/70"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold text-sky-800">{block.label}</span>
+        {block.status === "accepted" && <span className="text-[10px] text-emerald-700">Incorporado à evolução</span>}
+        {block.status === "discarded" && <span className="text-[10px] text-muted-foreground">Descartado</span>}
       </div>
-      {children(locked)}
-    </div>
-  );
-}
 
-function Field({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[11px] text-muted-foreground">{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} maxLength={20} disabled={disabled} />
+      {editing ? (
+        <textarea
+          autoFocus
+          value={block.text}
+          onChange={(e) => onEdit(e.target.value)}
+          onBlur={() => setEditing(false)}
+          className="mt-1.5 w-full resize-none rounded-md border border-sky-300 bg-white p-2 text-[12px] leading-relaxed focus:outline-none"
+          rows={3}
+        />
+      ) : (
+        <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-slate-700">{block.text}</p>
+      )}
+
+      {!isResolved && (
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" onClick={onAccept} className="h-7 bg-sky-600 text-[11px] text-white hover:bg-sky-700">
+            <Sparkles className="mr-1 h-3 w-3" />
+            Aceitar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="h-7 text-[11px]">
+            <Pencil className="mr-1 h-3 w-3" />
+            Editar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDiscard} className="h-7 text-[11px]">
+            Descartar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1221,111 +1083,6 @@ function AutoTextarea({
   );
 }
 
-function SubjectiveBody({
-  value,
-  onChange,
-  locked,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  locked: boolean;
-}) {
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [showSuggestion, setShowSuggestion] = useState(false);
-
-  useEffect(() => {
-    if (!recording) return;
-    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, [recording]);
-
-  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-  const toggle = () => {
-    if (recording) {
-      setRecording(false);
-      setShowSuggestion(true);
-    } else {
-      setElapsed(0);
-      setRecording(true);
-      setShowSuggestion(false);
-    }
-  };
-
-  const suggestion = "Paciente menciona melhora com repouso. Piora ao caminhar mais de 100m.";
-
-  return (
-    <div className="space-y-2">
-      <AutoTextarea value={value} onChange={onChange} disabled={locked} />
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={locked}
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-          recording
-            ? "border-rose-300 bg-rose-50 text-rose-700"
-            : "border-border bg-background text-foreground/80 hover:bg-muted"
-        } disabled:opacity-50`}
-      >
-        {recording ? (
-          <>
-            <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
-            Gravando · {fmt(elapsed)}
-          </>
-        ) : (
-          <>
-            <Mic className="h-3 w-3" />
-            Gravar e transcrever
-          </>
-        )}
-      </button>
-      {showSuggestion && (
-        <SuggestionBox
-          title="Sugestão da transcrição"
-          text={`"${suggestion}"`}
-          onAccept={() => {
-            onChange((value ? value + " " : "") + suggestion);
-            setShowSuggestion(false);
-            toast.success("Sugestão incorporada ao S");
-          }}
-          onIgnore={() => setShowSuggestion(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function SuggestionBox({
-  title,
-  text,
-  onAccept,
-  onIgnore,
-}: {
-  title: string;
-  text: string;
-  onAccept: () => void;
-  onIgnore: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-3">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-800">
-        <Lightbulb className="h-3.5 w-3.5" />
-        {title}
-      </div>
-      <div className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-slate-700">{text}</div>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={onAccept} className="h-7 bg-sky-600 text-white hover:bg-sky-700 text-[11px]">
-          Aceitar
-        </Button>
-        <Button size="sm" variant="outline" onClick={onIgnore} className="h-7 text-[11px]">
-          Ignorar
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function Collapsible({
   icon: Icon,
   title,
@@ -1340,18 +1097,10 @@ function Collapsible({
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-2xl border border-border bg-card">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left"
-      >
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-4 py-3 text-left">
         <Icon className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium">{title}</span>
-        {badge && (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {badge}
-          </span>
-        )}
+        {badge && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{badge}</span>}
         <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && <div className="border-t border-border px-4 py-3">{children}</div>}

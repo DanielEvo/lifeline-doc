@@ -39,8 +39,6 @@ type Store = {
   resetChat: () => void;
   patients: PatientCard[];
   movePatient: (id: string, to: KanbanColumnId) => void;
-  subjective: string;
-  setSubjective: (s: string) => void;
   sealed: boolean;
   setSealed: (b: boolean) => void;
 };
@@ -118,7 +116,6 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [step, setStep] = useState(0);
   const [patients, setPatients] = useState<PatientCard[]>(initialPatients);
-  const [subjective, setSubjective] = useState("");
   const [sealed, setSealed] = useState(false);
 
   const pushMessages = (msgs: ChatMessage[]) =>
@@ -128,7 +125,6 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setStep(0);
     setPatients(initialPatients);
-    setSubjective("");
     setSealed(false);
   };
 
@@ -146,8 +142,6 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         resetChat,
         patients,
         movePatient,
-        subjective,
-        setSubjective,
         sealed,
         setSealed,
       }}
