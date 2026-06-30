@@ -198,6 +198,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   const [recording, setRecording] = useState(false);
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
+  const [activeChips, setActiveChips] = useState<string[]>(["Fadiga", "Ferritina <20"]);
   const [arrivalPulse, setArrivalPulse] = useState<boolean>(Boolean(initialQuest));
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [accessModal, setAccessModal] = useState(false);
@@ -783,6 +784,33 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
           </div>
 
           <Collapsible icon={Users} title="Casos com perfil similar" badge="3 pacientes">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+              {(["Fadiga", "Ferritina <20", "35–45 anos", "+ filtro"] as const).map((label) => {
+                const active = activeChips.includes(label);
+                return (
+                  <button
+                    key={label}
+                    onClick={() =>
+                      setActiveChips((prev) =>
+                        prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
+                      )
+                    }
+                    style={{
+                      fontSize: "11px",
+                      padding: "3px 10px",
+                      borderRadius: "20px",
+                      border: `0.5px solid ${active ? "var(--border-accent)" : "var(--border-strong)"}`,
+                      background: active ? "var(--bg-accent)" : "var(--surface-1)",
+                      color: active ? "var(--text-accent)" : "var(--text-secondary)",
+                      fontWeight: active ? 500 : 400,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
             <div className="space-y-2">
               {SIMILAR_CASES.map((c) => (
                 <div key={c.id} className="rounded-lg border border-border bg-white p-2.5 text-[11px]">
