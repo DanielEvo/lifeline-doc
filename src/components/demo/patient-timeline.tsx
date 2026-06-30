@@ -15,7 +15,6 @@ import {
   Mic,
   MicOff,
   Pencil,
-
   Pill,
   RefreshCw,
   Save,
@@ -26,28 +25,13 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Line,
-  LineChart,
-  ReferenceArea,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
+import { Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip as UITooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDemo } from "@/lib/demo-store";
 import { PageHeader } from "./whatsapp-simulator";
 
@@ -75,8 +59,7 @@ const EVENTS: ClinicalEvent[] = [
     description: "Hemograma + bioquímica + vitaminas",
     type: "exames",
     status: "Saudável",
-    summary:
-      "Painel metabólico completo dentro da faixa de referência. Hb 13.4 · Ferritina 78 · Vit D 38.",
+    summary: "Painel metabólico completo dentro da faixa de referência. Hb 13.4 · Ferritina 78 · Vit D 38.",
   },
   {
     id: "q2024",
@@ -86,8 +69,7 @@ const EVENTS: ClinicalEvent[] = [
     description: "Hemograma + perfil de ferro",
     type: "exames",
     status: "Atenção",
-    summary:
-      "Primeira queda significativa de hemoglobina. Ferritina caindo · Vit D limítrofe.",
+    summary: "Primeira queda significativa de hemoglobina. Ferritina caindo · Vit D limítrofe.",
   },
   {
     id: "q2025",
@@ -97,8 +79,7 @@ const EVENTS: ClinicalEvent[] = [
     description: "Bioquímica + vitaminas",
     type: "retorno",
     status: "Atenção",
-    summary:
-      "Suplementação iniciada. B12 e Zinco abaixo do ideal. EAS com leucócitos +.",
+    summary: "Suplementação iniciada. B12 e Zinco abaixo do ideal. EAS com leucócitos +.",
   },
   {
     id: "q2026",
@@ -108,8 +89,7 @@ const EVENTS: ClinicalEvent[] = [
     description: "Briefing WhatsApp + 2 exames recentes",
     type: "consulta",
     status: "Em atendimento",
-    summary:
-      "Hb 11.2 · Ferritina 18 · Vit D 19. Queixa de fadiga + dispneia aos esforços.",
+    summary: "Hb 11.2 · Ferritina 18 · Vit D 19. Queixa de fadiga + dispneia aos esforços.",
   },
 ];
 
@@ -149,7 +129,6 @@ const BIOMARKERS = [
   { name: "Zinco", min: 70, max: 120, unit: "µg/dL", series: [95, 82, 68, 61] },
   { name: "Creatinina", min: 0.5, max: 1.1, unit: "mg/dL", series: [0.78, 0.82, 0.85, 0.9] },
 ] as const;
-
 
 const MED_OPTIONS = [
   { name: "Sulfato Ferroso 40mg", desc: "1cp 2x/dia · 90 dias" },
@@ -191,30 +170,21 @@ const SIMILAR_CASES = [
 const KB_ITEMS = [
   {
     title: "Kit anemia ferropriva — protocolo Dra. Helena",
-    body:
-      "Sulfato Ferroso 40mg 1cp 2x/dia em jejum + Vit C 500mg. Reavaliar ferritina e hemograma em 60 dias. Se intolerância gástrica, fracionar dose. Considerar Ferro EV se Hb < 9 ou má adesão.",
+    body: "Sulfato Ferroso 40mg 1cp 2x/dia em jejum + Vit C 500mg. Reavaliar ferritina e hemograma em 60 dias. Se intolerância gástrica, fracionar dose. Considerar Ferro EV se Hb < 9 ou má adesão.",
   },
   {
     title: "Orientações para paciente com fadiga crônica",
-    body:
-      "Higiene do sono · atividade física leve progressiva · suplementação conforme déficit · investigar hipotireoidismo e síndrome depressiva. Diário de sintomas por 14 dias.",
+    body: "Higiene do sono · atividade física leve progressiva · suplementação conforme déficit · investigar hipotireoidismo e síndrome depressiva. Diário de sintomas por 14 dias.",
   },
   {
     title: "Quando indicar ferro EV vs oral",
-    body:
-      "Ferro EV: intolerância oral comprovada, má absorção (DII, bariátrica), perdas continuadas, necessidade de correção rápida (Hb < 8 sintomático). Caso contrário, via oral é primeira escolha.",
+    body: "Ferro EV: intolerância oral comprovada, má absorção (DII, bariátrica), perdas continuadas, necessidade de correção rápida (Hb < 8 sintomático). Caso contrário, via oral é primeira escolha.",
   },
 ];
 
 type KbItem = (typeof KB_ITEMS)[number];
 
-export function PatientTimelineSOAP({
-  onSeal,
-  initialQuest,
-}: {
-  onSeal: () => void;
-  initialQuest?: string;
-}) {
+export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => void; initialQuest?: string }) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
   const [objetivoNotes, setObjetivoNotes] = useState("");
@@ -228,9 +198,7 @@ export function PatientTimelineSOAP({
   const [recording, setRecording] = useState(false);
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
-  const [arrivalPulse, setArrivalPulse] = useState<boolean>(
-    Boolean(initialQuest),
-  );
+  const [arrivalPulse, setArrivalPulse] = useState<boolean>(Boolean(initialQuest));
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [accessModal, setAccessModal] = useState(false);
   const [tokenA, setTokenA] = useState("");
@@ -288,10 +256,7 @@ export function PatientTimelineSOAP({
     setSoapFields(SOAP_DEMO);
   };
 
-  const fmtTime = (s: number) =>
-    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-
+  const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const validateToken = () => {
     const a = tokenA.trim().toUpperCase();
@@ -319,10 +284,7 @@ export function PatientTimelineSOAP({
     return () => clearTimeout(t);
   }, [arrivalPulse]);
 
-
-  const filtered = MED_OPTIONS.filter((m) =>
-    m.name.toLowerCase().includes(medSearch.toLowerCase()),
-  );
+  const filtered = MED_OPTIONS.filter((m) => m.name.toLowerCase().includes(medSearch.toLowerCase()));
 
   const currentStatus: "Saudável" | "Em acompanhamento" | "Atenção" = "Em acompanhamento";
 
@@ -339,7 +301,6 @@ export function PatientTimelineSOAP({
     });
   };
 
-
   const finalize = () => {
     setSealed(true);
     toast.success("Receita e orientações enviadas para Mariana via WhatsApp ✓", {
@@ -348,7 +309,6 @@ export function PatientTimelineSOAP({
     });
     setTimeout(onSeal, 1400);
   };
-
 
   // Group events by year for the anchor display
   const grouped = useMemo(() => {
@@ -368,7 +328,6 @@ export function PatientTimelineSOAP({
         </div>
       </div>
 
-
       {/* Patient header */}
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 p-6 text-white shadow-xl">
         <div className="flex flex-wrap items-center gap-5">
@@ -377,9 +336,7 @@ export function PatientTimelineSOAP({
           </div>
           <div className="flex-1 min-w-[220px]">
             <div className="text-lg font-semibold">Mariana Silva</div>
-            <div className="text-xs text-white/60">
-              38 anos · F · Histórico desde Mar 2023
-            </div>
+            <div className="text-xs text-white/60">38 anos · F · Histórico desde Mar 2023</div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(
@@ -413,7 +370,6 @@ export function PatientTimelineSOAP({
               {historyUnlocked ? "Histórico autorizado" : "Solicitar acesso ao histórico"}
             </button>
           </div>
-
         </div>
       </div>
 
@@ -450,9 +406,7 @@ export function PatientTimelineSOAP({
                       className="group relative flex min-w-0 flex-1 flex-col items-center"
                       title={e.summary}
                     >
-                      <div className="mb-1 text-[10px] font-medium text-muted-foreground">
-                        {e.date}
-                      </div>
+                      <div className="mb-1 text-[10px] font-medium text-muted-foreground">{e.date}</div>
                       <div
                         className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-white shadow-md ring-4 ring-white transition-transform ${
                           st.node
@@ -463,9 +417,7 @@ export function PatientTimelineSOAP({
                         }`}
                       >
                         <Icon className="h-4 w-4" />
-                        {isActive && (
-                          <span className="absolute -inset-1 -z-10 rounded-full bg-cyan-400/30 blur-sm" />
-                        )}
+                        {isActive && <span className="absolute -inset-1 -z-10 rounded-full bg-cyan-400/30 blur-sm" />}
                       </div>
                       <div
                         className={`mt-1.5 max-w-[110px] truncate text-[11px] font-medium leading-tight ${
@@ -474,9 +426,7 @@ export function PatientTimelineSOAP({
                       >
                         {e.title}
                       </div>
-                      <span
-                        className={`mt-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 ${st.pill}`}
-                      >
+                      <span className={`mt-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 ${st.pill}`}>
                         {e.status}
                       </span>
                     </button>
@@ -484,7 +434,6 @@ export function PatientTimelineSOAP({
                 })}
               </div>
             </div>
-
           </div>
         ) : (
           <button
@@ -497,9 +446,7 @@ export function PatientTimelineSOAP({
         )}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-
-
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_520px]">
         {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
         <div className="space-y-4">
           {/* CAMADA 1 — Briefing WhatsApp (read-only) */}
@@ -516,9 +463,7 @@ export function PatientTimelineSOAP({
                       📋 Via WhatsApp
                     </span>
                   </div>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-                    {briefingText}
-                  </p>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">{briefingText}</p>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
@@ -532,9 +477,7 @@ export function PatientTimelineSOAP({
           {/* CAMADA 2 — Campo livre + gravação */}
           <div>
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-medium text-muted-foreground">
-                Anotações da consulta
-              </Label>
+              <Label className="text-xs font-medium text-muted-foreground">Anotações da consulta</Label>
               {notesEditing ? (
                 <Button
                   type="button"
@@ -575,11 +518,7 @@ export function PatientTimelineSOAP({
                 variant="outline"
                 size="sm"
                 onClick={toggleRecording}
-                className={
-                  recording
-                    ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                    : ""
-                }
+                className={recording ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100" : ""}
               >
                 {recording ? (
                   <>
@@ -602,9 +541,7 @@ export function PatientTimelineSOAP({
                   <Sparkles className="h-3.5 w-3.5" />
                   Transcrição — revise e confirme
                 </div>
-                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">
-                  {TRANSCRIPT_DEMO}
-                </p>
+                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{TRANSCRIPT_DEMO}</p>
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm"
@@ -617,11 +554,7 @@ export function PatientTimelineSOAP({
                   >
                     Inserir no campo
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowTranscript(false)}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => setShowTranscript(false)}>
                     Descartar
                   </Button>
                 </div>
@@ -656,9 +589,7 @@ export function PatientTimelineSOAP({
                 </span>
               </div>
               <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${
-                  soapOpen ? "rotate-180" : ""
-                }`}
+                className={`h-4 w-4 text-muted-foreground transition-transform ${soapOpen ? "rotate-180" : ""}`}
               />
             </button>
 
@@ -671,7 +602,6 @@ export function PatientTimelineSOAP({
                     { key: "a", letter: "A", name: "Avaliação", locked: true },
                     { key: "p", letter: "P", name: "Plano", locked: false },
                   ] as const
-
                 ).map((f) => (
                   <div key={f.key} className="rounded-lg border border-border bg-slate-50/60 p-3">
                     <div className="flex items-center gap-2">
@@ -689,9 +619,7 @@ export function PatientTimelineSOAP({
                     {soapEditing ? (
                       <Textarea
                         value={soapFields[f.key]}
-                        onChange={(e) =>
-                          setSoapFields({ ...soapFields, [f.key]: e.target.value })
-                        }
+                        onChange={(e) => setSoapFields({ ...soapFields, [f.key]: e.target.value })}
                         className="mt-2 min-h-[70px] bg-white text-sm"
                       />
                     ) : (
@@ -702,12 +630,7 @@ export function PatientTimelineSOAP({
                   </div>
                 ))}
                 <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSoapEditing((v) => !v)}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={() => setSoapEditing((v) => !v)}>
                     {soapEditing ? (
                       <>
                         <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -725,7 +648,6 @@ export function PatientTimelineSOAP({
             )}
           </div>
         </div>
-
 
         {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
@@ -749,17 +671,12 @@ export function PatientTimelineSOAP({
                 const diff = current - prev;
                 const diffAbs = Math.abs(diff);
                 const diffStr =
-                  diffAbs % 1 === 0
-                    ? String(Math.round(diffAbs))
-                    : diffAbs.toFixed(1).replace(/\.0$/, "");
+                  diffAbs % 1 === 0 ? String(Math.round(diffAbs)) : diffAbs.toFixed(1).replace(/\.0$/, "");
                 const statusColor = inRef ? "#639922" : "#E24B4A";
                 const valueColor = inRef ? "var(--text-success)" : "var(--text-danger)";
                 const badgeBg = inRef ? "var(--bg-success)" : "var(--bg-danger)";
                 const badgeText = inRef ? "var(--text-success)" : "var(--text-danger)";
-                const badgeLabel =
-                  inRef || selIdx === 0
-                    ? "✓ ref"
-                    : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
+                const badgeLabel = inRef || selIdx === 0 ? "✓ ref" : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
 
                 const data = b.series.map((v, i) => ({
                   date: BIOMARKER_DATES[i],
@@ -775,20 +692,13 @@ export function PatientTimelineSOAP({
                     style={{
                       marginBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
                       paddingBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
-                      borderBottom:
-                        idx === BIOMARKERS.length - 1
-                          ? "none"
-                          : "0.5px solid var(--border)",
+                      borderBottom: idx === BIOMARKERS.length - 1 ? "none" : "0.5px solid var(--border)",
                     }}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-baseline gap-2">
                         <span style={{ fontSize: 13, fontWeight: 500 }}>{b.name}</span>
-                        <span
-                          style={{ fontSize: 14, fontWeight: 600, color: valueColor }}
-                        >
-                          {current}
-                        </span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: valueColor }}>{current}</span>
                         <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
                           {b.unit} · Ref: {b.min}–{b.max}
                         </span>
@@ -809,10 +719,7 @@ export function PatientTimelineSOAP({
                     </div>
                     <div style={{ height: 120, width: "100%", marginTop: 6 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={data}
-                          margin={{ top: 6, right: 8, bottom: 4, left: 8 }}
-                        >
+                        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 4, left: 8 }}>
                           <YAxis hide domain={[yMin, yMax]} />
                           <XAxis
                             dataKey="date"
@@ -821,29 +728,10 @@ export function PatientTimelineSOAP({
                             tickLine={false}
                             interval={0}
                           />
-                          <ReferenceArea
-                            y1={b.min}
-                            y2={b.max}
-                            fill="#22c55e"
-                            fillOpacity={0.08}
-                          />
-                          <ReferenceLine
-                            y={b.max}
-                            stroke="#22c55e"
-                            strokeDasharray="3 3"
-                            strokeOpacity={0.4}
-                          />
-                          <ReferenceLine
-                            y={b.min}
-                            stroke="#22c55e"
-                            strokeDasharray="3 3"
-                            strokeOpacity={0.4}
-                          />
-                          <ReferenceLine
-                            x={selectedDate}
-                            stroke="var(--border-strong)"
-                            strokeDasharray="4 4"
-                          />
+                          <ReferenceArea y1={b.min} y2={b.max} fill="#22c55e" fillOpacity={0.08} />
+                          <ReferenceLine y={b.max} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
+                          <ReferenceLine y={b.min} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
+                          <ReferenceLine x={selectedDate} stroke="var(--border-strong)" strokeDasharray="4 4" />
                           <Tooltip
                             cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
                             contentStyle={{
@@ -879,15 +767,7 @@ export function PatientTimelineSOAP({
                                 );
                               }
                               if (index === data.length - 1) {
-                                return (
-                                  <circle
-                                    key={key ?? `dot-${index}`}
-                                    cx={cx}
-                                    cy={cy}
-                                    r={4}
-                                    fill={statusColor}
-                                  />
-                                );
+                                return <circle key={key ?? `dot-${index}`} cx={cx} cy={cy} r={4} fill={statusColor} />;
                               }
                               return <g key={key ?? `empty-${index}`} />;
                             }}
@@ -902,21 +782,14 @@ export function PatientTimelineSOAP({
             </div>
           </div>
 
-
-
-          <Collapsible
-            icon={Users}
-            title="Casos com perfil similar"
-            badge="3 pacientes"
-          >
+          <Collapsible icon={Users} title="Casos com perfil similar" badge="3 pacientes">
             <div className="space-y-2">
               {SIMILAR_CASES.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-lg border border-border bg-white p-2.5 text-[11px]"
-                >
+                <div key={c.id} className="rounded-lg border border-border bg-white p-2.5 text-[11px]">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">{c.age} anos · {c.sex}</span>
+                    <span className="font-semibold">
+                      {c.age} anos · {c.sex}
+                    </span>
                     <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                       {c.outcome}
                     </span>
@@ -925,16 +798,11 @@ export function PatientTimelineSOAP({
                   <div className="mt-0.5 text-foreground/80">{c.treatment}</div>
                 </div>
               ))}
-              <div className="text-[10px] italic text-muted-foreground">
-                Dados anonimizados · mesma médica
-              </div>
+              <div className="text-[10px] italic text-muted-foreground">Dados anonimizados · mesma médica</div>
             </div>
           </Collapsible>
 
-          <Collapsible
-            icon={BookOpen}
-            title="Minha base de conhecimento"
-          >
+          <Collapsible icon={BookOpen} title="Minha base de conhecimento">
             <div className="space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -970,13 +838,17 @@ export function PatientTimelineSOAP({
         </div>
       </div>
 
-      {kbOpen && (
-        <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />
-      )}
+      {kbOpen && <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />}
 
       {accessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4" onClick={() => setAccessModal(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4"
+          onClick={() => setAccessModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 <KeyRound className="h-4 w-4" />
@@ -985,14 +857,17 @@ export function PatientTimelineSOAP({
                 <div className="text-sm font-semibold">Solicitar acesso ao histórico</div>
                 <div className="text-[11px] text-muted-foreground">Validação via token LifeLine</div>
               </div>
-              <button onClick={() => setAccessModal(false)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted">
+              <button
+                onClick={() => setAccessModal(false)}
+                className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
               Peça ao paciente que abra o app LifeLine e gere um token em
-              <span className="font-semibold text-foreground"> Perfil → Gerar token para médico</span>.
-              Digite o código de 3 partes abaixo:
+              <span className="font-semibold text-foreground"> Perfil → Gerar token para médico</span>. Digite o código
+              de 3 partes abaixo:
             </p>
             <div className="mt-4 flex items-center gap-2">
               <div className="flex h-10 items-center justify-center rounded-lg bg-muted px-3 font-mono text-sm font-bold text-muted-foreground">
@@ -1028,8 +903,6 @@ export function PatientTimelineSOAP({
     </div>
   );
 }
-
-
 
 function SoapBlock({
   letter,
@@ -1101,12 +974,7 @@ function Field({
   return (
     <div className="space-y-1.5">
       <Label className="text-[11px] text-muted-foreground">{label}</Label>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        maxLength={20}
-        disabled={disabled}
-      />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} maxLength={20} disabled={disabled} />
     </div>
   );
 }
@@ -1163,8 +1031,7 @@ function SubjectiveBody({
     return () => clearInterval(t);
   }, [recording]);
 
-  const fmt = (s: number) =>
-    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const toggle = () => {
     if (recording) {
@@ -1177,8 +1044,7 @@ function SubjectiveBody({
     }
   };
 
-  const suggestion =
-    "Paciente menciona melhora com repouso. Piora ao caminhar mais de 100m.";
+  const suggestion = "Paciente menciona melhora com repouso. Piora ao caminhar mais de 100m.";
 
   return (
     <div className="space-y-2">
@@ -1238,9 +1104,7 @@ function SuggestionBox({
         <Lightbulb className="h-3.5 w-3.5" />
         {title}
       </div>
-      <div className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-slate-700">
-        {text}
-      </div>
+      <div className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-slate-700">{text}</div>
       <div className="mt-2 flex gap-2">
         <Button size="sm" onClick={onAccept} className="h-7 bg-sky-600 text-white hover:bg-sky-700 text-[11px]">
           Aceitar
@@ -1279,9 +1143,7 @@ function Collapsible({
             {badge}
           </span>
         )}
-        <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-        />
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && <div className="border-t border-border px-4 py-3">{children}</div>}
     </div>
@@ -1294,25 +1156,20 @@ function KbModal({ item, onClose }: { item: KbItem; onClose: () => void }) {
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-700">
-              Base de conhecimento
-            </div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-cyan-700">Base de conhecimento</div>
             <div className="mt-0.5 text-base font-semibold">{item.title}</div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-            aria-label="Fechar"
-          >
+          <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="Fechar">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="mt-4 text-sm leading-relaxed text-slate-700">{item.body}</div>
         <div className="mt-5 flex justify-end">
-          <Button size="sm" onClick={onClose}>Fechar</Button>
+          <Button size="sm" onClick={onClose}>
+            Fechar
+          </Button>
         </div>
       </div>
     </div>
   );
 }
-
