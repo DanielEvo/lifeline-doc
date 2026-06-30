@@ -717,52 +717,126 @@ export function PatientTimelineSOAP({
         {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-3xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Painel de biomarcadores
-                </div>
-                <div className="text-sm font-semibold">Tendência · 4 anos</div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Painel de biomarcadores
               </div>
-              <div className="flex flex-wrap gap-1">
-                {PANELS.map((p) => {
-                  const Icon = p.icon;
-                  const isActive = activePanel === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setActivePanel(p.id)}
-                      className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-all ${
-                        isActive
-                          ? `bg-gradient-to-r ${p.tint} text-white shadow`
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                      title={p.label}
+              <div className="text-sm font-semibold">Consulta atual · Jun 2026</div>
+            </div>
+
+            <div className="mt-4 space-y-[6px]">
+              {BIOMARKERS.map((b) => {
+                const below = b.current < b.min;
+                const above = b.current > b.max;
+                const inRef = !below && !above;
+                const diff = b.current - b.prev;
+                const diffAbs = Math.abs(diff);
+                const diffStr =
+                  diffAbs % 1 === 0
+                    ? String(Math.round(diffAbs))
+                    : diffAbs.toFixed(1).replace(/\.0$/, "");
+
+                const valueColor = below
+                  ? "var(--text-danger)"
+                  : above
+                    ? "var(--text-warning)"
+                    : "var(--text-success)";
+                const barColor = below
+                  ? "var(--fill-danger)"
+                  : above
+                    ? "var(--fill-warning)"
+                    : "var(--fill-success)";
+                const badgeBg = below
+                  ? "var(--bg-danger)"
+                  : above
+                    ? "var(--bg-warning)"
+                    : "var(--bg-success)";
+                const badgeText = below
+                  ? "var(--text-danger)"
+                  : above
+                    ? "var(--text-warning)"
+                    : "var(--text-success)";
+                const badgeLabel = inRef
+                  ? "✓ dentro do ref"
+                  : `↓ ${diffStr} vs anterior`;
+
+                const pct = Math.max(
+                  0,
+                  Math.min(100, ((b.current - b.min) / (b.max - b.min)) * 100),
+                );
+
+                return (
+                  <div
+                    key={b.name}
+                    className="space-y-1"
+                    style={{
+                      borderRadius: "8px",
+                      border: "0.5px solid var(--border)",
+                      background: "var(--surface-2)",
+                      padding: "10px 12px",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {b.name}
+                      </span>
+                      <span
+                        className="font-medium"
+                        style={{
+                          fontSize: "11px",
+                          borderRadius: "20px",
+                          padding: "2px 8px",
+                          background: badgeBg,
+                          color: badgeText,
+                        }}
+                      >
+                        {badgeLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span
+                        className="font-medium"
+                        style={{
+                          fontSize: "18px",
+                          fontWeight: 500,
+                          color: valueColor,
+                        }}
+                      >
+                        {b.current}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        {b.unit} · Ref: {b.min}–{b.max} {b.unit}
+                      </span>
+                    </div>
+                    <div
+                      className="h-[5px] w-full overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-0)" }}
                     >
-                      <Icon className="h-3 w-3" />
-                    </button>
-                  );
-                })}
-              </div>
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${pct}%`,
+                          background: barColor,
+                          borderRadius: "3px",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="mt-4 space-y-3">
-              {panel.series.map((s) => (
-                <BiomarkerChart
-                  key={s.key}
-                  series={s}
-                  activeQuest={activeEvent}
-                  onExpand={() => setExpandedSeries(s.key)}
-                />
-              ))}
-            </div>
-
-            {expanded && (
-              <ExpandedSeries
-                series={expanded}
-                onClose={() => setExpandedSeries(null)}
-              />
-            )}
           </div>
 
           <Collapsible
