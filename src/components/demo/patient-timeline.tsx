@@ -12,9 +12,11 @@ import {
   Lock,
   KeyRound,
   Mail,
+  MessageCircle,
   Mic,
   MicOff,
   Pencil,
+
   Pill,
   RefreshCw,
   Save,
