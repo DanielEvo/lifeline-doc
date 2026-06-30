@@ -128,15 +128,17 @@ const STATUS_STYLE: Record<EventStatus, { pill: string; node: string }> = {
   },
 };
 
-// ---------- Biomarker alert cards data ----------
+// ---------- Biomarker historical series ----------
+const BIOMARKER_DATES = ["Mar 23", "Set 24", "Mai 25", "Jun 26"] as const;
 const BIOMARKERS = [
-  { name: "Hemoglobina", current: 11.2, prev: 11.9, min: 12, max: 16, unit: "g/dL" },
-  { name: "Ferritina", current: 18, prev: 28, min: 30, max: 200, unit: "ng/mL" },
-  { name: "Vitamina D", current: 19, prev: 24, min: 30, max: 100, unit: "ng/mL" },
-  { name: "Vitamina B12", current: 240, prev: 290, min: 300, max: 900, unit: "pg/mL" },
-  { name: "Zinco", current: 61, prev: 68, min: 70, max: 120, unit: "µg/dL" },
-  { name: "Creatinina", current: 0.9, prev: 0.85, min: 0.5, max: 1.1, unit: "mg/dL" },
+  { name: "Hemoglobina", min: 12, max: 16, unit: "g/dL", series: [13.4, 12.6, 11.9, 11.2] },
+  { name: "Ferritina", min: 30, max: 200, unit: "ng/mL", series: [78, 42, 28, 18] },
+  { name: "Vitamina D", min: 30, max: 100, unit: "ng/mL", series: [38, 29, 24, 19] },
+  { name: "Vitamina B12", min: 300, max: 900, unit: "pg/mL", series: [520, 410, 290, 240] },
+  { name: "Zinco", min: 70, max: 120, unit: "µg/dL", series: [95, 82, 68, 61] },
+  { name: "Creatinina", min: 0.5, max: 1.1, unit: "mg/dL", series: [0.78, 0.82, 0.85, 0.9] },
 ] as const;
+
 
 const MED_OPTIONS = [
   { name: "Sulfato Ferroso 40mg", desc: "1cp 2x/dia · 90 dias" },
