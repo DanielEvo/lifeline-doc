@@ -446,7 +446,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
         )}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_520px]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
         <div className="space-y-4">
           {/* CAMADA 1 — Briefing WhatsApp (read-only) */}
