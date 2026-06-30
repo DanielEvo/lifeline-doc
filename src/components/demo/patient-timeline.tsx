@@ -381,6 +381,8 @@ export function PatientTimelineSOAP({
   const [tokenA, setTokenA] = useState("");
   const [tokenB, setTokenB] = useState("");
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+
 
   const validateToken = () => {
     const a = tokenA.trim().toUpperCase();
