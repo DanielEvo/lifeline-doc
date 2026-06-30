@@ -388,23 +388,27 @@ export function PatientTimelineSOAP({
   // ---- New central zone state ----
   const BRIEFING_DEFAULT =
     "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas).\nSem dor torácica ou edema. Nega febre.\nExames anexados: Hb 11.2 g/dL · Ferritina 18 ng/mL · Vit D 19 ng/mL";
+  const NOTES_DEFAULT =
+    "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
   const TRANSCRIPT_DEMO =
     "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
   const SOAP_DEMO = {
-    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nNega dor torácica. Hb 11.2 · Ferritina 18 via WhatsApp.",
+    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nPiora nas últimas semanas. Hb 11.2 · Ferritina 18 via WhatsApp.",
     o: "PA 118/76 mmHg · Peso 62kg · FC 82bpm.\nBiomarcadores: Hb 11.2 · Ferritina 18 · Vit D 19.",
     a: "Anemia ferropriva em evolução. Queda contínua de Hb, Ferritina e Vitamina D nos últimos 3 anos.",
-    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nReavaliar em 60 dias.",
+    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.",
   };
-  const [briefingText, setBriefingText] = useState(BRIEFING_DEFAULT);
-  const [briefingEditing, setBriefingEditing] = useState(false);
-  const [notesText, setNotesText] = useState("");
+  const [briefingText] = useState(BRIEFING_DEFAULT);
+  const [notesText, setNotesText] = useState(NOTES_DEFAULT);
+  const [notesEditing, setNotesEditing] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showTranscript, setShowTranscript] = useState(false);
   const [soapOpen, setSoapOpen] = useState(false);
   const [soapEditing, setSoapEditing] = useState(false);
   const [soapFields, setSoapFields] = useState(SOAP_DEMO);
   const [soapPulse, setSoapPulse] = useState(false);
+  const [soapBadgeUpdated, setSoapBadgeUpdated] = useState(false);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!recording) return;
@@ -412,10 +416,23 @@ export function PatientTimelineSOAP({
     return () => clearInterval(id);
   }, [recording]);
 
-  const triggerSoapPulse = () => {
-    if (!soapOpen) return;
+  // Auto-resize notes textarea
+  useEffect(() => {
+    const el = notesRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [notesText, notesEditing]);
+
+  const saveNotes = () => {
+    setNotesEditing(false);
+    toast.success("Anotações salvas ✓");
+    setSoapOpen(true);
     setSoapPulse(true);
-    setTimeout(() => setSoapPulse(false), 350);
+    setTimeout(() => setSoapPulse(false), 400);
+    setSoapBadgeUpdated(true);
+    setTimeout(() => setSoapBadgeUpdated(false), 3000);
+    setSoapFields(SOAP_DEMO);
   };
 
   const fmtTime = (s: number) =>
