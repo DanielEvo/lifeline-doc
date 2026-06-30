@@ -198,11 +198,9 @@ type KbItem = (typeof KB_ITEMS)[number];
 export function PatientTimelineSOAP({
   onSeal,
   initialQuest,
-  initialPanel,
 }: {
   onSeal: () => void;
   initialQuest?: string;
-  initialPanel?: string;
 }) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
