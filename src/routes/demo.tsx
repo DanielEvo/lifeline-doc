@@ -154,7 +154,6 @@ function DemoShell() {
           <PatientTimelineSOAP
             onSeal={() => setTab("patient")}
             initialQuest={initialQuest}
-            initialPanel={initialPanel}
           />
         )}
         {tab === "patient" && <PatientAppMockup onRestart={() => setTab("whatsapp")} />}
