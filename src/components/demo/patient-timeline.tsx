@@ -535,28 +535,58 @@ export function PatientTimelineSOAP({
                 Ocultar histórico
               </button>
             </div>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {EVENTS.map((e) => {
-                const isActive = activeEvent === e.id;
-                return (
-                  <button
-                    key={e.id}
-                    onClick={() => setActiveEvent(e.id)}
-                    className={`group shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
-                      isActive
-                        ? `border-transparent bg-cyan-600 text-white shadow ${arrivalPulse ? "ring-2 ring-cyan-300 animate-pulse" : ""}`
-                        : "border-border bg-white text-foreground/80 hover:border-cyan-400 hover:text-foreground"
-                    }`}
-                    title={e.summary}
-                  >
-                    <span className="opacity-80">{e.date}</span>
-                    <span className="mx-1.5 opacity-40">·</span>
-                    <span>{e.title}</span>
-                    {isActive && <span className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-white" />}
-                  </button>
-                );
-              })}
+            <div className="relative mt-5 pt-2 pb-2">
+              {/* Horizontal LifeLine */}
+              <div className="absolute left-3 right-3 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-emerald-300 via-cyan-400 to-rose-400" />
+              <div className="absolute left-3 right-3 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[radial-gradient(circle,white_1.5px,transparent_2px)] bg-[length:8px_3px] opacity-40" />
+
+              <div className="relative flex items-stretch justify-between gap-2">
+                {EVENTS.map((e) => {
+                  const isActive = activeEvent === e.id;
+                  const st = STATUS_STYLE[e.status];
+                  const Icon = TYPE_ICON[e.type];
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => setActiveEvent(e.id)}
+                      className="group relative flex min-w-0 flex-1 flex-col items-center"
+                      title={e.summary}
+                    >
+                      <div className="mb-1 text-[10px] font-medium text-muted-foreground">
+                        {e.date}
+                      </div>
+                      <div
+                        className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-white shadow-md ring-4 ring-white transition-transform ${
+                          st.node
+                        } ${
+                          isActive
+                            ? `scale-110 ${arrivalPulse ? "animate-pulse ring-cyan-300" : ""}`
+                            : "scale-90 opacity-80 group-hover:scale-100 group-hover:opacity-100"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {isActive && (
+                          <span className="absolute -inset-1 -z-10 rounded-full bg-cyan-400/30 blur-sm" />
+                        )}
+                      </div>
+                      <div
+                        className={`mt-1.5 max-w-[110px] truncate text-[11px] font-medium leading-tight ${
+                          isActive ? "text-foreground" : "text-foreground/60"
+                        }`}
+                      >
+                        {e.title}
+                      </div>
+                      <span
+                        className={`mt-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 ${st.pill}`}
+                      >
+                        {e.status}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
           </div>
         ) : (
           <button
