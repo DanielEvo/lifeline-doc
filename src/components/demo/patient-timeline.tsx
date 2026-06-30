@@ -472,15 +472,16 @@ export function PatientTimelineSOAP({
   const toggleRecording = () => {
     setRecording((r) => {
       const next = !r;
-      toast.success(next ? "Gravação iniciada" : "Gravação finalizada", {
-        description: next
-          ? "Áudio da consulta sendo capturado para transcrição."
-          : "Transcrição será anexada ao prontuário.",
-        icon: next ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />,
-      });
+      if (next) {
+        setRecordSeconds(0);
+        setShowTranscript(false);
+      } else {
+        setShowTranscript(true);
+      }
       return next;
     });
   };
+
 
   const finalize = () => {
     setSealed(true);
