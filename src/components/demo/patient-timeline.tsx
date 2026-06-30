@@ -739,8 +739,10 @@ export function PatientTimelineSOAP({
 
             <div className="mt-4">
               {BIOMARKERS.map((b, idx) => {
-                const current = b.series[b.series.length - 1];
-                const prev = b.series[b.series.length - 2];
+                const eventIds = ["q2023", "q2024", "q2025", "q2026"];
+                const selIdx = Math.max(0, eventIds.indexOf(activeEvent));
+                const current = b.series[selIdx];
+                const prev = selIdx > 0 ? b.series[selIdx - 1] : b.series[selIdx];
                 const below = current < b.min;
                 const above = current > b.max;
                 const inRef = !below && !above;
@@ -754,9 +756,10 @@ export function PatientTimelineSOAP({
                 const valueColor = inRef ? "var(--text-success)" : "var(--text-danger)";
                 const badgeBg = inRef ? "var(--bg-success)" : "var(--bg-danger)";
                 const badgeText = inRef ? "var(--text-success)" : "var(--text-danger)";
-                const badgeLabel = inRef
-                  ? "✓ ref"
-                  : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
+                const badgeLabel =
+                  inRef || selIdx === 0
+                    ? "✓ ref"
+                    : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
 
                 const data = b.series.map((v, i) => ({
                   date: BIOMARKER_DATES[i],
@@ -764,13 +767,14 @@ export function PatientTimelineSOAP({
                 }));
                 const yMin = Math.min(b.min, ...b.series) * 0.9;
                 const yMax = Math.max(b.max, ...b.series) * 1.05;
+                const selectedDate = BIOMARKER_DATES[selIdx];
 
                 return (
                   <div
                     key={b.name}
                     style={{
-                      marginBottom: idx === BIOMARKERS.length - 1 ? 0 : 16,
-                      paddingBottom: idx === BIOMARKERS.length - 1 ? 0 : 16,
+                      marginBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
+                      paddingBottom: idx === BIOMARKERS.length - 1 ? 0 : 12,
                       borderBottom:
                         idx === BIOMARKERS.length - 1
                           ? "none"
@@ -803,11 +807,11 @@ export function PatientTimelineSOAP({
                         {badgeLabel}
                       </span>
                     </div>
-                    <div style={{ height: 80, width: "100%", marginTop: 6 }}>
+                    <div style={{ height: 120, width: "100%", marginTop: 6 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart
                           data={data}
-                          margin={{ top: 6, right: 6, bottom: 4, left: 6 }}
+                          margin={{ top: 6, right: 8, bottom: 4, left: 8 }}
                         >
                           <YAxis hide domain={[yMin, yMax]} />
                           <XAxis
@@ -815,6 +819,7 @@ export function PatientTimelineSOAP({
                             tick={{ fontSize: 10, fill: "var(--text-muted)" }}
                             axisLine={false}
                             tickLine={false}
+                            interval={0}
                           />
                           <ReferenceArea
                             y1={b.min}
@@ -833,6 +838,11 @@ export function PatientTimelineSOAP({
                             stroke="#22c55e"
                             strokeDasharray="3 3"
                             strokeOpacity={0.4}
+                          />
+                          <ReferenceLine
+                            x={selectedDate}
+                            stroke="var(--border-strong)"
+                            strokeDasharray="4 4"
                           />
                           <Tooltip
                             cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
@@ -854,7 +864,21 @@ export function PatientTimelineSOAP({
                             strokeWidth={2}
                             dot={(props: { cx?: number; cy?: number; index?: number; key?: string | number }) => {
                               const { cx, cy, index, key } = props;
-                              if (index === data.length - 1 && cx != null && cy != null) {
+                              if (cx == null || cy == null) return <g key={key ?? `empty-${index}`} />;
+                              if (index === selIdx) {
+                                return (
+                                  <circle
+                                    key={key ?? `sel-${index}`}
+                                    cx={cx}
+                                    cy={cy}
+                                    r={7}
+                                    fill={statusColor}
+                                    stroke="#fff"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              }
+                              if (index === data.length - 1) {
                                 return (
                                   <circle
                                     key={key ?? `dot-${index}`}
@@ -877,6 +901,7 @@ export function PatientTimelineSOAP({
               })}
             </div>
           </div>
+
 
 
           <Collapsible
