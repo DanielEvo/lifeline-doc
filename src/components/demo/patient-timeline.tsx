@@ -385,6 +385,43 @@ export function PatientTimelineSOAP({
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(true);
 
+  // ---- New central zone state ----
+  const BRIEFING_DEFAULT =
+    "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas).\nSem dor torácica ou edema. Nega febre.\nExames anexados: Hb 11.2 g/dL · Ferritina 18 ng/mL · Vit D 19 ng/mL";
+  const TRANSCRIPT_DEMO =
+    "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
+  const SOAP_DEMO = {
+    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nNega dor torácica. Hb 11.2 · Ferritina 18 via WhatsApp.",
+    o: "PA 118/76 mmHg · Peso 62kg · FC 82bpm.\nBiomarcadores: Hb 11.2 · Ferritina 18 · Vit D 19.",
+    a: "Anemia ferropriva em evolução. Queda contínua de Hb, Ferritina e Vitamina D nos últimos 3 anos.",
+    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nReavaliar em 60 dias.",
+  };
+  const [briefingText, setBriefingText] = useState(BRIEFING_DEFAULT);
+  const [briefingEditing, setBriefingEditing] = useState(false);
+  const [notesText, setNotesText] = useState("");
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [soapOpen, setSoapOpen] = useState(false);
+  const [soapEditing, setSoapEditing] = useState(false);
+  const [soapFields, setSoapFields] = useState(SOAP_DEMO);
+  const [soapPulse, setSoapPulse] = useState(false);
+
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  const triggerSoapPulse = () => {
+    if (!soapOpen) return;
+    setSoapPulse(true);
+    setTimeout(() => setSoapPulse(false), 350);
+  };
+
+  const fmtTime = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+
 
   const validateToken = () => {
     const a = tokenA.trim().toUpperCase();
