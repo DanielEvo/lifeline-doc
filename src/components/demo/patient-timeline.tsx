@@ -381,6 +381,8 @@ export function PatientTimelineSOAP({
   const [tokenA, setTokenA] = useState("");
   const [tokenB, setTokenB] = useState("");
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+
 
   const validateToken = () => {
     const a = tokenA.trim().toUpperCase();
@@ -517,87 +519,58 @@ export function PatientTimelineSOAP({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)_360px]">
-        {/* ---------- LEFT: Clinical timeline ---------- */}
-        <div
-          ref={timelineRef}
-          className="rounded-3xl border border-border bg-card p-6"
-        >
-          <div className="flex items-center justify-between">
-            <div>
+      {/* ---------- Horizontal clinical timeline ---------- */}
+      <div ref={timelineRef} className="mt-4">
+        {historyExpanded ? (
+          <div className="rounded-2xl border border-border bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Histórico clínico
+                Histórico clínico · {EVENTS.length} consultas
               </div>
-              <div className="text-base font-semibold">Linha do tempo · 2023 → 2026</div>
+              <button
+                onClick={() => setHistoryExpanded(false)}
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-180" />
+                Ocultar histórico
+              </button>
             </div>
-            <div className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
-              {EVENTS.length} registros
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {EVENTS.map((e) => {
+                const isActive = activeEvent === e.id;
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => setActiveEvent(e.id)}
+                    className={`group shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
+                      isActive
+                        ? `border-transparent bg-cyan-600 text-white shadow ${arrivalPulse ? "ring-2 ring-cyan-300 animate-pulse" : ""}`
+                        : "border-border bg-white text-foreground/80 hover:border-cyan-400 hover:text-foreground"
+                    }`}
+                    title={e.summary}
+                  >
+                    <span className="opacity-80">{e.date}</span>
+                    <span className="mx-1.5 opacity-40">·</span>
+                    <span>{e.title}</span>
+                    {isActive && <span className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-white" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
+        ) : (
+          <button
+            onClick={() => setHistoryExpanded(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Ver histórico ({EVENTS.length} consultas)
+          </button>
+        )}
+      </div>
 
-          <div className="mt-6 space-y-6">
-            {grouped.map(([year, items]) => (
-              <div key={year} className="relative pl-12">
-                <div className="absolute left-0 top-1 flex h-8 w-9 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white shadow">
-                  {year}
-                </div>
-                <div className="absolute left-[18px] top-10 bottom-0 w-px bg-border" />
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
 
-                <div className="space-y-3">
-                  {items.map((e) => {
-                    const Icon = TYPE_ICON[e.type];
-                    const isActive = activeEvent === e.id;
-                    const st = STATUS_STYLE[e.status];
-                    return (
-                      <button
-                        key={e.id}
-                        onClick={() => setActiveEvent(e.id)}
-                        className={`relative flex w-full items-stretch gap-3 rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                          isActive
-                            ? `border-cyan-400 bg-white shadow-sm ring-2 ring-cyan-100 ${
-                                arrivalPulse ? "ring-4 ring-cyan-300 animate-pulse" : ""
-                              }`
-                            : "border-border bg-white/70 hover:border-cyan-200"
-                        }`}
-                      >
-                        <div
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${st.node} text-white shadow ring-4`}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold leading-tight">
-                                {e.title}
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {e.date}
-                              </div>
-                            </div>
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${st.pill}`}
-                            >
-                              {e.status}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-[11px] text-foreground/75">
-                            {e.description}
-                          </div>
-                          {isActive && (
-                            <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700 ring-1 ring-border">
-                              {e.summary}
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* ---------- MIDDLE: SOAP vertical stack ---------- */}
         <div className="space-y-5">
