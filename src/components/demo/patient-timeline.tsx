@@ -643,259 +643,217 @@ export function PatientTimelineSOAP({
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
 
 
-        {/* ---------- MIDDLE: SOAP vertical stack ---------- */}
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-border bg-card p-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Prontuário SOAP
+        {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
+        <div className="space-y-4">
+          {/* CAMADA 1 — Briefing WhatsApp */}
+          <div className="rounded-2xl border border-border bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-sm font-semibold">Briefing pré-consulta</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                  📋 Via WhatsApp
+                </span>
               </div>
-              <div className="text-sm font-semibold">Consulta atual · Mariana Silva</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBriefingEditing((v) => !v)}
+                className="h-7 text-xs"
+              >
+                {briefingEditing ? (
+                  <>
+                    <Save className="mr-1 h-3.5 w-3.5" />
+                    Salvar
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Editar
+                  </>
+                )}
+              </Button>
             </div>
-            <Button
-              onClick={toggleRecording}
-              variant={recording ? "default" : "outline"}
-              size="sm"
-              className={recording ? "bg-rose-500 text-white hover:bg-rose-600" : ""}
-            >
-              {recording ? (
-                <>
-                  <MicOff className="mr-1.5 h-4 w-4" />
-                  Parar gravação
-                </>
-              ) : (
-                <>
-                  <Mic className="mr-1.5 h-4 w-4" />
-                  Gravar consulta
-                </>
-              )}
-            </Button>
+            {briefingEditing ? (
+              <Textarea
+                value={briefingText}
+                onChange={(e) => setBriefingText(e.target.value)}
+                className="mt-3 min-h-[100px] border-cyan-400 bg-white text-sm ring-2 ring-cyan-100 focus-visible:ring-cyan-200"
+              />
+            ) : (
+              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                {briefingText}
+              </p>
+            )}
           </div>
 
-          {/* S */}
-          <SoapBlock
-            letter="S"
-            name="Subjetivo"
-            tone="cyan"
-            headerNote={
-              <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-sky-200">
-                <RefreshCw className="h-3 w-3" />
-                Pré-preenchido via WhatsApp
-              </span>
-            }
-          >
-            {(locked) => (
-              <SubjectiveBody
-                value={subjective}
-                onChange={setSubjective}
-                locked={locked}
-              />
-            )}
-          </SoapBlock>
+          <div className="border-t border-border" />
 
-          {/* O */}
-          <SoapBlock letter="O" name="Objetivo" tone="emerald">
-            {(locked) => (
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <Field
-                    label="PA (mmHg)"
-                    value={objetivo.pa}
-                    disabled={locked}
-                    onChange={(v) => setObjetivo({ ...objetivo, pa: v })}
-                  />
-                  <Field
-                    label="Peso (kg)"
-                    value={objetivo.peso}
-                    disabled={locked}
-                    onChange={(v) => setObjetivo({ ...objetivo, peso: v })}
-                  />
-                  <Field
-                    label="FC (bpm)"
-                    value={objetivo.fc}
-                    disabled={locked}
-                    onChange={(v) => setObjetivo({ ...objetivo, fc: v })}
-                  />
-                </div>
-                <AutoTextarea
-                  value={objetivoNotes}
-                  onChange={setObjetivoNotes}
-                  disabled={locked}
-                  placeholder="Exame físico e dados objetivos adicionais..."
-                />
-              </div>
-            )}
-          </SoapBlock>
-
-          {/* A */}
-          <SoapBlock
-            letter="A"
-            name="Avaliação"
-            tone="amber"
-            headerNote={
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
-                <Lock className="h-3 w-3" />
-                Visível apenas para o médico
-              </span>
-            }
-          >
-            {(locked) => (
-              <AutoTextarea
-                value={diag}
-                onChange={setDiag}
-                disabled={locked}
-                placeholder="Impressão clínica e hipóteses diagnósticas..."
-              />
-            )}
-          </SoapBlock>
-
-          {/* P */}
-          <SoapBlock
-            letter="P"
-            name="Plano"
-            tone="violet"
-            headerNote={
-              planTab === "memed" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-                  ICP-Brasil · nativo
-                </span>
-              ) : null
-            }
-          >
-            {(locked) => (
-              <div className="space-y-3">
-                <div className="inline-flex rounded-lg bg-muted p-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setPlanTab("clinico")}
-                    className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-                      planTab === "clinico"
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Plano clínico
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlanTab("memed")}
-                    className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-                      planTab === "memed"
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Prescrição Memed
-                  </button>
-                </div>
-
-                {planTab === "clinico" ? (
-                  <div className="space-y-2">
-                    <AutoTextarea
-                      value={plano}
-                      onChange={setPlano}
-                      disabled={locked}
-                      placeholder="Condutas, orientações e solicitações de exame..."
-                    />
-                    {!locked && !planSuggested && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPlanSuggested(true)}
-                        className="text-xs"
-                      >
-                        <Lightbulb className="mr-1.5 h-3.5 w-3.5" />
-                        Sugerir plano com base no S/O
-                      </Button>
-                    )}
-                    {planSuggested && (
-                      <SuggestionBox
-                        title="Sugestão da IA"
-                        text={`1. Considerar reposição de ferro oral (Sulfato Ferroso 40mg/dia).
-2. Solicitar ferritina de controle em 60 dias.
-3. Orientar hidratação e repouso relativo.
-4. Retorno em 45 dias ou antes se piora.`}
-                        onAccept={() => {
-                          setPlano(
-                            (p) =>
-                              (p ? p + "\n\n" : "") +
-                              "1. Considerar reposição de ferro oral (Sulfato Ferroso 40mg/dia).\n2. Solicitar ferritina de controle em 60 dias.\n3. Orientar hidratação e repouso relativo.\n4. Retorno em 45 dias ou antes se piora.",
-                          );
-                          setPlanSuggested(false);
-                          toast.success("Sugestão aplicada ao plano");
-                        }}
-                        onIgnore={() => setPlanSuggested(false)}
-                      />
-                    )}
-                  </div>
+          {/* CAMADA 2 — Campo livre + gravação */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground">
+              Anotações da consulta
+            </Label>
+            <Textarea
+              value={notesText}
+              onChange={(e) => {
+                setNotesText(e.target.value);
+                triggerSoapPulse();
+              }}
+              placeholder="Escreva livremente ou grave a consulta abaixo..."
+              className="mt-1.5 min-h-[140px] bg-white text-sm focus-visible:ring-cyan-300"
+            />
+            <div className="mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={toggleRecording}
+                className={
+                  recording
+                    ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    : ""
+                }
+              >
+                {recording ? (
+                  <>
+                    <MicOff className="mr-1.5 h-4 w-4" />
+                    Parar gravação
+                    <span className="ml-2 tabular-nums">{fmtTime(recordSeconds)}</span>
+                  </>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={medSearch}
-                        onChange={(e) => setMedSearch(e.target.value)}
-                        placeholder="Buscar medicamento..."
-                        className="pl-9"
-                        maxLength={80}
-                        disabled={locked}
-                      />
-                    </div>
-                    {medSearch && (
-                      <div className="space-y-1 rounded-lg border border-violet-200 bg-card">
-                        {filtered.length === 0 && (
-                          <div className="p-3 text-xs text-muted-foreground">
-                            Nenhum medicamento encontrado.
-                          </div>
-                        )}
-                        {filtered.map((m) => (
-                          <button
-                            key={m.name}
-                            type="button"
-                            onClick={() => {
-                              if (!selectedMeds.includes(m.name))
-                                setSelectedMeds([...selectedMeds, m.name]);
-                              setMedSearch("");
-                            }}
-                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-violet-50"
-                          >
-                            <div>
-                              <div className="font-medium">{m.name}</div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {m.desc}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {selectedMeds.length > 0 && (
-                      <div className="space-y-1.5">
-                        {selectedMeds.map((m) => (
-                          <div
-                            key={m}
-                            className="flex items-center justify-between rounded-md bg-violet-50 px-3 py-1.5 text-xs ring-1 ring-violet-200"
-                          >
-                            <span className="font-medium">{m}</span>
-                            <button
-                              onClick={() =>
-                                setSelectedMeds(selectedMeds.filter((s) => s !== m))
-                              }
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              remover
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <>
+                    <Mic className="mr-1.5 h-4 w-4" />
+                    Gravar consulta
+                  </>
                 )}
+              </Button>
+            </div>
+
+            {showTranscript && (
+              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-sky-800">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Transcrição — revise e confirme
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">
+                  {TRANSCRIPT_DEMO}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setNotesText((t) => (t ? t + "\n\n" : "") + TRANSCRIPT_DEMO);
+                      setShowTranscript(false);
+                      triggerSoapPulse();
+                      toast.success("Transcrição inserida no campo");
+                    }}
+                  >
+                    Inserir no campo
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowTranscript(false)}
+                  >
+                    Descartar
+                  </Button>
+                </div>
               </div>
             )}
-          </SoapBlock>
+          </div>
+
+          <div className="border-t border-border" />
+
+          {/* CAMADA 3 — SOAP accordion */}
+          <div
+            className={`rounded-2xl border border-border bg-card transition-opacity duration-300 ${
+              soapPulse ? "opacity-60" : "opacity-100"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setSoapOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Estrutura SOAP</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Gerado automaticamente
+                </span>
+              </div>
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform ${
+                  soapOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {soapOpen && (
+              <div className="space-y-3 border-t border-border p-4">
+                {(
+                  [
+                    { key: "s", letter: "S", name: "Subjetivo" },
+                    { key: "o", letter: "O", name: "Objetivo" },
+                    { key: "a", letter: "A", name: "Avaliação", locked: true },
+                    { key: "p", letter: "P", name: "Plano" },
+                  ] as const
+                ).map((f) => (
+                  <div key={f.key} className="rounded-lg border border-border bg-slate-50/60 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+                        {f.letter}
+                      </span>
+                      <span className="text-xs font-semibold">{f.name}</span>
+                      {f.locked && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200">
+                          <Lock className="h-3 w-3" />
+                          Visível apenas para o médico
+                        </span>
+                      )}
+                    </div>
+                    {soapEditing ? (
+                      <Textarea
+                        value={soapFields[f.key]}
+                        onChange={(e) =>
+                          setSoapFields({ ...soapFields, [f.key]: e.target.value })
+                        }
+                        className="mt-2 min-h-[70px] bg-white text-sm"
+                      />
+                    ) : (
+                      <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                        {soapFields[f.key]}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSoapEditing((v) => !v)}
+                  >
+                    {soapEditing ? (
+                      <>
+                        <Save className="mr-1.5 h-3.5 w-3.5" />
+                        Salvar edição
+                      </>
+                    ) : (
+                      <>
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                        Editar SOAP manualmente
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
 
         {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
