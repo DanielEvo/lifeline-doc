@@ -224,6 +224,10 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   const [briefingText] = useState(BRIEFING_DEFAULT);
   const [notesText, setNotesText] = useState(NOTES_DEFAULT);
   const [notesEditing, setNotesEditing] = useState(false);
+  const PLANO_DEFAULT =
+    "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.";
+  const [planoText, setPlanoText] = useState(PLANO_DEFAULT);
+  const [planoEditing, setPlanoEditing] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showTranscript, setShowTranscript] = useState(false);
   const [soapOpen, setSoapOpen] = useState(false);
@@ -247,15 +251,25 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
     el.style.height = el.scrollHeight + "px";
   }, [notesText, notesEditing]);
 
-  const saveNotes = () => {
-    setNotesEditing(false);
-    toast.success("Anotações salvas ✓");
+  const triggerSoapUpdate = () => {
     setSoapOpen(true);
     setSoapPulse(true);
     setTimeout(() => setSoapPulse(false), 400);
     setSoapBadgeUpdated(true);
     setTimeout(() => setSoapBadgeUpdated(false), 3000);
     setSoapFields(SOAP_DEMO);
+  };
+
+  const saveNotes = () => {
+    setNotesEditing(false);
+    toast.success("Anotações salvas ✓");
+    triggerSoapUpdate();
+  };
+
+  const savePlano = () => {
+    setPlanoEditing(false);
+    toast.success("Plano terapêutico salvo ✓");
+    triggerSoapUpdate();
   };
 
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -566,122 +580,167 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
 
           <div className="border-t border-border" />
 
-          {/* CAMADA 2.5 — Prescrição Memed */}
+          {/* CAMADA 2.5 — Plano Terapêutico + Prescrição Memed */}
           <div>
-            <div className="mb-2 flex items-center gap-1.5">
-              <Pill className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold">Prescrição Memed</span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <ClipboardList className="h-3.5 w-3.5 text-muted-foreground" />
+                <Label className="text-xs font-medium text-muted-foreground">Plano Terapêutico</Label>
+              </div>
+              {planoEditing ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={savePlano}
+                  className="h-7 bg-teal-600 text-xs text-white hover:bg-teal-700"
+                >
+                  <Save className="mr-1 h-3.5 w-3.5" />
+                  Salvar plano
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPlanoEditing(true)}
+                  className="h-7 text-xs"
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Editar plano
+                </Button>
+              )}
             </div>
 
-            {selectedMeds.map((entry, idx) => (
-              <div key={entry.name} className="mb-3 rounded-lg border border-border bg-white p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-semibold">{entry.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMeds((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="mt-2 space-y-2">
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground">Dosagem e frequência</label>
-                    <input
-                      value={entry.dosage}
-                      onChange={(e) =>
-                        setSelectedMeds((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, dosage: e.target.value } : x))
-                        )
-                      }
-                      placeholder="Ex: 1 comprimido, 2 vezes ao dia"
-                      className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
-                    />
-                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      Será exibido ao paciente exatamente como escrito aqui
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground">Duração do tratamento</label>
-                    <input
-                      value={entry.duration}
-                      onChange={(e) =>
-                        setSelectedMeds((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, duration: e.target.value } : x))
-                        )
-                      }
-                      placeholder="Ex: 90 dias"
-                      className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
-                    />
-                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      Use linguagem clara, ex: '90 dias' ou '3 meses'
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {!memedOpen ? (
-              <button
-                type="button"
-                onClick={() => setMemedOpen(true)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  border: "0.5px dashed var(--border-strong)",
-                  borderRadius: "8px",
-                  padding: "10px 12px",
-                  textAlign: "center",
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  background: "transparent",
-                }}
-              >
-                + Adicionar medicamento à prescrição
-              </button>
+            {planoEditing ? (
+              <AutoTextarea
+                value={planoText}
+                onChange={setPlanoText}
+                placeholder="Descreva o plano terapêutico..."
+                minHeight={80}
+              />
             ) : (
-              <div className="rounded-lg border border-border bg-white p-2">
-                <input
-                  autoFocus
-                  value={medSearch}
-                  onChange={(e) => setMedSearch(e.target.value)}
-                  placeholder="Buscar medicamento..."
-                  className="w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
-                />
-                <div className="mt-1.5 space-y-1">
-                  {filtered.map((m) => (
+              <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                {planoText}
+              </p>
+            )}
+
+            {/* Prescrição Memed — embedded below plan text */}
+            <div className="mt-4">
+              <div className="mb-2 flex items-center gap-1.5">
+                <Pill className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-[11px] font-semibold text-foreground/70">Prescrição Memed</span>
+              </div>
+
+              {selectedMeds.map((entry, idx) => (
+                <div key={entry.name} className="mb-3 rounded-lg border border-border bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold">{entry.name}</span>
                     <button
-                      key={m.name}
                       type="button"
-                      onClick={() => {
-                        if (!selectedMeds.find((x) => x.name === m.name)) {
-                          const parts = m.desc.split(" · ");
-                          setSelectedMeds((prev) => [
-                            ...prev,
-                            { name: m.name, dosage: parts[0] ?? "", duration: parts[1] ?? "" },
-                          ]);
-                        }
-                        setMedSearch("");
-                        setMemedOpen(false);
-                      }}
-                      className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                      onClick={() => setSelectedMeds((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-muted-foreground hover:text-foreground"
                     >
-                      <span className="text-[12px] font-medium">{m.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{m.desc}</span>
+                      ×
                     </button>
-                  ))}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground">Dosagem e frequência</label>
+                      <input
+                        value={entry.dosage}
+                        onChange={(e) =>
+                          setSelectedMeds((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, dosage: e.target.value } : x))
+                          )
+                        }
+                        placeholder="Ex: 1 comprimido, 2 vezes ao dia"
+                        className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                      />
+                      <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                        Será exibido ao paciente exatamente como escrito aqui
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground">Duração do tratamento</label>
+                      <input
+                        value={entry.duration}
+                        onChange={(e) =>
+                          setSelectedMeds((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, duration: e.target.value } : x))
+                          )
+                        }
+                        placeholder="Ex: 90 dias"
+                        className="mt-0.5 w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                      />
+                      <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                        Use linguagem clara, ex: '90 dias' ou '3 meses'
+                      </p>
+                    </div>
+                  </div>
                 </div>
+              ))}
+
+              {!memedOpen ? (
                 <button
                   type="button"
-                  onClick={() => { setMemedOpen(false); setMedSearch(""); }}
-                  className="mt-1.5 w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
+                  onClick={() => setMemedOpen(true)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    border: "0.5px dashed var(--border-strong)",
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    background: "transparent",
+                  }}
                 >
-                  Fechar
+                  + Adicionar medicamento à prescrição
                 </button>
-              </div>
-            )}
+              ) : (
+                <div className="rounded-lg border border-border bg-white p-2">
+                  <input
+                    autoFocus
+                    value={medSearch}
+                    onChange={(e) => setMedSearch(e.target.value)}
+                    placeholder="Buscar medicamento..."
+                    className="w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  />
+                  <div className="mt-1.5 space-y-1">
+                    {filtered.map((m) => (
+                      <button
+                        key={m.name}
+                        type="button"
+                        onClick={() => {
+                          if (!selectedMeds.find((x) => x.name === m.name)) {
+                            const parts = m.desc.split(" · ");
+                            setSelectedMeds((prev) => [
+                              ...prev,
+                              { name: m.name, dosage: parts[0] ?? "", duration: parts[1] ?? "" },
+                            ]);
+                          }
+                          setMedSearch("");
+                          setMemedOpen(false);
+                        }}
+                        className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                      >
+                        <span className="text-[12px] font-medium">{m.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{m.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setMemedOpen(false); setMedSearch(""); }}
+                    className="mt-1.5 w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-border" />
