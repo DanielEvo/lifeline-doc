@@ -88,6 +88,19 @@
   --chart-4: oklch(0.62 0.21 22);
   --chart-5: oklch(0.55 0.18 280);
 
+  /* Biomarker alert card tokens */
+  --surface-0: var(--muted);
+  --surface-2: var(--card);
+  --text-primary: var(--foreground);
+  --bg-danger: oklch(0.97 0.015 22);
+  --text-danger: var(--destructive);
+  --bg-success: oklch(0.97 0.03 155);
+  --text-success: var(--success);
+  --text-warning: var(--warning);
+  --fill-danger: var(--destructive);
+  --fill-success: var(--success);
+  --fill-warning: var(--warning);
+
   --sidebar: oklch(0.21 0.03 250);
   --sidebar-foreground: oklch(0.95 0.01 240);
   --sidebar-primary: oklch(0.62 0.12 200);
