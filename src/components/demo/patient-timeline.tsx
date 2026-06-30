@@ -795,11 +795,12 @@ export function PatientTimelineSOAP({
               <div className="space-y-3 border-t border-border p-4">
                 {(
                   [
-                    { key: "s", letter: "S", name: "Subjetivo" },
-                    { key: "o", letter: "O", name: "Objetivo" },
+                    { key: "s", letter: "S", name: "Subjetivo", locked: false },
+                    { key: "o", letter: "O", name: "Objetivo", locked: false },
                     { key: "a", letter: "A", name: "Avaliação", locked: true },
-                    { key: "p", letter: "P", name: "Plano" },
+                    { key: "p", letter: "P", name: "Plano", locked: false },
                   ] as const
+
                 ).map((f) => (
                   <div key={f.key} className="rounded-lg border border-border bg-slate-50/60 p-3">
                     <div className="flex items-center gap-2">
