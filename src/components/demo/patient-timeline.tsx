@@ -670,7 +670,7 @@ export function PatientTimelineSOAP({
         <div className="space-y-4">
           {/* CAMADA 1 — Briefing WhatsApp (read-only) */}
           <TooltipProvider delayDuration={150}>
-            <Tooltip>
+            <UITooltip>
               <TooltipTrigger asChild>
                 <div className="cursor-help rounded-2xl border border-border bg-slate-50 p-4">
                   <div className="flex flex-wrap items-center gap-2">
@@ -690,7 +690,7 @@ export function PatientTimelineSOAP({
               <TooltipContent side="top" className="max-w-xs">
                 Gerado automaticamente a partir das mensagens do paciente no WhatsApp
               </TooltipContent>
-            </Tooltip>
+            </UITooltip>
           </TooltipProvider>
 
           <div className="border-t border-border" />
