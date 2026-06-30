@@ -465,11 +465,12 @@ export function PatientTimelineSOAP({
 
   return (
     <div className="mx-auto max-w-[1500px] p-3 lg:p-5">
-      <PageHeader
-        eyebrow="Step C · Mariana Silva · 38 anos"
-        title="Linha do Tempo do Paciente & Prontuário SOAP"
-        desc="Histórico clínico longitudinal de Mariana — consultas, exames e biomarcadores — integrado ao prontuário SOAP em tempo real."
-      />
+      <div className="max-w-3xl">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+          Step C · Mariana Silva · 38 anos
+        </div>
+      </div>
+
 
       {/* Patient header */}
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 p-6 text-white shadow-xl">
