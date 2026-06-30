@@ -212,8 +212,6 @@ export function PatientTimelineSOAP({
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
   const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
-  const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
-  const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
