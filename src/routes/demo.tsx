@@ -51,7 +51,7 @@ function DemoPage() {
 }
 
 function DemoShell() {
-  const { tab: initialTab, quest: initialQuest, panel: initialPanel } = Route.useSearch();
+  const { tab: initialTab, quest: initialQuest } = Route.useSearch();
   const [tab, setTab] = useState<TabId>(initialTab ?? "whatsapp");
   const { resetChat } = useDemo();
 
