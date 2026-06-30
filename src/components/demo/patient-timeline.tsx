@@ -216,7 +216,7 @@ export function PatientTimelineSOAP({
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
   const [arrivalPulse, setArrivalPulse] = useState<boolean>(
-    Boolean(initialQuest || initialPanel),
+    Boolean(initialQuest),
   );
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [accessModal, setAccessModal] = useState(false);
