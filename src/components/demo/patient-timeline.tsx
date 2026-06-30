@@ -497,7 +497,7 @@ export function PatientTimelineSOAP({
         )}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
 
 
         {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
