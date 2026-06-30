@@ -45,6 +45,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDemo } from "@/lib/demo-store";
 import { PageHeader } from "./whatsapp-simulator";
 
@@ -388,23 +394,27 @@ export function PatientTimelineSOAP({
   // ---- New central zone state ----
   const BRIEFING_DEFAULT =
     "Paciente relata fadiga progressiva e dispneia aos esforços (subir escadas).\nSem dor torácica ou edema. Nega febre.\nExames anexados: Hb 11.2 g/dL · Ferritina 18 ng/mL · Vit D 19 ng/mL";
+  const NOTES_DEFAULT =
+    "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
   const TRANSCRIPT_DEMO =
     "Paciente refere piora da fadiga nas últimas semanas.\nRealizou hemograma em maio — Hb caindo progressivamente.\nVou solicitar ferro sérico e ferritina de controle.\nConduta: manter sulfato ferroso, retorno em 60 dias.";
   const SOAP_DEMO = {
-    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nNega dor torácica. Hb 11.2 · Ferritina 18 via WhatsApp.",
+    s: "Fadiga progressiva e dispneia aos esforços há 3 meses.\nPiora nas últimas semanas. Hb 11.2 · Ferritina 18 via WhatsApp.",
     o: "PA 118/76 mmHg · Peso 62kg · FC 82bpm.\nBiomarcadores: Hb 11.2 · Ferritina 18 · Vit D 19.",
     a: "Anemia ferropriva em evolução. Queda contínua de Hb, Ferritina e Vitamina D nos últimos 3 anos.",
-    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nReavaliar em 60 dias.",
+    p: "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.",
   };
-  const [briefingText, setBriefingText] = useState(BRIEFING_DEFAULT);
-  const [briefingEditing, setBriefingEditing] = useState(false);
-  const [notesText, setNotesText] = useState("");
+  const [briefingText] = useState(BRIEFING_DEFAULT);
+  const [notesText, setNotesText] = useState(NOTES_DEFAULT);
+  const [notesEditing, setNotesEditing] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showTranscript, setShowTranscript] = useState(false);
   const [soapOpen, setSoapOpen] = useState(false);
   const [soapEditing, setSoapEditing] = useState(false);
   const [soapFields, setSoapFields] = useState(SOAP_DEMO);
   const [soapPulse, setSoapPulse] = useState(false);
+  const [soapBadgeUpdated, setSoapBadgeUpdated] = useState(false);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!recording) return;
@@ -412,10 +422,23 @@ export function PatientTimelineSOAP({
     return () => clearInterval(id);
   }, [recording]);
 
-  const triggerSoapPulse = () => {
-    if (!soapOpen) return;
+  // Auto-resize notes textarea
+  useEffect(() => {
+    const el = notesRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [notesText, notesEditing]);
+
+  const saveNotes = () => {
+    setNotesEditing(false);
+    toast.success("Anotações salvas ✓");
+    setSoapOpen(true);
     setSoapPulse(true);
-    setTimeout(() => setSoapPulse(false), 350);
+    setTimeout(() => setSoapPulse(false), 400);
+    setSoapBadgeUpdated(true);
+    setTimeout(() => setSoapBadgeUpdated(false), 3000);
+    setSoapFields(SOAP_DEMO);
   };
 
   const fmtTime = (s: number) =>
@@ -645,65 +668,72 @@ export function PatientTimelineSOAP({
 
         {/* ---------- MIDDLE: Briefing + Notes + SOAP accordion ---------- */}
         <div className="space-y-4">
-          {/* CAMADA 1 — Briefing WhatsApp */}
-          <div className="rounded-2xl border border-border bg-slate-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                </span>
-                <span className="text-sm font-semibold">Briefing pré-consulta</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-                  📋 Via WhatsApp
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setBriefingEditing((v) => !v)}
-                className="h-7 text-xs"
-              >
-                {briefingEditing ? (
-                  <>
-                    <Save className="mr-1 h-3.5 w-3.5" />
-                    Salvar
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="mr-1 h-3.5 w-3.5" />
-                    Editar
-                  </>
-                )}
-              </Button>
-            </div>
-            {briefingEditing ? (
-              <Textarea
-                value={briefingText}
-                onChange={(e) => setBriefingText(e.target.value)}
-                className="mt-3 min-h-[100px] border-cyan-400 bg-white text-sm ring-2 ring-cyan-100 focus-visible:ring-cyan-200"
-              />
-            ) : (
-              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-                {briefingText}
-              </p>
-            )}
-          </div>
+          {/* CAMADA 1 — Briefing WhatsApp (read-only) */}
+          <TooltipProvider delayDuration={150}>
+            <UITooltip>
+              <TooltipTrigger asChild>
+                <div className="cursor-help rounded-2xl border border-border bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+                      <MessageCircle className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="text-sm font-semibold">Briefing pré-consulta</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                      📋 Via WhatsApp
+                    </span>
+                  </div>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                    {briefingText}
+                  </p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                Gerado automaticamente a partir das mensagens do paciente no WhatsApp
+              </TooltipContent>
+            </UITooltip>
+          </TooltipProvider>
 
           <div className="border-t border-border" />
 
           {/* CAMADA 2 — Campo livre + gravação */}
           <div>
-            <Label className="text-xs font-medium text-muted-foreground">
-              Anotações da consulta
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-medium text-muted-foreground">
+                Anotações da consulta
+              </Label>
+              {notesEditing ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={saveNotes}
+                  className="h-7 bg-teal-600 text-xs text-white hover:bg-teal-700"
+                >
+                  <Save className="mr-1 h-3.5 w-3.5" />
+                  Salvar anotações
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setNotesEditing(true)}
+                  className="h-7 text-xs"
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Editar anotações
+                </Button>
+              )}
+            </div>
             <Textarea
+              ref={notesRef}
               value={notesText}
-              onChange={(e) => {
-                setNotesText(e.target.value);
-                triggerSoapPulse();
-              }}
+              readOnly={!notesEditing}
+              onChange={(e) => setNotesText(e.target.value)}
               placeholder="Escreva livremente ou grave a consulta abaixo..."
-              className="mt-1.5 min-h-[140px] bg-white text-sm focus-visible:ring-cyan-300"
+              style={{ overflowY: "hidden" }}
+              className={`mt-1.5 min-h-[140px] resize-none bg-white text-sm focus-visible:ring-cyan-300 ${
+                notesEditing ? "border-cyan-400 ring-2 ring-cyan-100" : ""
+              }`}
             />
             <div className="mt-2">
               <Button
@@ -746,8 +776,8 @@ export function PatientTimelineSOAP({
                     size="sm"
                     onClick={() => {
                       setNotesText((t) => (t ? t + "\n\n" : "") + TRANSCRIPT_DEMO);
+                      setNotesEditing(true);
                       setShowTranscript(false);
-                      triggerSoapPulse();
                       toast.success("Transcrição inserida no campo");
                     }}
                   >
@@ -781,8 +811,14 @@ export function PatientTimelineSOAP({
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-semibold">Estrutura SOAP</span>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  Gerado automaticamente
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                    soapBadgeUpdated
+                      ? "bg-teal-100 text-teal-700 ring-1 ring-teal-200"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {soapBadgeUpdated ? "Atualizado agora" : "Gerado automaticamente"}
                 </span>
               </div>
               <ChevronDown
@@ -791,6 +827,7 @@ export function PatientTimelineSOAP({
                 }`}
               />
             </button>
+
             {soapOpen && (
               <div className="space-y-3 border-t border-border p-4">
                 {(
