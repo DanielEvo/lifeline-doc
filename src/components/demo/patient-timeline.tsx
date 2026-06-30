@@ -5,7 +5,6 @@ import {
   BookOpen,
   ChevronDown,
   ClipboardList,
-  Droplet,
   FileText,
   FlaskConical,
   Lightbulb,
@@ -23,23 +22,10 @@ import {
   Search,
   Sparkles,
   Stethoscope,
-  TestTube,
   Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ReferenceArea,
-  ReferenceDot,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,163 +128,15 @@ const STATUS_STYLE: Record<EventStatus, { pill: string; node: string }> = {
   },
 };
 
-// ---------- Multi-parameter biomarker data ----------
-type Series = {
-  key: string;
-  label: string;
-  unit: string;
-  min: number;
-  max: number;
-  domain: [number, number];
-  data: { quest: string; date: string; value: number }[];
-};
-
-type Panel = {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tint: string;
-  series: Series[];
-};
-
-const PANELS: Panel[] = [
-  {
-    id: "hemo",
-    label: "Hemograma & Ferro",
-    icon: Droplet,
-    tint: "from-rose-500 to-red-500",
-    series: [
-      {
-        key: "hb",
-        label: "Hemoglobina",
-        unit: "g/dL",
-        min: 12,
-        max: 16,
-        domain: [10, 16],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 13.4 },
-          { quest: "q2024", date: "Set 24", value: 12.6 },
-          { quest: "q2025", date: "Mai 25", value: 11.9 },
-          { quest: "q2026", date: "Jun 26", value: 11.2 },
-        ],
-      },
-      {
-        key: "ferritin",
-        label: "Ferritina",
-        unit: "ng/mL",
-        min: 30,
-        max: 200,
-        domain: [0, 200],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 78 },
-          { quest: "q2024", date: "Set 24", value: 42 },
-          { quest: "q2025", date: "Mai 25", value: 28 },
-          { quest: "q2026", date: "Jun 26", value: 18 },
-        ],
-      },
-    ],
-  },
-  {
-    id: "vit",
-    label: "Vitaminas & Minerais",
-    icon: Sparkles,
-    tint: "from-amber-500 to-orange-500",
-    series: [
-      {
-        key: "vitd",
-        label: "Vitamina D",
-        unit: "ng/mL",
-        min: 30,
-        max: 60,
-        domain: [0, 70],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 38 },
-          { quest: "q2024", date: "Set 24", value: 29 },
-          { quest: "q2025", date: "Mai 25", value: 24 },
-          { quest: "q2026", date: "Jun 26", value: 19 },
-        ],
-      },
-      {
-        key: "b12",
-        label: "Vitamina B12",
-        unit: "pg/mL",
-        min: 300,
-        max: 900,
-        domain: [100, 900],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 520 },
-          { quest: "q2024", date: "Set 24", value: 410 },
-          { quest: "q2025", date: "Mai 25", value: 290 },
-          { quest: "q2026", date: "Jun 26", value: 240 },
-        ],
-      },
-      {
-        key: "zn",
-        label: "Zinco Sérico",
-        unit: "µg/dL",
-        min: 70,
-        max: 120,
-        domain: [40, 130],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 95 },
-          { quest: "q2024", date: "Set 24", value: 82 },
-          { quest: "q2025", date: "Mai 25", value: 68 },
-          { quest: "q2026", date: "Jun 26", value: 61 },
-        ],
-      },
-    ],
-  },
-  {
-    id: "bio",
-    label: "Bioquímica & Urina",
-    icon: TestTube,
-    tint: "from-cyan-500 to-teal-500",
-    series: [
-      {
-        key: "creat",
-        label: "Creatinina",
-        unit: "mg/dL",
-        min: 0.5,
-        max: 1.1,
-        domain: [0.3, 1.3],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 0.78 },
-          { quest: "q2024", date: "Set 24", value: 0.82 },
-          { quest: "q2025", date: "Mai 25", value: 0.85 },
-          { quest: "q2026", date: "Jun 26", value: 0.9 },
-        ],
-      },
-      {
-        key: "leuko",
-        label: "EAS · Leucócitos",
-        unit: "p/campo",
-        min: 0,
-        max: 5,
-        domain: [0, 20],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 2 },
-          { quest: "q2024", date: "Set 24", value: 3 },
-          { quest: "q2025", date: "Mai 25", value: 8 },
-          { quest: "q2026", date: "Jun 26", value: 14 },
-        ],
-      },
-      {
-        key: "nit",
-        label: "EAS · Nitrito",
-        unit: "(0=neg / 1=pos)",
-        min: 0,
-        max: 0,
-        domain: [0, 1.2],
-        data: [
-          { quest: "q2023", date: "Mar 23", value: 0 },
-          { quest: "q2024", date: "Set 24", value: 0 },
-          { quest: "q2025", date: "Mai 25", value: 1 },
-          { quest: "q2026", date: "Jun 26", value: 1 },
-        ],
-      },
-    ],
-  },
-];
+// ---------- Biomarker alert cards data ----------
+const BIOMARKERS = [
+  { name: "Hemoglobina", current: 11.2, prev: 11.9, min: 12, max: 16, unit: "g/dL" },
+  { name: "Ferritina", current: 18, prev: 28, min: 30, max: 200, unit: "ng/mL" },
+  { name: "Vitamina D", current: 19, prev: 24, min: 30, max: 100, unit: "ng/mL" },
+  { name: "Vitamina B12", current: 240, prev: 290, min: 300, max: 900, unit: "pg/mL" },
+  { name: "Zinco", current: 61, prev: 68, min: 70, max: 120, unit: "µg/dL" },
+  { name: "Creatinina", current: 0.9, prev: 0.85, min: 0.5, max: 1.1, unit: "mg/dL" },
+] as const;
 
 const MED_OPTIONS = [
   { name: "Sulfato Ferroso 40mg", desc: "1cp 2x/dia · 90 dias" },
@@ -360,11 +198,9 @@ type KbItem = (typeof KB_ITEMS)[number];
 export function PatientTimelineSOAP({
   onSeal,
   initialQuest,
-  initialPanel,
 }: {
   onSeal: () => void;
   initialQuest?: string;
-  initialPanel?: string;
 }) {
   const { subjective, setSubjective, sealed, setSealed } = useDemo();
   const [objetivo, setObjetivo] = useState({ pa: "118/76", peso: "62", fc: "82" });
@@ -376,13 +212,11 @@ export function PatientTimelineSOAP({
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
   const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
-  const [activePanel, setActivePanel] = useState<string>(initialPanel ?? "hemo");
-  const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
   const [arrivalPulse, setArrivalPulse] = useState<boolean>(
-    Boolean(initialQuest || initialPanel),
+    Boolean(initialQuest),
   );
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [accessModal, setAccessModal] = useState(false);
@@ -472,19 +306,6 @@ export function PatientTimelineSOAP({
     return () => clearTimeout(t);
   }, [arrivalPulse]);
 
-  const panel = useMemo(
-    () => PANELS.find((p) => p.id === activePanel)!,
-    [activePanel],
-  );
-
-  const expanded = useMemo(() => {
-    if (!expandedSeries) return null;
-    for (const p of PANELS) {
-      const s = p.series.find((x) => x.key === expandedSeries);
-      if (s) return s;
-    }
-    return null;
-  }, [expandedSeries]);
 
   const filtered = MED_OPTIONS.filter((m) =>
     m.name.toLowerCase().includes(medSearch.toLowerCase()),
@@ -896,52 +717,126 @@ export function PatientTimelineSOAP({
         {/* ---------- RIGHT: Biomarkers + collapsibles + sticky CTA ---------- */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-3xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Painel de biomarcadores
-                </div>
-                <div className="text-sm font-semibold">Tendência · 4 anos</div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Painel de biomarcadores
               </div>
-              <div className="flex flex-wrap gap-1">
-                {PANELS.map((p) => {
-                  const Icon = p.icon;
-                  const isActive = activePanel === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setActivePanel(p.id)}
-                      className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-all ${
-                        isActive
-                          ? `bg-gradient-to-r ${p.tint} text-white shadow`
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                      title={p.label}
+              <div className="text-sm font-semibold">Consulta atual · Jun 2026</div>
+            </div>
+
+            <div className="mt-4 space-y-[6px]">
+              {BIOMARKERS.map((b) => {
+                const below = b.current < b.min;
+                const above = b.current > b.max;
+                const inRef = !below && !above;
+                const diff = b.current - b.prev;
+                const diffAbs = Math.abs(diff);
+                const diffStr =
+                  diffAbs % 1 === 0
+                    ? String(Math.round(diffAbs))
+                    : diffAbs.toFixed(1).replace(/\.0$/, "");
+
+                const valueColor = below
+                  ? "var(--text-danger)"
+                  : above
+                    ? "var(--text-warning)"
+                    : "var(--text-success)";
+                const barColor = below
+                  ? "var(--fill-danger)"
+                  : above
+                    ? "var(--fill-warning)"
+                    : "var(--fill-success)";
+                const badgeBg = below
+                  ? "var(--bg-danger)"
+                  : above
+                    ? "var(--bg-warning)"
+                    : "var(--bg-success)";
+                const badgeText = below
+                  ? "var(--text-danger)"
+                  : above
+                    ? "var(--text-warning)"
+                    : "var(--text-success)";
+                const badgeLabel = inRef
+                  ? "✓ dentro do ref"
+                  : `↓ ${diffStr} vs anterior`;
+
+                const pct = Math.max(
+                  0,
+                  Math.min(100, ((b.current - b.min) / (b.max - b.min)) * 100),
+                );
+
+                return (
+                  <div
+                    key={b.name}
+                    className="space-y-1"
+                    style={{
+                      borderRadius: "8px",
+                      border: "0.5px solid var(--border)",
+                      background: "var(--surface-2)",
+                      padding: "10px 12px",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {b.name}
+                      </span>
+                      <span
+                        className="font-medium"
+                        style={{
+                          fontSize: "11px",
+                          borderRadius: "20px",
+                          padding: "2px 8px",
+                          background: badgeBg,
+                          color: badgeText,
+                        }}
+                      >
+                        {badgeLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span
+                        className="font-medium"
+                        style={{
+                          fontSize: "18px",
+                          fontWeight: 500,
+                          color: valueColor,
+                        }}
+                      >
+                        {b.current}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        {b.unit} · Ref: {b.min}–{b.max} {b.unit}
+                      </span>
+                    </div>
+                    <div
+                      className="h-[5px] w-full overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-0)" }}
                     >
-                      <Icon className="h-3 w-3" />
-                    </button>
-                  );
-                })}
-              </div>
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${pct}%`,
+                          background: barColor,
+                          borderRadius: "3px",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="mt-4 space-y-3">
-              {panel.series.map((s) => (
-                <BiomarkerChart
-                  key={s.key}
-                  series={s}
-                  activeQuest={activeEvent}
-                  onExpand={() => setExpandedSeries(s.key)}
-                />
-              ))}
-            </div>
-
-            {expanded && (
-              <ExpandedSeries
-                series={expanded}
-                onClose={() => setExpandedSeries(null)}
-              />
-            )}
           </div>
 
           <Collapsible
@@ -1070,187 +965,6 @@ export function PatientTimelineSOAP({
 }
 
 
-function BiomarkerChart({
-  series,
-  activeQuest,
-  onExpand,
-}: {
-  series: Series;
-  activeQuest: string;
-  onExpand: () => void;
-}) {
-  const activePoint = series.data.find((d) => d.quest === activeQuest);
-  const latest = series.data[series.data.length - 1].value;
-  const inRange = latest >= series.min && latest <= series.max;
-  return (
-    <button
-      type="button"
-      onClick={onExpand}
-      className="text-left rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50 p-3 transition-all hover:shadow-md hover:border-cyan-300"
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-semibold">{series.label}</div>
-          <div className="text-[10px] text-muted-foreground">
-            Ref: {series.min}–{series.max} {series.unit}
-          </div>
-        </div>
-        <div
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            inRange
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-rose-100 text-rose-700"
-          }`}
-        >
-          {latest} {series.unit.split(" ")[0]}
-        </div>
-      </div>
-      <div className="mt-2 h-28">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series.data} margin={{ top: 5, right: 5, bottom: 0, left: -25 }}>
-            <defs>
-              <linearGradient id={`g-${series.key}`} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0.45} />
-                <stop offset="100%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="oklch(0.92 0.01 240)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="oklch(0.5 0.02 250)" />
-            <YAxis tick={{ fontSize: 9 }} stroke="oklch(0.5 0.02 250)" domain={series.domain} />
-            <ReferenceArea
-              y1={series.min}
-              y2={series.max}
-              fill="oklch(0.85 0.12 150)"
-              fillOpacity={0.18}
-            />
-            <Tooltip
-              contentStyle={{
-                borderRadius: 8,
-                border: "1px solid oklch(0.92 0.01 240)",
-                fontSize: 11,
-              }}
-              formatter={(v: number) => [`${v} ${series.unit}`, series.label]}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="oklch(0.55 0.14 200)"
-              strokeWidth={2}
-              fill={`url(#g-${series.key})`}
-            />
-            {activePoint && (
-              <ReferenceDot
-                x={activePoint.date}
-                y={activePoint.value}
-                r={6}
-                fill="oklch(0.65 0.2 25)"
-                stroke="white"
-                strokeWidth={2}
-              />
-            )}
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-1 text-right text-[10px] text-muted-foreground">
-        clique para expandir série histórica
-      </div>
-    </button>
-  );
-}
-
-function ExpandedSeries({
-  series,
-  onClose,
-}: {
-  series: Series;
-  onClose: () => void;
-}) {
-  return (
-    <div className="mt-5 rounded-2xl border border-cyan-200 bg-gradient-to-b from-cyan-50/40 to-white p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-cyan-700">
-            Série histórica completa
-          </div>
-          <div className="text-sm font-semibold">
-            {series.label}{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              · referência {series.min}–{series.max} {series.unit}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Fechar série expandida"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="mt-3 h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series.data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
-            <defs>
-              <linearGradient id={`gx-${series.key}`} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0.45} />
-                <stop offset="100%" stopColor="oklch(0.62 0.12 200)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="oklch(0.92 0.01 240)" strokeDasharray="3 3" />
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="oklch(0.5 0.02 250)" />
-            <YAxis tick={{ fontSize: 11 }} stroke="oklch(0.5 0.02 250)" domain={series.domain} />
-            <Tooltip
-              contentStyle={{
-                borderRadius: 8,
-                border: "1px solid oklch(0.92 0.01 240)",
-                fontSize: 12,
-              }}
-              formatter={(v: number) => [`${v} ${series.unit}`, series.label]}
-            />
-            <ReferenceLine
-              y={series.min}
-              stroke="oklch(0.6 0.15 150)"
-              strokeDasharray="4 4"
-              label={{ value: `mín ${series.min}`, position: "insideTopLeft", fontSize: 10, fill: "oklch(0.45 0.15 150)" }}
-            />
-            <ReferenceLine
-              y={series.max}
-              stroke="oklch(0.6 0.15 150)"
-              strokeDasharray="4 4"
-              label={{ value: `máx ${series.max}`, position: "insideTopLeft", fontSize: 10, fill: "oklch(0.45 0.15 150)" }}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="oklch(0.55 0.14 200)"
-              strokeWidth={2.5}
-              fill={`url(#gx-${series.key})`}
-              dot={{ r: 4, fill: "oklch(0.55 0.14 200)", stroke: "white", strokeWidth: 2 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-        {series.data.map((d) => {
-          const out = d.value < series.min || d.value > series.max;
-          return (
-            <div
-              key={d.date}
-              className={`rounded-lg border px-2 py-1.5 ${
-                out
-                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              <div className="text-[10px] text-muted-foreground">{d.date}</div>
-              <div className="text-sm font-semibold">{d.value}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function SoapBlock({
   letter,
