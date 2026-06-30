@@ -721,125 +721,152 @@ export function PatientTimelineSOAP({
           <div className="rounded-3xl border border-border bg-card p-5">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Painel de biomarcadores
+                PAINEL DE BIOMARCADORES
               </div>
-              <div className="text-sm font-semibold">Consulta atual · Jun 2026</div>
+              <div className="text-sm font-semibold">Histórico · 4 anos</div>
             </div>
 
-            <div className="mt-4 space-y-[6px]">
-              {BIOMARKERS.map((b) => {
-                const below = b.current < b.min;
-                const above = b.current > b.max;
+            <div className="mt-4">
+              {BIOMARKERS.map((b, idx) => {
+                const current = b.series[b.series.length - 1];
+                const prev = b.series[b.series.length - 2];
+                const below = current < b.min;
+                const above = current > b.max;
                 const inRef = !below && !above;
-                const diff = b.current - b.prev;
+                const diff = current - prev;
                 const diffAbs = Math.abs(diff);
                 const diffStr =
                   diffAbs % 1 === 0
                     ? String(Math.round(diffAbs))
                     : diffAbs.toFixed(1).replace(/\.0$/, "");
-
-                const valueColor = below
-                  ? "var(--text-danger)"
-                  : above
-                    ? "var(--text-warning)"
-                    : "var(--text-success)";
-                const barColor = below
-                  ? "var(--fill-danger)"
-                  : above
-                    ? "var(--fill-warning)"
-                    : "var(--fill-success)";
-                const badgeBg = below
-                  ? "var(--bg-danger)"
-                  : above
-                    ? "var(--bg-warning)"
-                    : "var(--bg-success)";
-                const badgeText = below
-                  ? "var(--text-danger)"
-                  : above
-                    ? "var(--text-warning)"
-                    : "var(--text-success)";
+                const statusColor = inRef ? "#639922" : "#E24B4A";
+                const valueColor = inRef ? "var(--text-success)" : "var(--text-danger)";
+                const badgeBg = inRef ? "var(--bg-success)" : "var(--bg-danger)";
+                const badgeText = inRef ? "var(--text-success)" : "var(--text-danger)";
                 const badgeLabel = inRef
-                  ? "✓ dentro do ref"
-                  : `↓ ${diffStr} vs anterior`;
+                  ? "✓ ref"
+                  : `${diff < 0 ? "↓" : "↑"} ${diffStr} vs anterior`;
 
-                const pct = Math.max(
-                  0,
-                  Math.min(100, ((b.current - b.min) / (b.max - b.min)) * 100),
-                );
+                const data = b.series.map((v, i) => ({
+                  date: BIOMARKER_DATES[i],
+                  value: v,
+                }));
+                const yMin = Math.min(b.min, ...b.series) * 0.9;
+                const yMax = Math.max(b.max, ...b.series) * 1.05;
 
                 return (
                   <div
                     key={b.name}
-                    className="space-y-1"
                     style={{
-                      borderRadius: "8px",
-                      border: "0.5px solid var(--border)",
-                      background: "var(--surface-2)",
-                      padding: "10px 12px",
-                      marginBottom: "6px",
+                      marginBottom: idx === BIOMARKERS.length - 1 ? 0 : 16,
+                      paddingBottom: idx === BIOMARKERS.length - 1 ? 0 : 16,
+                      borderBottom:
+                        idx === BIOMARKERS.length - 1
+                          ? "none"
+                          : "0.5px solid var(--border)",
                     }}
                   >
                     <div className="flex items-center justify-between">
-                      <span
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {b.name}
-                      </span>
+                      <div className="flex items-baseline gap-2">
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{b.name}</span>
+                        <span
+                          style={{ fontSize: 14, fontWeight: 600, color: valueColor }}
+                        >
+                          {current}
+                        </span>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                          {b.unit} · Ref: {b.min}–{b.max}
+                        </span>
+                      </div>
                       <span
                         className="font-medium"
                         style={{
-                          fontSize: "11px",
-                          borderRadius: "20px",
+                          fontSize: 11,
+                          borderRadius: 20,
                           padding: "2px 8px",
                           background: badgeBg,
                           color: badgeText,
+                          whiteSpace: "nowrap",
                         }}
                       >
                         {badgeLabel}
                       </span>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span
-                        className="font-medium"
-                        style={{
-                          fontSize: "18px",
-                          fontWeight: 500,
-                          color: valueColor,
-                        }}
-                      >
-                        {b.current}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "11px",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {b.unit} · Ref: {b.min}–{b.max} {b.unit}
-                      </span>
-                    </div>
-                    <div
-                      className="h-[5px] w-full overflow-hidden rounded-full"
-                      style={{ background: "var(--surface-0)" }}
-                    >
-                      <div
-                        className="h-full"
-                        style={{
-                          width: `${pct}%`,
-                          background: barColor,
-                          borderRadius: "3px",
-                        }}
-                      />
+                    <div style={{ height: 80, width: "100%", marginTop: 6 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={data}
+                          margin={{ top: 6, right: 6, bottom: 4, left: 6 }}
+                        >
+                          <YAxis hide domain={[yMin, yMax]} />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <ReferenceArea
+                            y1={b.min}
+                            y2={b.max}
+                            fill="#22c55e"
+                            fillOpacity={0.08}
+                          />
+                          <ReferenceLine
+                            y={b.max}
+                            stroke="#22c55e"
+                            strokeDasharray="3 3"
+                            strokeOpacity={0.4}
+                          />
+                          <ReferenceLine
+                            y={b.min}
+                            stroke="#22c55e"
+                            strokeDasharray="3 3"
+                            strokeOpacity={0.4}
+                          />
+                          <Tooltip
+                            cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+                            contentStyle={{
+                              fontSize: 11,
+                              borderRadius: 8,
+                              border: "1px solid var(--border)",
+                              background: "var(--card)",
+                              padding: "4px 8px",
+                            }}
+                            formatter={(v: number) => [`${v} ${b.unit}`, ""]}
+                            labelStyle={{ fontSize: 10, color: "var(--text-muted)" }}
+                            separator=""
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke={statusColor}
+                            strokeWidth={2}
+                            dot={(props: { cx?: number; cy?: number; index?: number; key?: string | number }) => {
+                              const { cx, cy, index, key } = props;
+                              if (index === data.length - 1 && cx != null && cy != null) {
+                                return (
+                                  <circle
+                                    key={key ?? `dot-${index}`}
+                                    cx={cx}
+                                    cy={cy}
+                                    r={4}
+                                    fill={statusColor}
+                                  />
+                                );
+                              }
+                              return <g key={key ?? `empty-${index}`} />;
+                            }}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+
 
           <Collapsible
             icon={Users}
