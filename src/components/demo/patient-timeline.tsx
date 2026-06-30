@@ -5,7 +5,6 @@ import {
   BookOpen,
   ChevronDown,
   ClipboardList,
-  Droplet,
   FileText,
   FlaskConical,
   Lightbulb,
@@ -23,7 +22,6 @@ import {
   Search,
   Sparkles,
   Stethoscope,
-  TestTube,
   Users,
   X,
 } from "lucide-react";
