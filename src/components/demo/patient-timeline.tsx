@@ -194,6 +194,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   const [planSuggested, setPlanSuggested] = useState(false);
   const [medSearch, setMedSearch] = useState("");
   const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
+  const [memedOpen, setMemedOpen] = useState(false);
   const [activeEvent, setActiveEvent] = useState<string>(initialQuest ?? "q2026");
   const [recording, setRecording] = useState(false);
   const [kbSearch, setKbSearch] = useState("");
@@ -627,6 +628,92 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
                       <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
                         {soapFields[f.key]}
                       </p>
+                    )}
+
+                    {f.key === "p" && (
+                      <div className="mt-3">
+                        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
+                          <Pill className="h-3.5 w-3.5" />
+                          Prescrição Memed
+                        </div>
+
+                        {selectedMeds.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {selectedMeds.map((m) => (
+                              <span
+                                key={m}
+                                className="flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-[11px] font-medium text-teal-700 ring-1 ring-teal-200"
+                              >
+                                {m}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMeds((prev) => prev.filter((x) => x !== m))}
+                                  className="ml-0.5 text-teal-400 hover:text-teal-700"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {!memedOpen ? (
+                          <button
+                            type="button"
+                            onClick={() => setMemedOpen(true)}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              border: "0.5px dashed var(--border-strong)",
+                              borderRadius: "8px",
+                              padding: "10px 12px",
+                              textAlign: "center",
+                              color: "var(--text-muted)",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              background: "transparent",
+                            }}
+                          >
+                            + Adicionar medicamento à prescrição
+                          </button>
+                        ) : (
+                          <div className="rounded-lg border border-border bg-white p-2">
+                            <input
+                              autoFocus
+                              value={medSearch}
+                              onChange={(e) => setMedSearch(e.target.value)}
+                              placeholder="Buscar medicamento..."
+                              className="w-full rounded-md border border-border px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                            />
+                            <div className="mt-1.5 space-y-1">
+                              {filtered.map((m) => (
+                                <button
+                                  key={m.name}
+                                  type="button"
+                                  onClick={() => {
+                                    if (!selectedMeds.includes(m.name)) {
+                                      setSelectedMeds((prev) => [...prev, m.name]);
+                                    }
+                                    setMedSearch("");
+                                    setMemedOpen(false);
+                                  }}
+                                  className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                                >
+                                  <span className="text-[12px] font-medium">{m.name}</span>
+                                  <span className="text-[10px] text-muted-foreground">{m.desc}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setMemedOpen(false); setMedSearch(""); }}
+                              className="mt-1.5 w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
+                            >
+                              Fechar
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
