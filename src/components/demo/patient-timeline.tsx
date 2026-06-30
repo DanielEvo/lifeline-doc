@@ -306,19 +306,6 @@ export function PatientTimelineSOAP({
     return () => clearTimeout(t);
   }, [arrivalPulse]);
 
-  const panel = useMemo(
-    () => PANELS.find((p) => p.id === activePanel)!,
-    [activePanel],
-  );
-
-  const expanded = useMemo(() => {
-    if (!expandedSeries) return null;
-    for (const p of PANELS) {
-      const s = p.series.find((x) => x.key === expandedSeries);
-      if (s) return s;
-    }
-    return null;
-  }, [expandedSeries]);
 
   const filtered = MED_OPTIONS.filter((m) =>
     m.name.toLowerCase().includes(medSearch.toLowerCase()),
