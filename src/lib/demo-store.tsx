@@ -41,7 +41,10 @@ type Store = {
   movePatient: (id: string, to: KanbanColumnId) => void;
   sealed: boolean;
   setSealed: (b: boolean) => void;
+  subjective: string;
+  setSubjective: (s: string) => void;
 };
+
 
 const Ctx = createContext<Store | null>(null);
 
