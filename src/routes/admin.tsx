@@ -81,7 +81,7 @@ function Admin() {
 
           <div className="mt-4 space-y-2">
             {fb.rows.length === 0 && <EmptyState label="Nenhum feedback ainda." />}
-            {fb.rows.map((r) => (
+            {fb.rows.map((r: FeedbackEntry) => (
               <div
                 key={r.id}
                 className="flex items-start gap-3 rounded-xl border border-border bg-card p-3"
