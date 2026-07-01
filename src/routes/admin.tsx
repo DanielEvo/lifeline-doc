@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { getFeedback } from "@/lib/api/feedback.functions";
 import { getLeads } from "@/lib/api/leads.functions";
 import { getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import type {
+  ConsultationEntry,
+  FeedbackEntry,
+  LeadEntry,
+  PrescriptionEntry,
+} from "@/lib/store.server";
+
 
 export const Route = createFileRoute("/admin")({
   loader: async () => {
