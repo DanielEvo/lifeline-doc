@@ -150,7 +150,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         movePatient,
         sealed,
         setSealed,
+        subjective,
+        setSubjective,
       }}
+
     >
       {children}
     </Ctx.Provider>
