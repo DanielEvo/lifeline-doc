@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { getFeedback } from "@/lib/api/feedback.functions";
 import { getLeads } from "@/lib/api/leads.functions";
 import { getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import type {
+  ConsultationEntry,
+  FeedbackEntry,
+  LeadEntry,
+  PrescriptionEntry,
+} from "@/lib/store.server";
+
 
 export const Route = createFileRoute("/admin")({
   loader: async () => {
@@ -74,7 +81,7 @@ function Admin() {
 
           <div className="mt-4 space-y-2">
             {fb.rows.length === 0 && <EmptyState label="Nenhum feedback ainda." />}
-            {fb.rows.map((r) => (
+            {fb.rows.map((r: FeedbackEntry) => (
               <div
                 key={r.id}
                 className="flex items-start gap-3 rounded-xl border border-border bg-card p-3"
@@ -103,7 +110,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {consults.rows.length === 0 && <EmptyState label="Nenhum prontuário selado ainda." />}
-            {consults.rows.map((c) => (
+            {consults.rows.map((c: ConsultationEntry) => (
               <div key={c.id} className="rounded-xl border border-border bg-card p-3">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span className="font-semibold">{c.patient}</span>
@@ -133,7 +140,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {rx.rows.length === 0 && <EmptyState label="Nenhuma receita gerada ainda." />}
-            {rx.rows.map((p) => (
+            {rx.rows.map((p: PrescriptionEntry) => (
               <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm">
                 <span className="font-semibold">{p.patient}</span>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
@@ -159,7 +166,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {leads.rows.length === 0 && <EmptyState label="Nenhum lead ainda." />}
-            {leads.rows.map((l) => (
+            {leads.rows.map((l: LeadEntry) => (
               <div
                 key={l.id}
                 className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm"

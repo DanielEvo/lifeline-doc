@@ -41,7 +41,10 @@ type Store = {
   movePatient: (id: string, to: KanbanColumnId) => void;
   sealed: boolean;
   setSealed: (b: boolean) => void;
+  subjective: string;
+  setSubjective: (s: string) => void;
 };
+
 
 const Ctx = createContext<Store | null>(null);
 
@@ -117,6 +120,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [step, setStep] = useState(0);
   const [patients, setPatients] = useState<PatientCard[]>(initialPatients);
   const [sealed, setSealed] = useState(false);
+  const [subjective, setSubjective] = useState("");
 
   const pushMessages = (msgs: ChatMessage[]) =>
     setMessages((m) => [...m, ...msgs]);
@@ -126,7 +130,9 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setStep(0);
     setPatients(initialPatients);
     setSealed(false);
+    setSubjective("");
   };
+
 
   const movePatient = (id: string, to: KanbanColumnId) => {
     setPatients((ps) => ps.map((p) => (p.id === id ? { ...p, column: to } : p)));
@@ -144,7 +150,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         movePatient,
         sealed,
         setSealed,
+        subjective,
+        setSubjective,
       }}
+
     >
       {children}
     </Ctx.Provider>
