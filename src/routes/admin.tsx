@@ -140,7 +140,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {rx.rows.length === 0 && <EmptyState label="Nenhuma receita gerada ainda." />}
-            {rx.rows.map((p) => (
+            {rx.rows.map((p: PrescriptionEntry) => (
               <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm">
                 <span className="font-semibold">{p.patient}</span>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
