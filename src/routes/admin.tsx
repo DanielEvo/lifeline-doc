@@ -166,7 +166,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {leads.rows.length === 0 && <EmptyState label="Nenhum lead ainda." />}
-            {leads.rows.map((l) => (
+            {leads.rows.map((l: LeadEntry) => (
               <div
                 key={l.id}
                 className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm"
