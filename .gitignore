@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# LifeLine local persistence
+.data/
+dev*.log
