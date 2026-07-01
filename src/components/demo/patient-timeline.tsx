@@ -217,6 +217,31 @@ const EVOLUCAO_DEFAULT =
 const PLANO_DEFAULT =
   "Sulfato Ferroso 40mg 2x/dia em jejum + Vit C 500mg.\nFerro sérico e ferritina de controle solicitados.\nReavaliar em 60 dias.";
 
+// ---------- Derivação heurística S/O/A/P a partir do texto livre de Evolução ----------
+// Regras simples (palavras-chave/posição), suficientes para validar a UTILIDADE
+// da visualização derivada — não é extração por IA nesta fase (ver Tech Decision
+// Log, Seção 6). A edição real acontece só no campo de Evolução; aqui é read-only.
+type Soap = { s: string; o: string; a: string; p: string };
+
+function deriveSoap(text: string): Soap {
+  const sentences = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const A = ["anemia", "ferropriv", "hipótese", "hipotese", "diagnóst", "diagnost", "cid", "síndrome", "sindrome", "provável", "provavel", "avaliaç", "suspeita"];
+  const P = ["sulfato", "ferroso", "colecalciferol", "ácido fólico", "acido folico", "prescre", "solicit", "reavali", "retorno", "manter", "iniciar", "suplement", "conduta", "orient", "tratamento", "encaminh", "ferro sérico", "ferro serico"];
+  const O = ["g/dl", "ng/ml", "mg/dl", "pg/ml", "µg/dl", "mmhg", "bpm", "hemograma", "exame", "ferritina", "hemoglobina", "hb ", "vit d", "vitamina", "biomarc"];
+  const has = (str: string, arr: string[]) => arr.some((k) => str.toLowerCase().includes(k));
+  const bucket: Record<"s" | "o" | "a" | "p", string[]> = { s: [], o: [], a: [], p: [] };
+  for (const sen of sentences) {
+    if (has(sen, A)) bucket.a.push(sen);
+    else if (has(sen, P)) bucket.p.push(sen);
+    else if (has(sen, O)) bucket.o.push(sen);
+    else bucket.s.push(sen);
+  }
+  return { s: bucket.s.join(" "), o: bucket.o.join(" "), a: bucket.a.join(" "), p: bucket.p.join(" ") };
+}
+
 export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => void; initialQuest?: string }) {
   const { sealed, setSealed } = useDemo();
 
@@ -224,6 +249,9 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   const [evolucaoText, setEvolucaoText] = useState(EVOLUCAO_DEFAULT);
   const [evolucaoEditing, setEvolucaoEditing] = useState(false);
   const evolucaoRef = useRef<HTMLTextAreaElement | null>(null);
+  // Fonte da visualização SOAP derivada — atualizada só ao salvar a Evolução
+  const [soapSource, setSoapSource] = useState(EVOLUCAO_DEFAULT);
+  const soap = useMemo(() => deriveSoap(soapSource), [soapSource]);
 
   // ---- Gravação + confirmação ----
   const [recording, setRecording] = useState(false);
@@ -316,6 +344,7 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
 
   const saveEvolucao = () => {
     setEvolucaoEditing(false);
+    setSoapSource(evolucaoText); // recalcula a visualização SOAP derivada
     toast.success("Evolução salva ✓");
   };
 
@@ -625,6 +654,47 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
               </div>
             )}
           </div>
+
+          {/* CAMADA 2.5 — Visualização SOAP derivada (somente leitura) */}
+          <Collapsible icon={Stethoscope} title="Visualização SOAP (somente leitura)" badge="derivado da Evolução">
+            <div className="space-y-2.5">
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                Gerado automaticamente a partir da Evolução · recalculado ao salvar. Para corrigir algo,
+                edite o campo de Evolução — não há edição direta aqui.
+              </p>
+              {(
+                [
+                  { k: "S", label: "Subjetivo", text: soap.s, locked: false },
+                  { k: "O", label: "Objetivo", text: soap.o, locked: false },
+                  { k: "A", label: "Avaliação", text: soap.a, locked: true },
+                  { k: "P", label: "Plano", text: soap.p, locked: false },
+                ] as const
+              ).map((row) => (
+                <div key={row.k} className="flex gap-2.5">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-800 text-[11px] font-bold text-white">
+                    {row.k}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-semibold">{row.label}</span>
+                      {row.locked && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 ring-1 ring-amber-200">
+                          🔒 Visível apenas para o médico
+                        </span>
+                      )}
+                    </div>
+                    {row.text ? (
+                      <p className="mt-0.5 whitespace-pre-line text-[12px] leading-relaxed text-foreground/80">{row.text}</p>
+                    ) : (
+                      <p className="mt-0.5 text-[12px] italic leading-relaxed text-muted-foreground">
+                        Sem dados extraídos — edite a Evolução.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Collapsible>
 
           <div className="border-t border-border" />
 
