@@ -110,7 +110,7 @@ function Admin() {
           </div>
           <div className="space-y-2">
             {consults.rows.length === 0 && <EmptyState label="Nenhum prontuário selado ainda." />}
-            {consults.rows.map((c) => (
+            {consults.rows.map((c: ConsultationEntry) => (
               <div key={c.id} className="rounded-xl border border-border bg-card p-3">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span className="font-semibold">{c.patient}</span>
