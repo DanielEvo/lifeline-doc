@@ -5,6 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono",
+    "Roboto Mono", Menlo, Consolas, monospace;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -88,19 +93,6 @@
   --chart-4: oklch(0.62 0.21 22);
   --chart-5: oklch(0.55 0.18 280);
 
-  /* Biomarker alert card tokens */
-  --surface-0: var(--muted);
-  --surface-2: var(--card);
-  --text-primary: var(--foreground);
-  --bg-danger: oklch(0.97 0.015 22);
-  --text-danger: var(--destructive);
-  --bg-success: oklch(0.97 0.03 155);
-  --text-success: var(--success);
-  --text-warning: var(--warning);
-  --fill-danger: var(--destructive);
-  --fill-success: var(--success);
-  --fill-warning: var(--warning);
-
   --sidebar: oklch(0.21 0.03 250);
   --sidebar-foreground: oklch(0.95 0.01 240);
   --sidebar-primary: oklch(0.62 0.12 200);
@@ -154,20 +146,222 @@
   * {
     border-color: var(--color-border);
   }
+
+  html {
+    scroll-behavior: smooth;
+    /* offset for the sticky 64px header when jumping to #anchors */
+    scroll-padding-top: 5rem;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01";
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Consistent, visible keyboard focus across the whole app (a11y) */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Brand-tinted text selection */
+  ::selection {
+    background-color: color-mix(in oklch, var(--color-primary) 24%, transparent);
+    color: var(--color-foreground);
+  }
+
+  /* Respect users who prefer less motion — clinical software is used all day */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @utility brand-gradient {
-  background-image: linear-gradient(135deg, oklch(0.62 0.12 200), oklch(0.55 0.14 180));
+  background-image: linear-gradient(
+    135deg,
+    oklch(0.64 0.15 205),
+    oklch(0.6 0.16 185),
+    oklch(0.57 0.15 165)
+  );
 }
 
 @utility text-brand-gradient {
-  background-image: linear-gradient(135deg, oklch(0.55 0.14 200), oklch(0.5 0.15 175));
+  background-image: linear-gradient(
+    110deg,
+    oklch(0.6 0.14 200),
+    oklch(0.55 0.15 175),
+    oklch(0.62 0.13 210),
+    oklch(0.6 0.14 200)
+  );
+  background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: text-shine 6s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion system — purposeful, calm micro-interactions
+--------------------------------------------------------------------------- */
+
+@keyframes text-shine {
+  to {
+    background-position: 250% 0;
+  }
+}
+
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes aurora-drift-alt {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate3d(-5%, 4%, 0) scale(0.95);
+    opacity: 0.95;
+  }
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes audio-wave {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px color-mix(in oklch, var(--color-primary) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 0%, transparent);
+  }
+}
+
+@utility animate-aurora {
+  animation: aurora-drift 14s ease-in-out infinite;
+}
+
+@utility animate-aurora-alt {
+  animation: aurora-drift-alt 18s ease-in-out infinite;
+}
+
+@utility animate-float {
+  animation: float-y 6s ease-in-out infinite;
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@utility audio-wave {
+  animation: audio-wave 0.8s ease-in-out infinite;
+}
+
+@utility animate-pulse-ring {
+  animation: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Shimmer sweep used for skeletons / "live" surfaces */
+@utility shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scroll-reveal: elements start hidden, transition in when .is-visible is set */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .text-brand-gradient {
+    animation: none;
+  }
+}
+
+/* Subtle press feedback for any interactive element using this utility */
+@utility press {
+  transition: transform 0.12s ease;
+}
+@utility press {
+  &:active {
+    transform: scale(0.97);
+  }
 }
