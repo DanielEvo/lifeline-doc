@@ -625,10 +625,12 @@ function LeadForm() {
                 <Label htmlFor="whatsapp">WhatsApp</Label>
                 <Input
                   id="whatsapp"
+                  type="tel"
+                  inputMode="tel"
                   placeholder="(11) 99999-0000"
                   value={form.whatsapp}
-                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                  maxLength={20}
+                  onChange={(e) => setForm({ ...form, whatsapp: maskPhoneBR(e.target.value) })}
+                  maxLength={16}
                 />
               </div>
               <div className="space-y-1.5">
