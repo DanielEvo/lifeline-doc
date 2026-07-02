@@ -541,6 +541,14 @@ function MemedPreview() {
 }
 
 /* ========================= LEAD FORM ========================= */
+function maskPhoneBR(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
 function LeadForm() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ nome: "", email: "", whatsapp: "", especialidade: "" });
@@ -625,10 +633,12 @@ function LeadForm() {
                 <Label htmlFor="whatsapp">WhatsApp</Label>
                 <Input
                   id="whatsapp"
+                  type="tel"
+                  inputMode="tel"
                   placeholder="(11) 99999-0000"
                   value={form.whatsapp}
-                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                  maxLength={20}
+                  onChange={(e) => setForm({ ...form, whatsapp: maskPhoneBR(e.target.value) })}
+                  maxLength={16}
                 />
               </div>
               <div className="space-y-1.5">
