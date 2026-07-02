@@ -16,6 +16,8 @@ import {
   Search,
   Sparkles,
   Stethoscope,
+  Upload,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -139,11 +141,24 @@ const MED_OPTIONS = [
   { name: "Colecalciferol 50.000UI", desc: "1cp/semana · 8 semanas" },
 ];
 
-const SIMILAR_CASES = [
+type SimilarCase = {
+  id: string;
+  age: number;
+  sex: "F" | "M";
+  complaint: string;
+  biomarkers: string[];
+  condition: string;
+  treatment: string;
+  outcome: string;
+};
+
+const SIMILAR_CASES: SimilarCase[] = [
   {
     id: "c1",
     age: 35,
     sex: "F",
+    complaint: "Fadiga",
+    biomarkers: ["Ferritina", "Hemoglobina"],
     condition: "Anemia ferropriva · fadiga",
     treatment: "Sulfato ferroso 40mg + Vit C · 90 dias",
     outcome: "Resolvido",
@@ -152,6 +167,8 @@ const SIMILAR_CASES = [
     id: "c2",
     age: 42,
     sex: "F",
+    complaint: "Fadiga",
+    biomarkers: ["Vitamina D", "Hemoglobina"],
     condition: "Anemia + Vit D baixa",
     treatment: "Ferro EV + Colecalciferol 50.000UI",
     outcome: "Resolvido",
@@ -160,11 +177,80 @@ const SIMILAR_CASES = [
     id: "c3",
     age: 39,
     sex: "F",
+    complaint: "Fadiga",
+    biomarkers: ["Ferritina"],
     condition: "Fadiga crônica · ferritina 22",
     treatment: "Sulfato ferroso + B12 + reavaliação 60d",
     outcome: "Em acompanh.",
   },
+  {
+    id: "c4",
+    age: 51,
+    sex: "M",
+    complaint: "Dispneia",
+    biomarkers: ["Hemoglobina"],
+    condition: "Anemia leve · dispneia aos esforços",
+    treatment: "Investigação GI + ferro oral",
+    outcome: "Em acompanh.",
+  },
+  {
+    id: "c5",
+    age: 29,
+    sex: "F",
+    complaint: "Cefaleia",
+    biomarkers: ["Vitamina D"],
+    condition: "Cefaleia tensional · Vit D baixa",
+    treatment: "Colecalciferol + higiene do sono",
+    outcome: "Resolvido",
+  },
 ];
+
+// Patch 2 (F4): categorias fixas de filtro — seleção múltipla, OR dentro da
+// categoria e AND entre categorias (nunca campo livre).
+const CASE_FILTERS = [
+  { id: "complaint", label: "Queixa inicial", options: ["Fadiga", "Dispneia", "Cefaleia"] },
+  { id: "biomarker", label: "Biomarcador alterado", options: ["Hemoglobina", "Ferritina", "Vitamina D"] },
+  { id: "age", label: "Faixa etária", options: ["18–34", "35–45", "46+"] },
+  { id: "sex", label: "Sexo", options: ["F", "M"] },
+] as const;
+type CaseFilterId = (typeof CASE_FILTERS)[number]["id"];
+
+function ageBucket(age: number): string {
+  if (age <= 34) return "18–34";
+  if (age <= 45) return "35–45";
+  return "46+";
+}
+
+// Patch 4 (F3): Knowledge Base esqueleto — dados fixos das 3 abas
+const KB_LIBRARY = [
+  { title: "Harrison — Medicina Interna (cap. Anemias)", tags: ["Hematologia", "Referência"] },
+  { title: "Diretriz SBHH 2024 — Anemia ferropriva", tags: ["Diretriz", "Hematologia"] },
+];
+const KB_RESEARCH = [
+  { title: "Oral vs IV iron in iron-deficiency anemia: meta-analysis", source: "The Lancet Haematology · 2025" },
+  { title: "Fatigue as first symptom of anemia in primary care", source: "BMJ · 2024" },
+];
+
+// Patch 5 (F7/TECH-08): template de Anamnese completa (1ª consulta) — protótipo.
+// A seleção definitiva por histórico do paciente (modelo de dados) fica para spec própria.
+const ANAMNESE_TEMPLATE = `IDENTIFICAÇÃO:
+Mariana Silva · 38 anos · F
+
+QUEIXA PRINCIPAL:
+
+HDA:
+
+ANTECEDENTES:
+
+HÁBITOS DE VIDA:
+
+REVISÃO DE SISTEMAS:
+
+EXAME FÍSICO:
+
+AVALIAÇÃO:
+
+PLANO:`;
 
 const KB_ITEMS = [
   {
@@ -276,7 +362,18 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
   // ---- Casos similares + Knowledge Base ----
   const [kbSearch, setKbSearch] = useState("");
   const [kbOpen, setKbOpen] = useState<KbItem | null>(null);
-  const [activeChips, setActiveChips] = useState<string[]>(["Fadiga", "Ferritina <20"]);
+  const [kbTab, setKbTab] = useState<"protocolos" | "biblioteca" | "pesquisas">("protocolos");
+  // Patch 2 (F4): filtros categorizados de casos similares
+  const [caseFilters, setCaseFilters] = useState<Record<CaseFilterId, string[]>>({
+    complaint: ["Fadiga"],
+    biomarker: ["Ferritina"],
+    age: [],
+    sex: [],
+  });
+  // Patch 3 (F6): cadastro inline via CPF
+  const [registerOpen, setRegisterOpen] = useState(false);
+  // Patch 5 (F7): template de registro — retorno é o padrão (paciente com histórico)
+  const [recordTemplate, setRecordTemplate] = useState<"anamnese" | "soap">("soap");
 
   // ---- Acesso via token ----
   const [accessModal, setAccessModal] = useState(false);
@@ -347,6 +444,39 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
     setSoapSource(evolucaoText); // recalcula a visualização SOAP derivada
     toast.success("Evolução salva ✓");
   };
+
+  // Patch 5 (F7/TECH-08): alternar template de registro (protótipo de validação —
+  // o padrão é auto-selecionado pelo histórico; aqui o médico pode trocar manualmente)
+  const applyTemplate = (t: "anamnese" | "soap") => {
+    if (t === recordTemplate) return;
+    setRecordTemplate(t);
+    setEvolucaoText(t === "anamnese" ? ANAMNESE_TEMPLATE : EVOLUCAO_DEFAULT);
+    setEvolucaoEditing(true);
+    toast.message(
+      t === "anamnese" ? "Template: Anamnese completa (1ª consulta)" : "Template: Evolução (retorno)",
+      { description: "O padrão é definido pelo histórico do paciente — Mariana tem consultas anteriores." },
+    );
+  };
+
+  // Patch 2 (F4): OR dentro da categoria, AND entre categorias
+  const toggleCaseFilter = (cat: CaseFilterId, opt: string) =>
+    setCaseFilters((prev) => ({
+      ...prev,
+      [cat]: prev[cat].includes(opt) ? prev[cat].filter((o) => o !== opt) : [...prev[cat], opt],
+    }));
+
+  const filteredCases = useMemo(
+    () =>
+      SIMILAR_CASES.filter((c) => {
+        if (caseFilters.complaint.length > 0 && !caseFilters.complaint.includes(c.complaint)) return false;
+        if (caseFilters.biomarker.length > 0 && !c.biomarkers.some((b) => caseFilters.biomarker.includes(b)))
+          return false;
+        if (caseFilters.age.length > 0 && !caseFilters.age.includes(ageBucket(c.age))) return false;
+        if (caseFilters.sex.length > 0 && !caseFilters.sex.includes(c.sex)) return false;
+        return true;
+      }),
+    [caseFilters],
+  );
 
   const savePlano = () => {
     setPlanoEditing(false);
@@ -541,10 +671,52 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             </UITooltip>
           </TooltipProvider>
 
+          {/* Patch 3 (F6) — cadastro inline quando não há briefing prévio via WhatsApp */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border px-3 py-2">
+            <span className="text-[11px] text-muted-foreground">
+              Paciente sem briefing/exames prévios via WhatsApp?
+            </span>
+            <button
+              type="button"
+              onClick={() => setRegisterOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground/80 transition hover:bg-muted"
+            >
+              <UserPlus className="h-3 w-3" />
+              Cadastrar paciente agora
+            </button>
+          </div>
+
           <div className="border-t border-border" />
 
           {/* CAMADA 2 — Evolução (campo único) + gravação com confirmação */}
           <div>
+            {/* Patch 5 (F7/TECH-08) — template de registro, auto-selecionado pelo histórico */}
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
+                {(
+                  [
+                    { id: "anamnese", label: "Anamnese completa · 1ª consulta" },
+                    { id: "soap", label: "Evolução · retorno" },
+                  ] as const
+                ).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => applyTemplate(t.id)}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
+                      recordTemplate === t.id
+                        ? "bg-teal-600 text-white shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                Auto: {EVENTS.length - 1} consultas anteriores → retorno
+              </span>
+            </div>
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs font-medium text-muted-foreground">Evolução</Label>
               {evolucaoEditing ? (
@@ -945,32 +1117,43 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             </div>
           </div>
 
-          <Collapsible icon={Users} title="Casos com perfil similar" badge="3 pacientes">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-              {(["Fadiga", "Ferritina <20", "35–45 anos", "+ filtro"] as const).map((label) => {
-                const active = activeChips.includes(label);
-                return (
-                  <button
-                    key={label}
-                    onClick={() => setActiveChips((prev) => (prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]))}
-                    style={{
-                      fontSize: "11px",
-                      padding: "3px 10px",
-                      borderRadius: "20px",
-                      border: `0.5px solid ${active ? "var(--border-accent)" : "var(--border-strong)"}`,
-                      background: active ? "var(--bg-accent)" : "var(--surface-1)",
-                      color: active ? "var(--text-accent)" : "var(--text-secondary)",
-                      fontWeight: active ? 500 : 400,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+          <Collapsible icon={Users} title="Casos com perfil similar" badge={`${filteredCases.length} pacientes`}>
+            {/* Patch 2 (F4) — seleção múltipla categorizada · OR na categoria, AND entre categorias */}
+            <div className="mb-3 space-y-2">
+              {CASE_FILTERS.map((cat) => (
+                <div key={cat.id}>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {cat.label}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {cat.options.map((opt) => {
+                      const active = caseFilters[cat.id].includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => toggleCaseFilter(cat.id, opt)}
+                          className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                            active
+                              ? "border-cyan-400 bg-cyan-50 font-medium text-cyan-800"
+                              : "border-border bg-white text-muted-foreground hover:border-cyan-200"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             <div className="space-y-2">
-              {SIMILAR_CASES.map((c) => (
+              {filteredCases.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border px-2.5 py-3 text-center text-[11px] text-muted-foreground">
+                  Nenhum caso corresponde aos filtros selecionados.
+                </div>
+              )}
+              {filteredCases.map((c) => (
                 <div key={c.id} className="rounded-lg border border-border bg-white p-2.5 text-[11px]">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">
@@ -986,23 +1169,103 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
             </div>
           </Collapsible>
 
-          <Collapsible icon={BookOpen} title="Minha base de conhecimento">
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                <Input value={kbSearch} onChange={(e) => setKbSearch(e.target.value)} placeholder="Buscar protocolos..." className="h-8 pl-7 text-xs" />
-              </div>
-              {KB_ITEMS.map((k) => (
+          <Collapsible icon={BookOpen} title="Minha base de conhecimento" badge="com trilhos">
+            {/* Patch 4 (F3) — esqueleto de validação: 3 abas fixas, sem liberdade total */}
+            <div className="mb-2.5 flex gap-1 rounded-full border border-border bg-muted/40 p-0.5">
+              {(
+                [
+                  { id: "protocolos", label: "Meus Protocolos" },
+                  { id: "biblioteca", label: "Biblioteca" },
+                  { id: "pesquisas", label: "Pesquisas" },
+                ] as const
+              ).map((t) => (
                 <button
-                  key={k.title}
+                  key={t.id}
                   type="button"
-                  onClick={() => setKbOpen(k)}
-                  className="block w-full rounded-lg border border-border bg-white px-2.5 py-2 text-left text-[11px] hover:border-cyan-300 hover:bg-cyan-50"
+                  onClick={() => setKbTab(t.id)}
+                  className={`flex-1 rounded-full px-2 py-1 text-[10px] font-medium transition ${
+                    kbTab === t.id
+                      ? "bg-white text-foreground shadow-sm ring-1 ring-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <div className="font-medium">{k.title}</div>
+                  {t.label}
                 </button>
               ))}
             </div>
+
+            {kbTab === "protocolos" && (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={kbSearch} onChange={(e) => setKbSearch(e.target.value)} placeholder="Buscar protocolos..." className="h-8 pl-7 text-xs" />
+                </div>
+                {KB_ITEMS.filter((k) => k.title.toLowerCase().includes(kbSearch.toLowerCase())).map((k) => (
+                  <button
+                    key={k.title}
+                    type="button"
+                    onClick={() => setKbOpen(k)}
+                    className="block w-full rounded-lg border border-border bg-white px-2.5 py-2 text-left text-[11px] hover:border-cyan-300 hover:bg-cyan-50"
+                  >
+                    <div className="font-medium">{k.title}</div>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    toast.message("Novo protocolo (template guiado)", {
+                      description: "Protótipo de validação — criação por template fixo, sem texto livre.",
+                    })
+                  }
+                  className="block w-full rounded-lg border border-dashed border-border px-2.5 py-2 text-center text-[11px] text-muted-foreground hover:bg-muted"
+                >
+                  + Novo protocolo (template)
+                </button>
+              </div>
+            )}
+
+            {kbTab === "biblioteca" && (
+              <div className="space-y-2">
+                {KB_LIBRARY.map((b) => (
+                  <div key={b.title} className="rounded-lg border border-border bg-white px-2.5 py-2 text-[11px]">
+                    <div className="font-medium">{b.title}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {b.tags.map((t) => (
+                        <span key={t} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    toast.message("Upload de referência", {
+                      description: "Protótipo — envio de PDF com tags pré-definidas por especialidade.",
+                    })
+                  }
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] text-muted-foreground hover:bg-muted"
+                >
+                  <Upload className="h-3 w-3" />
+                  Enviar arquivo (PDF)
+                </button>
+              </div>
+            )}
+
+            {kbTab === "pesquisas" && (
+              <div className="space-y-2">
+                {KB_RESEARCH.map((r) => (
+                  <div key={r.title} className="rounded-lg border border-border bg-white px-2.5 py-2 text-[11px]">
+                    <div className="font-medium">{r.title}</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">{r.source}</div>
+                  </div>
+                ))}
+                <div className="text-[10px] italic text-muted-foreground">
+                  Curadoria por especialidade · somente leitura
+                </div>
+              </div>
+            )}
           </Collapsible>
 
           <Button onClick={finalize} disabled={sealed} className="w-full bg-teal-600 text-white shadow-md hover:bg-teal-700" size="lg">
@@ -1013,6 +1276,8 @@ export function PatientTimelineSOAP({ onSeal, initialQuest }: { onSeal: () => vo
       </div>
 
       {kbOpen && <KbModal item={kbOpen} onClose={() => setKbOpen(null)} />}
+
+      {registerOpen && <RegisterModal onClose={() => setRegisterOpen(false)} />}
 
       {accessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4" onClick={() => setAccessModal(false)}>
@@ -1197,6 +1462,115 @@ function KbModal({ item, onClose }: { item: KbItem; onClose: () => void }) {
             Fechar
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Patch 3 (F6): cadastro inline via CPF (protótipo de validação) ----------
+function RegisterModal({ onClose }: { onClose: () => void }) {
+  const [cpf, setCpf] = useState("");
+  const [looked, setLooked] = useState(false);
+  const [nome, setNome] = useState("");
+  const [nasc, setNasc] = useState("");
+  const [sexo, setSexo] = useState("");
+  const [lifelineId, setLifelineId] = useState<string | null>(null);
+
+  const lookup = () => {
+    if (cpf.replace(/\D/g, "").length !== 11) {
+      toast.error("CPF inválido — digite os 11 dígitos.");
+      return;
+    }
+    // Simulação da consulta cadastral — em produção, busca em base oficial
+    setNome("Carlos Eduardo Mota");
+    setNasc("14/02/1985");
+    setSexo("M");
+    setLooked(true);
+  };
+
+  const generate = () => {
+    const rand = () => Math.random().toString(36).slice(2, 6).toUpperCase();
+    const id = `LFL-${rand()}-${rand()}`;
+    setLifelineId(id);
+    toast.success("LifeLine ID gerado ✓", { description: `${nome} · ${id}` });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <UserPlus className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">Cadastrar paciente agora</div>
+            <div className="text-[11px] text-muted-foreground">Sem briefing prévio · via CPF</div>
+          </div>
+          <button onClick={onClose} className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Fechar">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <Input
+            value={cpf}
+            onChange={(e) => setCpf(e.target.value.replace(/[^\d.\-]/g, "").slice(0, 14))}
+            placeholder="CPF do paciente (000.000.000-00)"
+            className="h-10 text-sm"
+          />
+          <Button onClick={lookup} className="h-10 bg-teal-600 text-white hover:bg-teal-700">
+            Buscar
+          </Button>
+        </div>
+
+        {looked && (
+          <div className="mt-3 space-y-2">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Label className="text-[10px] text-muted-foreground">Nome completo</Label>
+                <Input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-0.5 h-9 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[10px] text-muted-foreground">Nascimento</Label>
+                <Input value={nasc} onChange={(e) => setNasc(e.target.value)} className="mt-0.5 h-9 text-xs" />
+              </div>
+            </div>
+            <div className="flex items-end justify-between gap-2">
+              <div className="w-24">
+                <Label className="text-[10px] text-muted-foreground">Sexo</Label>
+                <Input
+                  value={sexo}
+                  onChange={(e) => setSexo(e.target.value.toUpperCase().slice(0, 1))}
+                  className="mt-0.5 h-9 text-xs"
+                />
+              </div>
+              {!lifelineId ? (
+                <Button onClick={generate} className="h-9 bg-teal-600 text-xs text-white hover:bg-teal-700">
+                  Gerar LifeLine ID
+                </Button>
+              ) : (
+                <div className="rounded-lg bg-emerald-50 px-3 py-2 font-mono text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                  {lifelineId}
+                </div>
+              )}
+            </div>
+            {lifelineId && (
+              <Button onClick={onClose} variant="outline" className="mt-1 w-full text-xs">
+                Concluir — paciente pronto para atendimento
+              </Button>
+            )}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10px] text-muted-foreground">
+          Protótipo de validação — em produção, a busca consulta base cadastral oficial e vincula o LifeLine ID ao CPF.
+        </p>
       </div>
     </div>
   );
