@@ -25,7 +25,7 @@ type Step = {
   desc: string;
   messages: ChatMessage[];
   toast?: string;
-  onDone?: (ctx: { setSubjective: (s: string) => void; movePatient: (id: string, to: any) => void; patients: any[] }) => void;
+  onDone?: (ctx: { movePatient: (id: string, to: any) => void; patients: any[] }) => void;
 };
 
 const NEW_FLOW: Step[] = [
@@ -67,10 +67,6 @@ const NEW_FLOW: Step[] = [
       { id: "n-p4", from: "patient", text: "Estou com muito cansaço e falta de ar quando subo escadas", ts: "14:05" },
       { id: "n-b5", from: "bot", text: "Entendido 🙏 Você tem algum exame recente? Pode enviar em PDF ou foto aqui mesmo.", ts: "14:05" },
     ],
-    onDone: ({ setSubjective }) =>
-      setSubjective(
-        "Paciente nova. Refere cansaço progressivo e dispneia aos médios esforços (subir escadas). Sem dor torácica, febre ou edema.",
-      ),
   },
   {
     label: "Paciente envia exame (PDF)",
@@ -122,7 +118,7 @@ const RETURN_FLOW: Step[] = [
 ];
 
 export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
-  const { messages, pushMessages, resetChat, patients, movePatient, setSubjective } = useDemo();
+  const { messages, pushMessages, resetChat, patients, movePatient } = useDemo();
   const [flow, setFlow] = useState<Flow>("new");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -159,7 +155,7 @@ export function WhatsAppSimulator({ onComplete }: { onComplete: () => void }) {
         setTimeout(tick, 650);
       } else {
         if (step.toast) toast.success(step.toast);
-        step.onDone?.({ setSubjective, movePatient, patients });
+        step.onDone?.({ movePatient, patients });
         setProgress((p) => p + 1);
         setBusy(false);
       }
