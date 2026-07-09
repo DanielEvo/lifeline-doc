@@ -29,8 +29,9 @@ import {
   sealEvolution,
   updateEvolution,
 } from "../records.server";
+import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
-import { todayIso } from "../clinic-types";
+import { BIOMARKER_CATALOG, todayIso } from "../clinic-types";
 
 const token = z.string().min(1).max(80);
 const COLUMN = z.string().min(1).max(32);
@@ -257,8 +258,46 @@ export const getPatientRecord = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await getPatient(doctor.id, data.id);
     if (!patient) return { ok: false as const, error: "not_found" as const };
-    const evolutions = await listEvolutions(doctor.id, data.id);
-    return { ok: true as const, patient, evolutions };
+    const [evolutions, measurements] = await Promise.all([
+      listEvolutions(doctor.id, data.id),
+      listMeasurements(doctor.id, data.id),
+    ]);
+    return { ok: true as const, patient, evolutions, measurements };
+  });
+
+// Registrar resultado de exame (biomarcador). A faixa de referência vem do
+// catálogo quando o nome bate; senão o médico informa a dele.
+export const addMyMeasurement = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      patientId: z.string().min(1),
+      name: z.string().min(1).max(60),
+      value: z.number().finite().min(-1_000_000).max(1_000_000),
+      date: YMD,
+      label: z.string().max(80).optional(),
+      unit: z.string().max(16).optional(),
+      refMin: z.number().finite().optional(),
+      refMax: z.number().finite().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await getPatient(doctor.id, data.patientId);
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+    const cat = BIOMARKER_CATALOG.find((b) => b.name === data.name);
+    const measurement = await addMeasurement(doctor.id, {
+      patientId: data.patientId,
+      name: data.name,
+      unit: data.unit ?? cat?.unit ?? "",
+      value: data.value,
+      refMin: data.refMin ?? cat?.min ?? 0,
+      refMax: data.refMax ?? cat?.max ?? 0,
+      date: data.date,
+      label: data.label?.trim() || "Exame avulso",
+    });
+    return { ok: true as const, measurement };
   });
 
 export const saveEvolution = createServerFn({ method: "POST" })
@@ -404,6 +443,74 @@ export const importSamplePatients = createServerFn({ method: "POST" })
     }
     if (sofia) {
       await createAppointment(doctor.id, { patientId: sofia.id, dateTime: atLocal(0, 19) });
+    }
+
+    // Histórico clínico da Mariana — 4 anos de biomarcadores (espelha a demo):
+    // a linha do tempo e os gráficos do prontuário nascem contando a história
+    // da queda de hemoglobina/ferritina.
+    if (mariana) {
+      const seed = async (
+        date: string,
+        label: string,
+        values: Array<[name: string, value: number]>,
+      ) => {
+        for (const [name, value] of values) {
+          const cat = BIOMARKER_CATALOG.find((b) => b.name === name);
+          if (!cat) continue;
+          await addMeasurement(doctor.id, {
+            patientId: mariana.id,
+            name,
+            unit: cat.unit,
+            value,
+            refMin: cat.min,
+            refMax: cat.max,
+            date,
+            label,
+          });
+        }
+      };
+      await seed("2023-03-15", "Check-up de rotina", [
+        ["Hemoglobina", 13.4],
+        ["Ferritina", 78],
+        ["Vitamina D", 38],
+        ["Vitamina B12", 520],
+        ["Zinco", 95],
+        ["Creatinina", 0.78],
+      ]);
+      await seed("2024-09-10", "Investigação de fadiga", [
+        ["Hemoglobina", 12.6],
+        ["Ferritina", 42],
+      ]);
+      await seed("2025-05-20", "Retorno · acompanhamento metabólico", [
+        ["Creatinina", 0.85],
+        ["Vitamina D", 24],
+        ["Vitamina B12", 290],
+        ["Zinco", 68],
+      ]);
+      await seed("2026-06-18", "Exames via WhatsApp", [
+        ["Hemoglobina", 11.2],
+        ["Ferritina", 18],
+      ]);
+    }
+    if (roberto) {
+      const cat = (n: string) => BIOMARKER_CATALOG.find((b) => b.name === n)!;
+      for (const [date, label, name, value] of [
+        ["2025-12-10", "Hemoglobina glicada", "HbA1c", 8.4],
+        ["2026-06-20", "Retorno diabetes", "HbA1c", 7.1],
+        ["2026-06-20", "Retorno diabetes", "Glicemia de jejum", 118],
+      ] as const) {
+        const c = cat(name);
+        await addMeasurement(doctor.id, {
+          patientId: roberto.id,
+          name,
+          unit: c.unit,
+          value,
+          refMin: c.min,
+          refMax: c.max,
+          date,
+          label,
+        });
+      }
     }
 
     return { ok: true as const, added: added.length };

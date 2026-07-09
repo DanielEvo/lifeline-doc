@@ -72,6 +72,47 @@ export type Charge = {
   createdAt: string;
 };
 
+// Resultado de exame (biomarcador) — a matéria-prima da linha do tempo
+// clínica e dos gráficos de evolução por anos.
+export type Measurement = {
+  id: string;
+  doctorId: string;
+  patientId: string;
+  name: string; // "Hemoglobina"
+  unit: string; // "g/dL"
+  value: number;
+  refMin: number;
+  refMax: number;
+  date: string; // yyyy-mm-dd (data da coleta)
+  label: string; // "Check-up de rotina", "Exames via WhatsApp"…
+  createdAt: string;
+};
+
+export const BIOMARKER_CATALOG = [
+  { name: "Hemoglobina", unit: "g/dL", min: 12, max: 16 },
+  { name: "Ferritina", unit: "ng/mL", min: 30, max: 200 },
+  { name: "Vitamina D", unit: "ng/mL", min: 30, max: 100 },
+  { name: "Vitamina B12", unit: "pg/mL", min: 300, max: 900 },
+  { name: "Zinco", unit: "µg/dL", min: 70, max: 120 },
+  { name: "Creatinina", unit: "mg/dL", min: 0.5, max: 1.1 },
+  { name: "Glicemia de jejum", unit: "mg/dL", min: 70, max: 99 },
+  { name: "HbA1c", unit: "%", min: 4, max: 5.6 },
+  { name: "Colesterol total", unit: "mg/dL", min: 100, max: 190 },
+  { name: "TSH", unit: "µUI/mL", min: 0.4, max: 4 },
+] as const;
+
+export function isOutOfRange(m: Pick<Measurement, "value" | "refMin" | "refMax">): boolean {
+  return m.value < m.refMin || m.value > m.refMax;
+}
+
+/** Status de um evento de exame pela quantidade de valores fora da faixa. */
+export function examStatus(ms: Measurement[]): "Saudável" | "Atenção" | "Alerta" {
+  const out = ms.filter(isOutOfRange).length;
+  if (out === 0) return "Saudável";
+  if (out === 1) return "Atenção";
+  return "Alerta";
+}
+
 export type Soap = { s: string; o: string; a: string; p: string };
 
 export type Evolution = {

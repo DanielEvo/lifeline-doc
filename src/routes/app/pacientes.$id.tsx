@@ -56,6 +56,9 @@ import {
 } from "@/lib/api/clinic.functions";
 import { ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
+import { PatientHistory } from "@/components/clinic/patient-history";
+import { Dictation } from "@/components/clinic/dictation";
+import { SimilarCases } from "@/components/clinic/similar-cases";
 import {
   ageFrom,
   DEFAULT_COLUMNS,
@@ -172,7 +175,7 @@ function Prontuario() {
     );
   }
 
-  const { patient: p, evolutions } = rec.data;
+  const { patient: p, evolutions, measurements } = rec.data;
   const idade = ageFrom(p.nascimento);
 
   return (
@@ -268,6 +271,15 @@ function Prontuario() {
         )}
       </div>
 
+      {/* Histórico clínico: linha do tempo + biomarcadores (como na demo, com dados reais) */}
+      <PatientHistory
+        token={token}
+        patientId={id}
+        measurements={measurements}
+        evolutions={evolutions}
+        onChanged={invalidate}
+      />
+
       {/* Nova evolução */}
       <NovaEvolucao token={token} patientId={id} onSaved={invalidate} />
 
@@ -298,6 +310,9 @@ function Prontuario() {
           </div>
         )}
       </div>
+
+      {/* Apoio à decisão */}
+      <SimilarCases />
 
       <PatientFormDialog
         open={editOpen}
@@ -368,11 +383,16 @@ function NovaEvolucao({
         <h2 className="text-sm font-semibold">Nova evolução</h2>
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
       </div>
+      <div className="mt-2">
+        <Dictation
+          onAppend={(t) => setTexto((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
+        />
+      </div>
       <Textarea
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         rows={3}
-        placeholder="Paciente relata… Ao exame… Hipótese… Conduta…"
+        placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
         className="mt-2"
       />
       {preview && (
@@ -434,6 +454,7 @@ function EvolucaoCard({
 
   return (
     <div
+      id={`evo-${e.id}`}
       className={`rounded-2xl border bg-card p-4 ${
         e.sealed ? "border-emerald-300/60 dark:border-emerald-800/60" : "border-border"
       }`}
