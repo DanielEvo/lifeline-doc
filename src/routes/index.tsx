@@ -77,6 +77,12 @@ function Header() {
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <Link
+            to="/login"
+            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground sm:block"
+          >
+            Entrar
+          </Link>
           <Link to="/demo">
             <Button className="press brand-gradient text-primary-foreground shadow-md shadow-primary/30 transition hover:shadow-lg hover:shadow-primary/40 hover:opacity-95">
               Testar grátis
