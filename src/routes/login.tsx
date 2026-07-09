@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { googleLogin, loginDoctor, registerDoctor } from "@/lib/api/auth.functions";
+import { googleAuthStart, googleLogin, loginDoctor, registerDoctor } from "@/lib/api/auth.functions";
 import { getSession, setSession } from "@/lib/session";
 
 export const Route = createFileRoute("/login")({
@@ -68,10 +68,18 @@ function LoginPage() {
     }
   };
 
+  // OAuth real quando o servidor tem credenciais Google; sem elas (dev),
+  // cai no login simulado — mesma conta + sessão reais no backend.
   const withGoogle = async () => {
     if (busy) return;
     setBusy("google");
     try {
+      const redirectUri = `${window.location.origin}/auth/callback`;
+      const start = await googleAuthStart({ data: { redirectUri } });
+      if (start.url) {
+        window.location.assign(start.url);
+        return; // segue no /auth/callback
+      }
       const r = await googleLogin({ data: {} });
       if (r.ok) finish(r);
       else toast.error(r.error);
