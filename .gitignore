@@ -34,3 +34,5 @@ dist-ssr
 # LifeLine local persistence
 .data/
 dev*.log
+dev.out.log
+dev.err.log
