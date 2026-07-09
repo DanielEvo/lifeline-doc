@@ -1,6 +1,7 @@
 // Cadastro/edição de paciente — o mesmo dialog serve o Kanban, o painel de
 // pacientes e o prontuário. Validação zod + react-hook-form; a gravação real
-// acontece na server fn autenticada passada em `onSubmit`.
+// acontece na server fn autenticada passada em `onSubmit`. As opções de
+// status vêm do board do médico (kanban flexível).
 
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -27,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CLINIC_COLUMNS, type Patient } from "@/lib/clinic-types";
+import { CONVENIOS, type BoardColumn, type Patient } from "@/lib/clinic-types";
 
 const schema = z.object({
   nome: z.string().min(2, "Nome muito curto").max(120),
@@ -43,8 +44,9 @@ const schema = z.object({
     .optional(),
   telefone: z.string().max(24).optional(),
   email: z.string().email("E-mail inválido").max(160).or(z.literal("")).optional(),
+  convenio: z.string().max(60).optional(),
   queixa: z.string().max(300).optional(),
-  column: z.enum(["triagem", "atendimento", "aguardando", "retorno", "estavel"]),
+  column: z.string().min(1),
 });
 
 export type PatientFormValues = z.infer<typeof schema>;
@@ -53,18 +55,33 @@ export function PatientFormDialog({
   open,
   onOpenChange,
   patient,
+  columns,
   onSubmit,
   saving,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   patient?: Patient | null; // presente = edição
+  columns: BoardColumn[];
   onSubmit: (values: PatientFormValues) => Promise<void> | void;
   saving: boolean;
 }) {
+  const firstCol = columns[0]?.id ?? "triagem";
+  const blank: PatientFormValues = {
+    nome: "",
+    nascimento: "",
+    sexo: "",
+    cpf: "",
+    telefone: "",
+    email: "",
+    convenio: "",
+    queixa: "",
+    column: firstCol,
+  };
+
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { nome: "", nascimento: "", sexo: "", cpf: "", telefone: "", email: "", queixa: "", column: "triagem" },
+    defaultValues: blank,
   });
 
   useEffect(() => {
@@ -78,12 +95,14 @@ export function PatientFormDialog({
             cpf: patient.cpf ?? "",
             telefone: patient.telefone ?? "",
             email: patient.email ?? "",
+            convenio: patient.convenio ?? "",
             queixa: patient.queixa,
             column: patient.column,
           }
-        : { nome: "", nascimento: "", sexo: "", cpf: "", telefone: "", email: "", queixa: "", column: "triagem" },
+        : blank,
     );
-  }, [open, patient, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, patient]);
 
   const err = form.formState.errors;
 
@@ -99,10 +118,7 @@ export function PatientFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          onSubmit={form.handleSubmit((v) => onSubmit(v))}
-          className="grid grid-cols-2 gap-3"
-        >
+        <form onSubmit={form.handleSubmit((v) => onSubmit(v))} className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1">
             <Label htmlFor="pf-nome" className="text-xs">Nome completo *</Label>
             <Input id="pf-nome" {...form.register("nome")} placeholder="Maria de Souza" />
@@ -141,7 +157,22 @@ export function PatientFormDialog({
             <Input id="pf-tel" {...form.register("telefone")} placeholder="(11) 99999-0000" />
           </div>
 
-          <div className="col-span-2 space-y-1">
+          <div className="space-y-1">
+            <Label className="text-xs">Convênio / plano</Label>
+            <Select
+              value={form.watch("convenio") || ""}
+              onValueChange={(v) => form.setValue("convenio", v)}
+            >
+              <SelectTrigger><SelectValue placeholder="Particular ou convênio" /></SelectTrigger>
+              <SelectContent>
+                {CONVENIOS.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
             <Label htmlFor="pf-email" className="text-xs">E-mail</Label>
             <Input id="pf-email" type="email" {...form.register("email")} placeholder="paciente@email.com" />
             {err.email && <p className="text-[11px] text-destructive">{err.email.message}</p>}
@@ -156,11 +187,11 @@ export function PatientFormDialog({
             <Label className="text-xs">Status no painel</Label>
             <Select
               value={form.watch("column")}
-              onValueChange={(v) => form.setValue("column", v as PatientFormValues["column"])}
+              onValueChange={(v) => form.setValue("column", v)}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CLINIC_COLUMNS.map((c) => (
+                {columns.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
                 ))}
               </SelectContent>

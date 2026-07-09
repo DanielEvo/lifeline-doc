@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Cake,
+  CalendarPlus,
+  CreditCard,
   FileSignature,
   Loader2,
   Lock,
@@ -45,18 +47,21 @@ import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/p
 import {
   archiveMyPatient,
   getPatientRecord,
+  getWorkspace,
   moveMyPatient,
   prescribeForEvolution,
   saveEvolution,
   sealMyEvolution,
   updateMyPatient,
 } from "@/lib/api/clinic.functions";
+import { ScheduleDialog } from "@/components/clinic/action-dialogs";
+import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
   ageFrom,
-  CLINIC_COLUMNS,
+  DEFAULT_COLUMNS,
   formatDateTimeBR,
   initialsOf,
-  type ClinicColumn,
+  WA_TEMPLATES,
   type Evolution,
 } from "@/lib/clinic-types";
 import { deriveSoap } from "@/lib/soap";
@@ -69,10 +74,22 @@ export const Route = createFileRoute("/app/pacientes/$id")({
 
 function Prontuario() {
   const { id } = Route.useParams();
-  const { token } = useClinic();
+  const { token, nome: medico } = useClinic();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const [agendarOpen, setAgendarOpen] = useState(false);
+
+  // mesma query do kanban/pacientes → colunas do board sem roundtrip extra
+  const wsq = useQuery({
+    queryKey: ["workspace"],
+    queryFn: async () => {
+      const r = await getWorkspace({ data: { token } });
+      if (!r.ok) throw new Error("unauthorized");
+      return r;
+    },
+  });
+  const columns = wsq.data?.ok ? wsq.data.columns : DEFAULT_COLUMNS;
 
   const rec = useQuery({
     queryKey: ["patient", id],
@@ -93,7 +110,6 @@ function Prontuario() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["patient", id] });
     qc.invalidateQueries({ queryKey: ["workspace"] });
-    qc.invalidateQueries({ queryKey: ["workspace", "all"] });
   };
 
   const editar = useMutation({
@@ -108,6 +124,7 @@ function Prontuario() {
           cpf: v.cpf || null,
           telefone: v.telefone || null,
           email: v.email || null,
+          convenio: v.convenio || null,
           queixa: v.queixa ?? "",
           column: v.column,
         },
@@ -121,7 +138,7 @@ function Prontuario() {
   });
 
   const mover = useMutation({
-    mutationFn: (to: ClinicColumn) => moveMyPatient({ data: { token, id, to } }),
+    mutationFn: (to: string) => moveMyPatient({ data: { token, id, to } }),
     onSuccess: (r) => {
       if (r.ok) invalidate();
     },
@@ -182,6 +199,11 @@ function Prontuario() {
                 {idade !== null && (
                   <span className="inline-flex items-center gap-1"><Cake className="h-3 w-3" />{idade} anos</span>
                 )}
+                {p.convenio && (
+                  <span className="inline-flex items-center gap-1 font-medium text-primary">
+                    <CreditCard className="h-3 w-3" />{p.convenio}
+                  </span>
+                )}
                 {p.telefone && (
                   <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{p.telefone}</span>
                 )}
@@ -193,14 +215,24 @@ function Prontuario() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={p.column} onValueChange={(v) => mover.mutate(v as ClinicColumn)}>
-              <SelectTrigger className="h-8 w-auto text-xs"><SelectValue /></SelectTrigger>
+            <WhatsAppButton
+              telefone={p.telefone}
+              text={WA_TEMPLATES.livre(p.nome, medico)}
+              title="WhatsApp"
+            />
+            <Select value={p.column} onValueChange={(v) => mover.mutate(v)}>
+              <SelectTrigger className="h-8 w-auto text-xs"><SelectValue>
+                {columns.find((c) => c.id === p.column)?.title ?? p.column}
+              </SelectValue></SelectTrigger>
               <SelectContent>
-                {CLINIC_COLUMNS.map((c) => (
+                {columns.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={() => setAgendarOpen(true)}>
+              <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Agendar
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
             </Button>
@@ -271,8 +303,15 @@ function Prontuario() {
         open={editOpen}
         onOpenChange={setEditOpen}
         patient={p}
+        columns={columns}
         onSubmit={(v) => editar.mutate(v)}
         saving={editar.isPending}
+      />
+      <ScheduleDialog
+        open={agendarOpen}
+        onOpenChange={setAgendarOpen}
+        patient={p}
+        token={token}
       />
     </div>
   );

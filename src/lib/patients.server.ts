@@ -26,6 +26,7 @@ export type PatientInput = {
   cpf?: string | null;
   telefone?: string | null;
   email?: string | null;
+  convenio?: string | null;
   queixa?: string;
   column?: ClinicColumn;
   criticalFlag?: string | null;
@@ -59,6 +60,7 @@ export async function createPatient(doctorId: string, input: PatientInput): Prom
     cpf: input.cpf?.trim() || null,
     telefone: input.telefone?.trim() || null,
     email: input.email?.trim() || null,
+    convenio: input.convenio?.trim() || null,
     queixa: input.queixa?.trim() || "",
     column: input.column ?? "triagem",
     criticalFlag: input.criticalFlag ?? null,
@@ -91,6 +93,7 @@ export async function updatePatient(
     if (patch.cpf !== undefined) p.cpf = patch.cpf?.trim() || null;
     if (patch.telefone !== undefined) p.telefone = patch.telefone?.trim() || null;
     if (patch.email !== undefined) p.email = patch.email?.trim() || null;
+    if (patch.convenio !== undefined) p.convenio = patch.convenio?.trim() || null;
     if (patch.queixa !== undefined) p.queixa = patch.queixa.trim();
     if (patch.column !== undefined && patch.column) p.column = patch.column;
     if (patch.criticalFlag !== undefined) p.criticalFlag = patch.criticalFlag;
@@ -144,23 +147,23 @@ export async function bumpExams(doctorId: string, id: string, delta: number): Pr
 }
 
 // Personas de exemplo (as mesmas da demo) — importadas por AÇÃO EXPLÍCITA do
-// médico num consultório vazio; nunca semeadas automaticamente.
+// médico num consultório vazio; nunca semeadas automaticamente. Retorna os
+// pacientes criados para o chamador semear agenda/cobranças de amostra.
 const SAMPLES: Array<PatientInput & { nascimento: string }> = [
-  { nome: "Mariana Silva", nascimento: "1988-03-12", sexo: "feminino", telefone: "(11) 98888-1234", queixa: "Fadiga + queda de hemoglobina", column: "triagem", criticalFlag: "Hb 11.2 g/dL · abaixo do ref", adherence: 40, briefing: "Queixa: fadiga há 4 semanas + dispneia aos esforços. Exames via WhatsApp: Hb 11.2 · Ferritina 18 · Vit D 19." },
-  { nome: "Carlos Andrade", nascimento: "1972-07-30", sexo: "masculino", telefone: "(11) 97777-2345", queixa: "Hipertensão — ajuste de medicação", column: "atendimento", adherence: 82, briefing: "PA domiciliar média 148x92. Em losartana 50mg. Sem sintomas." },
-  { nome: "Juliana Prado", nascimento: "1997-01-15", sexo: "feminino", telefone: "(11) 96666-3456", queixa: "Cefaleia recorrente", column: "aguardando", briefing: "Cefaleia pulsátil 3x/semana, fotofobia. Solicitada RM de crânio." },
-  { nome: "Roberto Lima", nascimento: "1965-11-02", sexo: "masculino", telefone: "(11) 95555-4567", queixa: "Diabetes — retorno", column: "retorno", adherence: 91, briefing: "HbA1c 7.1% (era 8.4). Em metformina 850mg 2x/dia. 3 exames anexados." },
-  { nome: "Sofia Ramos", nascimento: "1981-05-22", sexo: "feminino", telefone: "(11) 94444-5678", queixa: "Check-up anual · sem queixas", column: "estavel" },
+  { nome: "Mariana Silva", nascimento: "1988-03-12", sexo: "feminino", telefone: "(11) 98888-1234", convenio: "Particular", queixa: "Fadiga + queda de hemoglobina", column: "triagem", criticalFlag: "Hb 11.2 g/dL · abaixo do ref", adherence: 40, briefing: "Queixa: fadiga há 4 semanas + dispneia aos esforços. Exames via WhatsApp: Hb 11.2 · Ferritina 18 · Vit D 19." },
+  { nome: "Carlos Andrade", nascimento: "1972-07-30", sexo: "masculino", telefone: "(11) 97777-2345", convenio: "Unimed", queixa: "Hipertensão — ajuste de medicação", column: "atendimento", adherence: 82, briefing: "PA domiciliar média 148x92. Em losartana 50mg. Sem sintomas." },
+  { nome: "Juliana Prado", nascimento: "1997-01-15", sexo: "feminino", telefone: "(11) 96666-3456", convenio: "Particular", queixa: "Cefaleia recorrente", column: "aguardando", briefing: "Cefaleia pulsátil 3x/semana, fotofobia. Solicitada RM de crânio." },
+  { nome: "Roberto Lima", nascimento: "1965-11-02", sexo: "masculino", telefone: "(11) 95555-4567", convenio: "Bradesco Saúde", queixa: "Diabetes — retorno", column: "retorno", adherence: 91, briefing: "HbA1c 7.1% (era 8.4). Em metformina 850mg 2x/dia. 3 exames anexados." },
+  { nome: "Sofia Ramos", nascimento: "1981-05-22", sexo: "feminino", telefone: "(11) 94444-5678", convenio: "Amil", queixa: "Check-up anual · sem queixas", column: "estavel" },
 ];
 
-export async function importSamples(doctorId: string): Promise<number> {
+export async function importSamples(doctorId: string): Promise<Patient[]> {
   const existing = await listPatients(doctorId, { includeArchived: true });
   const names = new Set(existing.map((p) => p.nome.toLowerCase()));
-  let added = 0;
+  const added: Patient[] = [];
   for (const s of SAMPLES) {
     if (names.has(s.nome.toLowerCase())) continue;
-    await createPatient(doctorId, s);
-    added++;
+    added.push(await createPatient(doctorId, s));
   }
   return added;
 }

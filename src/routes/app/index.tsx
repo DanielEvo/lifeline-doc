@@ -1,16 +1,18 @@
-// Painel do dia — o Kanban REAL do consultório. Cards vêm do servidor
-// (scoped ao médico logado), arrastar entre colunas persiste, clicar abre o
-// prontuário. Consultório vazio oferece cadastro ou personas de exemplo.
+// Painel do dia — o Kanban REAL do consultório, com colunas personalizáveis
+// por médico. Cards vêm do servidor, arrastar persiste, clicar abre o
+// prontuário. Mesma query do painel de pacientes → sempre em sincronia.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  CalendarClock,
   FileCheck2,
   Loader2,
   Pill,
   Plus,
+  Settings2,
   Sparkles,
   Stethoscope,
   UserPlus,
@@ -19,6 +21,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
+import { BoardDialog } from "@/components/clinic/board-dialog";
 import {
   createMyPatient,
   getWorkspace,
@@ -27,9 +30,11 @@ import {
 } from "@/lib/api/clinic.functions";
 import {
   ageFrom,
-  CLINIC_COLUMNS,
+  formatHourBR,
   initialsOf,
-  type ClinicColumn,
+  isSameLocalDay,
+  todayIso,
+  type Appointment,
   type Patient,
 } from "@/lib/clinic-types";
 import { clearSession } from "@/lib/session";
@@ -44,8 +49,9 @@ function PainelDoDia() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoverCol, setHoverCol] = useState<ClinicColumn | null>(null);
+  const [hoverCol, setHoverCol] = useState<string | null>(null);
   const [novoOpen, setNovoOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
 
   const ws = useQuery({
     queryKey: ["workspace"],
@@ -61,8 +67,7 @@ function PainelDoDia() {
   });
 
   const mover = useMutation({
-    mutationFn: (v: { id: string; to: ClinicColumn }) =>
-      moveMyPatient({ data: { token, ...v } }),
+    mutationFn: (v: { id: string; to: string }) => moveMyPatient({ data: { token, ...v } }),
     onMutate: async (v) => {
       // otimista: o card muda de coluna na hora; o servidor confirma depois
       await qc.cancelQueries({ queryKey: ["workspace"] });
@@ -92,6 +97,7 @@ function PainelDoDia() {
           cpf: v.cpf || null,
           telefone: v.telefone || null,
           email: v.email || null,
+          convenio: v.convenio || null,
           queixa: v.queixa ?? "",
           column: v.column,
         },
@@ -108,12 +114,28 @@ function PainelDoDia() {
     mutationFn: () => importSamplePatients({ data: { token } }),
     onSuccess: (r) => {
       if (!r.ok) return;
-      toast.success(`${r.added} pacientes de exemplo importados.`);
+      toast.success(`${r.added} pacientes de exemplo importados — com agenda e cobranças.`);
       qc.invalidateQueries({ queryKey: ["workspace"] });
     },
   });
 
-  if (ws.isLoading || !ws.data?.ok) {
+  const data = ws.data?.ok ? ws.data : null;
+  const patients = useMemo(() => (data?.patients ?? []).filter((p) => !p.archived), [data]);
+  const columns = data?.columns ?? [];
+
+  // consulta de HOJE por paciente (a mais próxima ainda aberta)
+  const hoje = todayIso();
+  const apptHoje = useMemo(() => {
+    const map = new Map<string, Appointment>();
+    for (const a of data?.appointments ?? []) {
+      if (!isSameLocalDay(a.dateTime, hoje)) continue;
+      if (a.status === "realizada") continue;
+      if (!map.has(a.patientId)) map.set(a.patientId, a);
+    }
+    return map;
+  }, [data, hoje]);
+
+  if (ws.isLoading || !data) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -121,12 +143,11 @@ function PainelDoDia() {
     );
   }
 
-  const patients = ws.data.patients;
   const criticos = patients.filter((p) => p.criticalFlag).length;
-  const emAtendimento = patients.filter((p) => p.column === "atendimento").length;
-  const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const consultasHoje = apptHoje.size;
+  const hojeLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 
-  const onDrop = (col: ClinicColumn) => {
+  const onDrop = (col: string) => {
     if (draggingId) {
       const p = patients.find((x) => x.id === draggingId);
       if (p && p.column !== col) mover.mutate({ id: draggingId, to: col });
@@ -135,15 +156,18 @@ function PainelDoDia() {
     }
   };
 
+  const gridCols =
+    columns.length <= 3 ? "lg:grid-cols-3" : columns.length === 4 ? "lg:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3 xl:grid-cols-5";
+
   return (
     <div className="mx-auto max-w-[1400px] p-3 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wider text-primary">{hoje}</div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-primary">{hojeLabel}</div>
           <h1 className="text-xl font-semibold tracking-tight">Painel do dia</h1>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span><strong className="text-foreground">{patients.length}</strong> pacientes ativos</span>
-            <span><strong className="text-foreground">{emAtendimento}</strong> em atendimento</span>
+            <span><strong className="text-foreground">{consultasHoje}</strong> consulta{consultasHoje === 1 ? "" : "s"} hoje</span>
             {criticos > 0 && (
               <span className="text-red-600 dark:text-red-400">
                 <strong>{criticos}</strong> com parâmetro crítico
@@ -151,10 +175,16 @@ function PainelDoDia() {
             )}
           </div>
         </div>
-        <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo paciente
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBoardOpen(true)} title="Personalizar colunas">
+            <Settings2 className="mr-1.5 h-4 w-4" />
+            Personalizar
+          </Button>
+          <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Novo paciente
+          </Button>
+        </div>
       </div>
 
       {patients.length === 0 ? (
@@ -164,8 +194,8 @@ function PainelDoDia() {
           importing={importar.isPending}
         />
       ) : (
-        <div className="mt-6 grid gap-3 lg:grid-cols-3 xl:grid-cols-5">
-          {CLINIC_COLUMNS.map((col) => {
+        <div className={`mt-6 grid gap-3 ${gridCols}`}>
+          {columns.map((col) => {
             const cards = patients.filter((p) => p.column === col.id);
             const isHover = hoverCol === col.id;
             return (
@@ -184,7 +214,7 @@ function PainelDoDia() {
                 <div className="mb-2.5 flex items-center justify-between px-1">
                   <div>
                     <div className="text-sm font-semibold leading-tight">{col.title}</div>
-                    <div className="text-[11px] text-muted-foreground">{col.hint}</div>
+                    {col.hint && <div className="text-[11px] text-muted-foreground">{col.hint}</div>}
                   </div>
                   <div className="flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
                     {cards.length}
@@ -195,6 +225,7 @@ function PainelDoDia() {
                     <PatientKanbanCard
                       key={p.id}
                       p={p}
+                      appt={apptHoje.get(p.id)}
                       onClick={() => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
                       onDragStart={() => setDraggingId(p.id)}
                       onDragEnd={() => setDraggingId(null)}
@@ -216,9 +247,11 @@ function PainelDoDia() {
       <PatientFormDialog
         open={novoOpen}
         onOpenChange={setNovoOpen}
+        columns={columns}
         onSubmit={(v) => criar.mutate(v)}
         saving={criar.isPending}
       />
+      <BoardDialog open={boardOpen} onOpenChange={setBoardOpen} columns={columns} token={token} />
     </div>
   );
 }
@@ -239,8 +272,8 @@ function EmptyClinic({
       </div>
       <h2 className="mt-4 text-lg font-semibold">Seu consultório está pronto</h2>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Cadastre seu primeiro paciente — ou importe cinco personas de exemplo para sentir o fluxo
-        antes de colocar dados reais.
+        Cadastre seu primeiro paciente — ou importe cinco personas de exemplo (com agenda e
+        cobranças) para sentir o fluxo antes de colocar dados reais.
       </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button onClick={onNovo} className="brand-gradient text-primary-foreground">
@@ -258,12 +291,14 @@ function EmptyClinic({
 
 export function PatientKanbanCard({
   p,
+  appt,
   onClick,
   onDragStart,
   onDragEnd,
   dragging,
 }: {
   p: Patient;
+  appt?: Appointment;
   onClick: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -288,15 +323,28 @@ export function PatientKanbanCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{p.nome}</div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="truncate text-[11px] text-muted-foreground">
             {idade !== null ? `${idade} anos` : "idade não informada"}
+            {p.convenio ? ` · ${p.convenio}` : ""}
           </div>
           {p.queixa && <div className="mt-0.5 line-clamp-2 text-xs text-foreground/80">{p.queixa}</div>}
         </div>
       </div>
 
-      {(p.briefing || p.criticalFlag || p.examsCount > 0 || typeof p.adherence === "number") && (
+      {(appt || p.briefing || p.criticalFlag || p.examsCount > 0 || typeof p.adherence === "number") && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {appt && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
+                appt.status === "faltou"
+                  ? "bg-red-100 text-red-800 ring-red-200 dark:bg-red-950 dark:text-red-300 dark:ring-red-900"
+                  : "bg-primary/10 text-primary ring-primary/30"
+              }`}
+            >
+              <CalendarClock className="h-2.5 w-2.5" />
+              {appt.status === "faltou" ? "faltou hoje" : `hoje ${formatHourBR(appt.dateTime)}`}
+            </span>
+          )}
           {p.criticalFlag && (
             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-800 ring-1 ring-red-200 dark:bg-red-950 dark:text-red-300 dark:ring-red-900">
               <AlertTriangle className="h-2.5 w-2.5" />
