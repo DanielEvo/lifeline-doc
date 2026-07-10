@@ -328,7 +328,6 @@ function Prontuario() {
         patient={p}
         token={token}
       />
-      <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} />
     </div>
   );
 }
