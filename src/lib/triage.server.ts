@@ -3,6 +3,55 @@
 // whatever a doctor actually types, instead of replaying a fixed script.
 // Lives in .server.ts so it never ships to the client bundle.
 
+import { BIOMARKER_CATALOG } from "./clinic-types";
+
+// ---------------------------------------------------------------------------
+// SIMULATED_OCR — trocar por extração real quando pipeline OCR existir.
+// ---------------------------------------------------------------------------
+
+export type SimulatedMeasurement = {
+  name: string;
+  value: number;
+  unit: string;
+  refMin: number;
+  refMax: number;
+};
+
+export type ExamExtractionResult = {
+  measurements: SimulatedMeasurement[];
+  summaryLine: string;
+};
+
+export function simulateExamExtraction(fileNames: string[]): ExamExtractionResult {
+  // SIMULATED_OCR — sorteia 1–3 biomarcadores com valores plausíveis
+  const catalog = [...BIOMARKER_CATALOG].sort(() => Math.random() - 0.5);
+  const count = 1 + Math.floor(Math.random() * 3);
+  const picked = catalog.slice(0, count);
+
+  const measurements: SimulatedMeasurement[] = picked.map((b) => {
+    const range = b.max - b.min;
+    const inRange = Math.random() < 0.7;
+    let value: number;
+    if (inRange) {
+      value = b.min + Math.random() * range;
+    } else {
+      const overshoot = range * 0.2;
+      value = Math.random() < 0.5 ? b.min - overshoot : b.max + overshoot;
+    }
+    return {
+      name: b.name,
+      unit: b.unit,
+      value: Math.round(value * 100) / 100,
+      refMin: b.min,
+      refMax: b.max,
+    };
+  });
+
+  const names = measurements.map((m) => `${m.name} ${m.value} ${m.unit}`).join(", ");
+  const summaryLine = `Exames (${fileNames.join(", ")}): ${names}.`;
+  return { measurements, summaryLine };
+}
+
 export type TriageResult = {
   complaint: string;
   symptoms: string[];

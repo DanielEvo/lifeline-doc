@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { requireDoctor } from "../auth.server";
 import {
+  bumpExams,
   createPatient,
   findPatientByCode,
   getPatient,
@@ -20,6 +21,7 @@ import {
   setArchived,
   updatePatient,
 } from "../patients.server";
+import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import { createAppointment, listAppointments, setAppointmentStatus } from "../agenda.server";
 import { createCharge, listCharges, setChargeStatus } from "../billing.server";
@@ -47,6 +49,59 @@ export const lookupPatientByCode = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await findPatientByCode(doctor.id, data.code);
     return { ok: true as const, patient: patient ?? null };
+  });
+
+export const submitPreCadastro = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      existingPatientId: z.string().optional(),
+      nome: z.string().min(2).max(120).optional(),
+      telefone: z.string().max(24).nullish(),
+      queixa: z.string().max(300).optional(),
+      fileNames: z.array(z.string().max(260)).max(20),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+
+    let patient = await (async () => {
+      if (data.existingPatientId) {
+        return getPatient(doctor.id, data.existingPatientId);
+      }
+      if (!data.nome) return undefined;
+      const columns = await getBoardColumns(doctor.id);
+      return createPatient(doctor.id, {
+        nome: data.nome,
+        telefone: data.telefone,
+        queixa: data.queixa || "",
+        column: resolveColumn(columns, "triagem"),
+      });
+    })();
+
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+
+    if (data.fileNames.length > 0) {
+      const { measurements, summaryLine } = simulateExamExtraction(data.fileNames);
+      for (const m of measurements) {
+        await addMeasurement(doctor.id, {
+          patientId: patient.id,
+          name: m.name,
+          unit: m.unit,
+          value: m.value,
+          refMin: m.refMin,
+          refMax: m.refMax,
+          date: todayIso(),
+          label: `Pré-cadastro · ${data.fileNames.join(", ")}`,
+        });
+      }
+      await bumpExams(doctor.id, patient.id, measurements.length);
+      const briefing = [patient.briefing, summaryLine].filter(Boolean).join(" ");
+      patient = (await updatePatient(doctor.id, patient.id, { briefing })) ?? patient;
+    }
+
+    return { ok: true as const, patient };
   });
 
 export const getWorkspace = createServerFn({ method: "POST" })
