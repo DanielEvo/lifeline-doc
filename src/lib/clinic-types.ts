@@ -124,14 +124,18 @@ export type Soap = {
   p: string;
 };
 
+export type PrescriptionMed = { name: string; dosage: string; duration: string };
+
 export type Evolution = {
   id: string;
   doctorId: string;
   patientId: string;
   evolucao: string;
+  /** Conduta/tratamento — campo próprio, separado do texto livre da Evolução. */
+  planoTerapeutico: string;
   soap: Soap;
   sealed: { protocol: string; signature: string; sealedAt: string } | null;
-  prescription: { code: string; meds: string[]; url: string; createdAt: string } | null;
+  prescription: { code: string; meds: PrescriptionMed[]; url: string; createdAt: string } | null;
   createdAt: string;
   updatedAt: string;
 };

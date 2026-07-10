@@ -137,7 +137,8 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
       evolutionId: e.id,
       sealed: !!e.sealed,
       assessment: e.soap.a.compartilhavel,
-      plan: e.soap.p,
+      // planoTerapeutico é o campo dedicado (novo); evoluções antigas caem no P do SOAP derivado
+      plan: e.planoTerapeutico || e.soap.p,
       hasPrescription: !!e.prescription,
       evolucaoSnippet: e.evolucao,
     }));

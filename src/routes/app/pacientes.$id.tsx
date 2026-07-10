@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -484,14 +485,17 @@ function NovaEvolucao({
   onSaved: () => void;
 }) {
   const [texto, setTexto] = useState("");
+  const [plano, setPlano] = useState("");
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
 
   const salvar = useMutation({
-    mutationFn: () => saveEvolution({ data: { token, patientId, evolucao: texto } }),
+    mutationFn: () =>
+      saveEvolution({ data: { token, patientId, evolucao: texto, planoTerapeutico: plano } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar a evolução.");
       toast.success("Evolução registrada.");
       setTexto("");
+      setPlano("");
       onSaved();
     },
   });
@@ -519,6 +523,15 @@ function NovaEvolucao({
           <SoapGrid soap={preview} />
         </div>
       )}
+      <div className="mt-3 space-y-1">
+        <Label className="text-xs font-medium text-muted-foreground">Plano terapêutico</Label>
+        <Textarea
+          value={plano}
+          onChange={(e) => setPlano(e.target.value)}
+          rows={2}
+          placeholder="Conduta, prescrição, retorno…"
+        />
+      </div>
       <div className="mt-2 flex justify-end">
         <Button
           size="sm"
@@ -644,6 +657,17 @@ function EvolucaoCard({
         <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{e.evolucao}</p>
       )}
 
+      {e.planoTerapeutico && (
+        <div className="mt-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900 dark:bg-teal-950/30">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-400">
+            Plano terapêutico
+          </div>
+          <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
+            {e.planoTerapeutico}
+          </p>
+        </div>
+      )}
+
       <div className="mt-3">
         <SoapGrid
           soap={e.soap}
@@ -653,14 +677,25 @@ function EvolucaoCard({
 
       {e.prescription && (
         <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-xs ring-1 ring-violet-200 dark:bg-violet-950/40 dark:ring-violet-900">
-          <div className="font-medium text-violet-900 dark:text-violet-300">
-            Receita digital · {e.prescription.meds.join(" · ")}
-          </div>
+          <div className="font-medium text-violet-900 dark:text-violet-300">Receita digital</div>
+          <ul className="mt-1 space-y-0.5 text-violet-900 dark:text-violet-300">
+            {e.prescription.meds.map((m, i) =>
+              typeof m === "string" ? (
+                <li key={i}>{m}</li>
+              ) : (
+                <li key={i}>
+                  {m.name}
+                  {m.dosage ? ` · ${m.dosage}` : ""}
+                  {m.duration ? ` · ${m.duration}` : ""}
+                </li>
+              ),
+            )}
+          </ul>
           <a
             href={e.prescription.url}
             target="_blank"
             rel="noreferrer"
-            className="text-violet-700 underline-offset-2 hover:underline dark:text-violet-400"
+            className="mt-1 inline-block text-violet-700 underline-offset-2 hover:underline dark:text-violet-400"
           >
             {e.prescription.url}
           </a>
@@ -702,15 +737,18 @@ function ReceitaDialog({
   patientId: string;
   onDone: () => void;
 }) {
-  const [meds, setMeds] = useState<string[]>([]);
+  const [meds, setMeds] = useState<{ name: string; dosage: string; duration: string }[]>([]);
   const [atual, setAtual] = useState("");
 
   const add = () => {
     const v = atual.trim();
     if (!v) return;
-    setMeds((m) => [...m, v]);
+    setMeds((m) => [...m, { name: v, dosage: "", duration: "" }]);
     setAtual("");
   };
+
+  const updateMed = (i: number, patch: Partial<{ dosage: string; duration: string }>) =>
+    setMeds((all) => all.map((m, j) => (j === i ? { ...m, ...patch } : m)));
 
   const gerar = useMutation({
     mutationFn: () => prescribeForEvolution({ data: { token, evolutionId, patientId, meds } }),
@@ -729,7 +767,7 @@ function ReceitaDialog({
         <DialogHeader>
           <DialogTitle>Receita digital</DialogTitle>
           <DialogDescription>
-            Adicione os medicamentos com posologia — o código verificável sai na hora.
+            Adicione os medicamentos com dosagem e duração — o código verificável sai na hora.
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2">
@@ -742,29 +780,48 @@ function ReceitaDialog({
                 add();
               }
             }}
-            placeholder="Ex.: Sulfato Ferroso 40mg — 2x/dia em jejum"
+            placeholder="Ex.: Sulfato Ferroso 40mg"
           />
           <Button type="button" variant="outline" onClick={add}>
             <Plus className="h-4 w-4" />
           </Button>
         </div>
         {meds.length > 0 && (
-          <ul className="space-y-1">
+          <ul className="space-y-2">
             {meds.map((m, i) => (
-              <li
-                key={`${m}-${i}`}
-                className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-xs"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Pill className="h-3 w-3 text-primary" />
-                  {m}
-                </span>
-                <button
-                  onClick={() => setMeds((all) => all.filter((_, j) => j !== i))}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+              <li key={`${m.name}-${i}`} className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <Pill className="h-3 w-3 text-primary" />
+                    {m.name}
+                  </span>
+                  <button
+                    onClick={() => setMeds((all) => all.filter((_, j) => j !== i))}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] text-muted-foreground">Dosagem e frequência</Label>
+                    <Input
+                      value={m.dosage}
+                      onChange={(e) => updateMed(i, { dosage: e.target.value })}
+                      placeholder="Ex.: 1cp 2x/dia"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] text-muted-foreground">Duração do tratamento</Label>
+                    <Input
+                      value={m.duration}
+                      onChange={(e) => updateMed(i, { duration: e.target.value })}
+                      placeholder="Ex.: 90 dias"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

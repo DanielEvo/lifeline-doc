@@ -7,7 +7,7 @@ import { mutateRows, newId, nowIso, readRows } from "./db.server";
 import { makePrescriptionCode, makeProtocol, makeSignature } from "./domain.server";
 import { deriveSoap } from "./soap";
 import { addConsultation, addPrescription } from "./store.server";
-import type { Evolution } from "./clinic-types";
+import type { Evolution, PrescriptionMed } from "./clinic-types";
 
 export type { Evolution } from "./clinic-types";
 
@@ -24,6 +24,7 @@ export async function createEvolution(
   doctorId: string,
   patientId: string,
   evolucao: string,
+  planoTerapeutico: string,
 ): Promise<Evolution> {
   const now = nowIso();
   const entry: Evolution = {
@@ -31,6 +32,7 @@ export async function createEvolution(
     doctorId,
     patientId,
     evolucao: evolucao.trim(),
+    planoTerapeutico: planoTerapeutico.trim(),
     soap: deriveSoap(evolucao),
     sealed: null,
     prescription: null,
@@ -47,6 +49,8 @@ export async function updateEvolution(
   doctorId: string,
   id: string,
   evolucao: string,
+  /** Ausente = não mexe no plano já salvo (ex.: só reeditando o texto da evolução). */
+  planoTerapeutico?: string,
 ): Promise<Evolution | { error: "sealed" | "not_found" }> {
   let result: Evolution | { error: "sealed" | "not_found" } = { error: "not_found" };
   await mutateRows<Evolution>(FILE, (rows) => {
@@ -57,6 +61,7 @@ export async function updateEvolution(
       return;
     }
     e.evolucao = evolucao.trim();
+    if (planoTerapeutico !== undefined) e.planoTerapeutico = planoTerapeutico.trim();
     // notaPrivada não é derivada do texto — preserva o que o médico já anotou
     const derived = deriveSoap(evolucao);
     e.soap = { ...derived, a: { ...derived.a, notaPrivada: e.soap.a.notaPrivada } };
@@ -121,7 +126,7 @@ export async function prescribeEvolution(
   doctorId: string,
   id: string,
   patientName: string,
-  meds: string[],
+  meds: PrescriptionMed[],
 ): Promise<Evolution | { error: "not_found" }> {
   let updated: Evolution | null = null;
   const code = makePrescriptionCode();
@@ -138,6 +143,11 @@ export async function prescribeEvolution(
     updated = { ...e };
   });
   if (!updated) return { error: "not_found" };
-  await addPrescription({ code, patient: patientName, meds });
+  // log de atividade do /admin é só texto — resume dosagem quando houver
+  await addPrescription({
+    code,
+    patient: patientName,
+    meds: meds.map((m) => (m.dosage ? `${m.name} (${m.dosage})` : m.name)),
+  });
   return updated;
 }

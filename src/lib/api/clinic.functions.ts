@@ -373,6 +373,8 @@ export const saveEvolution = createServerFn({ method: "POST" })
       patientId: z.string().min(1),
       evolutionId: z.string().optional(),
       evolucao: z.string().min(3).max(8000),
+      // ausente = não mexe no plano já salvo (edição só do texto da evolução)
+      planoTerapeutico: z.string().max(4000).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -381,11 +383,11 @@ export const saveEvolution = createServerFn({ method: "POST" })
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
     if (data.evolutionId) {
-      const r = await updateEvolution(doctor.id, data.evolutionId, data.evolucao);
+      const r = await updateEvolution(doctor.id, data.evolutionId, data.evolucao, data.planoTerapeutico);
       if ("error" in r) return { ok: false as const, error: r.error };
       return { ok: true as const, evolution: r };
     }
-    const evolution = await createEvolution(doctor.id, data.patientId, data.evolucao);
+    const evolution = await createEvolution(doctor.id, data.patientId, data.evolucao, data.planoTerapeutico ?? "");
     return { ok: true as const, evolution };
   });
 
@@ -425,7 +427,16 @@ export const prescribeForEvolution = createServerFn({ method: "POST" })
       token,
       evolutionId: z.string().min(1),
       patientId: z.string().min(1),
-      meds: z.array(z.string().min(1).max(120)).min(1).max(20),
+      meds: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(120),
+            dosage: z.string().max(120),
+            duration: z.string().max(120),
+          }),
+        )
+        .min(1)
+        .max(20),
     }),
   )
   .handler(async ({ data }) => {
