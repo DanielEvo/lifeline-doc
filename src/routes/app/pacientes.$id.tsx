@@ -82,7 +82,6 @@ function Prontuario() {
   const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [agendarOpen, setAgendarOpen] = useState(false);
-  const [kbOpen, setKbOpen] = useState(false);
 
   // mesma query do kanban/pacientes → colunas do board sem roundtrip extra
   const wsq = useQuery({
