@@ -1068,7 +1068,7 @@ function HistoricoConsultaPanel({
   const examesSolicitados = extractSection(/Exames?\s+solicitad[ao]s?/i);
   const relatorios = extractSection(/Relat[óo]rios?/i);
 
-  const secoes: { label: string; icon: typeof ClipboardList; content: React.ReactNode }[] = [
+  const secoes: { label: string; icon: typeof ClipboardList; content: ReactNode }[] = [
     {
       label: "Diagnóstico",
       icon: Stethoscope,
