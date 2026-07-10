@@ -315,7 +315,7 @@ export function BiomarkerPanel({
   const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-6 lg:self-start">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Biomarcadores</h2>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
