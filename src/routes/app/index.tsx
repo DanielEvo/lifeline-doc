@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { BoardDialog } from "@/components/clinic/board-dialog";
+import { PageHeader } from "@/components/clinic/page-header";
 import {
   getWorkspace,
   importSamplePatients,
@@ -156,10 +157,10 @@ function PainelDoDia() {
 
   return (
     <div className="mx-auto max-w-[1400px] p-3 lg:p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wider text-primary">{hojeLabel}</div>
-          <h1 className="text-xl font-semibold tracking-tight">Painel do dia</h1>
+      <PageHeader
+        eyebrow={hojeLabel}
+        title="Painel do dia"
+        subtitle={
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span><strong className="text-foreground">{patients.length}</strong> pacientes ativos</span>
             <span><strong className="text-foreground">{consultasHoje}</strong> consulta{consultasHoje === 1 ? "" : "s"} hoje</span>
@@ -169,18 +170,20 @@ function PainelDoDia() {
               </span>
             )}
           </div>
-        </div>
-        <div className="flex gap-2">
+        }
+        secondaryActions={
           <Button variant="outline" onClick={() => setBoardOpen(true)} title="Personalizar colunas">
             <Settings2 className="mr-1.5 h-4 w-4" />
             Personalizar
           </Button>
+        }
+        primaryAction={
           <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
             <Plus className="mr-1.5 h-4 w-4" />
             Novo paciente
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {patients.length === 0 ? (
         <EmptyClinic

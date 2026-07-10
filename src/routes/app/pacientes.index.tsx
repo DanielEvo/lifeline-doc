@@ -47,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
+import { PageHeader } from "@/components/clinic/page-header";
 import { ChargeDialog, ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
@@ -273,16 +274,16 @@ function PainelPacientes() {
   return (
     <div className="mx-auto max-w-[1200px] p-3 lg:p-5">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Centro de comando</div>
-          <h1 className="text-xl font-semibold tracking-tight">Pacientes</h1>
-        </div>
-        <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo paciente
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Centro de comando"
+        title="Pacientes"
+        primaryAction={
+          <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Novo paciente
+          </Button>
+        }
+      />
 
       {/* Stats clicáveis → visão */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
