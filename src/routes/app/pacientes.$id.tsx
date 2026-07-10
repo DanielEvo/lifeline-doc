@@ -864,21 +864,39 @@ function NovaEvolucao({
   onSaved,
   isPrimeiraConsulta,
   evolutionsCount,
-  historicoAutorizado,
-  onSolicitarHistorico,
+  evolutions,
+  activeHistoricoId,
+  onActiveHistoricoChange,
 }: {
   token: string;
   patientId: string;
   onSaved: () => void;
   isPrimeiraConsulta: boolean;
   evolutionsCount: number;
-  historicoAutorizado: boolean;
-  onSolicitarHistorico: () => void;
+  evolutions: Evolution[];
+  activeHistoricoId: string | null;
+  onActiveHistoricoChange: (id: string | null) => void;
 }) {
   const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
-  
-  const [template, setTemplate] = useState<"anamnese" | "soap">(isPrimeiraConsulta ? "anamnese" : "soap");
+  const [template, setTemplate] = useState<"anamnese" | "soap" | "historico">(
+    isPrimeiraConsulta ? "anamnese" : "soap",
+  );
+  // Consulta selecionada dentro do modo "Histórico". Mantida separada do id
+  // pilotado pelo pai (linha do tempo) mas sincronizada via useEffect abaixo.
+  const [historicoId, setHistoricoId] = useState<string | null>(null);
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
+
+  // Sincroniza com o clique na linha do tempo: quando o pai muda
+  // `activeHistoricoId`, entramos em modo Histórico com aquela consulta.
+  useEffect(() => {
+    if (activeHistoricoId) {
+      setTemplate("historico");
+      setHistoricoId(activeHistoricoId);
+    } else if (historicoId !== null) {
+      setHistoricoId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHistoricoId]);
 
   const salvar = useMutation({
     mutationFn: () =>
@@ -891,24 +909,40 @@ function NovaEvolucao({
     },
   });
 
-  const applyTemplate = (t: "anamnese" | "soap") => {
+  const applyTemplate = (t: "anamnese" | "soap" | "historico") => {
     if (t === template) return;
-    if (texto.trim().length > 0) {
+    // Só bloqueamos a troca entre Anamnese ↔ Retorno (evita perder rascunho
+    // ao trocar template de escrita). Histórico é sempre acessível — voltar
+    // de Histórico para os outros modos preserva o texto intacto.
+    if (t !== "historico" && template !== "historico" && texto.trim().length > 0) {
       toast.message("Limpe o campo de evolução antes de trocar de template", {
         description: "Isso evita perder o que você já escreveu.",
       });
       return;
     }
     setTemplate(t);
-    setTexto(t === "anamnese" ? ANAMNESE_TEMPLATE : "");
+    if (t === "anamnese" && texto.trim().length === 0) setTexto(ANAMNESE_TEMPLATE);
+    if (t === "soap" && texto.trim().length === 0) setTexto("");
+    if (t !== "historico") {
+      // saindo do modo histórico → limpa seleção no pai
+      onActiveHistoricoChange(null);
+    }
   };
 
-  const historicoChips = [
-    { id: "consultas", label: "Consultas", Icon: Stethoscope },
-    { id: "exames", label: "Exames", Icon: ClipboardList },
-    { id: "prescricoes", label: "Prescrições", Icon: Pill },
-    { id: "alergias", label: "Alergias", Icon: AlertTriangle },
-  ] as const;
+  const selecionarConsulta = (id: string) => {
+    setHistoricoId(id);
+    onActiveHistoricoChange(id);
+  };
+
+  const templatesPills = [
+    { id: "anamnese" as const, label: "Anamnese completa · 1ª consulta", disabled: false },
+    { id: "soap" as const, label: "Evolução · retorno", disabled: false },
+    { id: "historico" as const, label: "Histórico", disabled: evolutions.length === 0 },
+  ];
+
+  const consultaSelecionada = historicoId
+    ? evolutions.find((e) => e.id === historicoId) ?? null
+    : null;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -917,113 +951,191 @@ function NovaEvolucao({
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
       </div>
 
-      <div
-        className={`mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border px-2 py-1.5 ${
-          historicoAutorizado
-            ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30"
-            : "border-dashed border-border bg-muted/30"
-        }`}
-        title={historicoAutorizado ? "Histórico liberado pelo paciente" : "Solicite acesso via token para consultar o histórico"}
-      >
-        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {historicoAutorizado ? (
-            <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <Lock className="h-3 w-3" />
-          )}
-          Histórico
-        </span>
-        <div className="flex flex-wrap items-center gap-1">
-          {historicoChips.map((c) => {
-            const disabled = !historicoAutorizado;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                disabled={disabled}
-                onClick={() =>
-                  toast.message(`${c.label} do paciente`, {
-                    description: "Registros históricos abertos em painel lateral.",
-                  })
-                }
-                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
-                  disabled
-                    ? "cursor-not-allowed border-border/60 bg-background/60 text-muted-foreground/60"
-                    : "border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-                }`}
-              >
-                <c.Icon className="h-3 w-3" />
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-        {!historicoAutorizado && (
-          <button
-            type="button"
-            onClick={onSolicitarHistorico}
-            className="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-primary hover:underline"
-          >
-            <KeyRound className="h-3 w-3" /> Solicitar autorização
-          </button>
-        )}
-      </div>
-
-
       <div className="mb-2 mt-2 flex flex-wrap items-center gap-2">
         <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
-          {(
-            [
-              { id: "anamnese", label: "Anamnese completa · 1ª consulta" },
-              { id: "soap", label: "Evolução · retorno" },
-            ] as const
-          ).map((t) => (
+          {templatesPills.map((t) => (
             <button
               key={t.id}
               type="button"
+              disabled={t.disabled}
               onClick={() => applyTemplate(t.id)}
               className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
                 template === t.id
                   ? "bg-teal-600 text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : t.disabled
+                    ? "cursor-not-allowed text-muted-foreground/50"
+                    : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <span className="text-[10px] text-muted-foreground">
-          Auto: {evolutionsCount} consulta{evolutionsCount === 1 ? "" : "s"} anterior
-          {evolutionsCount === 1 ? "" : "es"} → {isPrimeiraConsulta ? "1ª consulta" : "retorno"}
-        </span>
+        {template === "historico" ? (
+          <Select
+            value={historicoId ?? ""}
+            onValueChange={(v) => selecionarConsulta(v)}
+          >
+            <SelectTrigger className="h-7 w-auto min-w-[220px] text-[11px]">
+              <SelectValue placeholder="Escolha uma consulta anterior…" />
+            </SelectTrigger>
+            <SelectContent>
+              {[...evolutions]
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((e) => {
+                  const dataFmt = new Date(e.createdAt).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  });
+                  return (
+                    <SelectItem key={e.id} value={e.id}>
+                      {dataFmt} · {e.sealed ? "Selada" : "Rascunho"}
+                    </SelectItem>
+                  );
+                })}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-[10px] text-muted-foreground">
+            Auto: {evolutionsCount} consulta{evolutionsCount === 1 ? "" : "s"} anterior
+            {evolutionsCount === 1 ? "" : "es"} → {isPrimeiraConsulta ? "1ª consulta" : "retorno"}
+          </span>
+        )}
       </div>
 
-      <div className="mt-2">
-        <Dictation
-          onAppend={(t) => setTexto((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
-        />
-      </div>
-      <Textarea
-        value={texto}
-        onChange={(e) => setTexto(e.target.value)}
-        placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
-        className="mt-1.5 min-h-[140px] resize-none bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
-      />
-      {preview && (
-        <div className="mt-2">
-          <SoapReadOnly soap={preview} />
-        </div>
+      {template === "historico" ? (
+        <HistoricoConsultaContent evolution={consultaSelecionada} />
+      ) : (
+        <>
+          <div className="mt-2">
+            <Dictation
+              onAppend={(t) => setTexto((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
+            />
+          </div>
+          <Textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
+            className="mt-1.5 min-h-[140px] resize-none bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
+          />
+          {preview && (
+            <div className="mt-2">
+              <SoapReadOnly soap={preview} />
+            </div>
+          )}
+          <div className="mt-2 flex justify-end">
+            <Button
+              size="sm"
+              disabled={texto.trim().length < 4 || salvar.isPending}
+              onClick={() => salvar.mutate()}
+              className="brand-gradient text-primary-foreground"
+            >
+              {salvar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Salvar evolução
+            </Button>
+          </div>
+        </>
       )}
-      <div className="mt-2 flex justify-end">
-        <Button
-          size="sm"
-          disabled={texto.trim().length < 4 || salvar.isPending}
-          onClick={() => salvar.mutate()}
-          className="brand-gradient text-primary-foreground"
-        >
-          {salvar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-          Salvar evolução
-        </Button>
+    </div>
+  );
+}
+
+// Conteúdo somente-leitura do modo "Histórico" — reaproveita a divisão em
+// quatro seções (Diagnóstico, Exames solicitados, Medicamentos prescritos,
+// Relatórios) do painel dedicado antigo.
+function HistoricoConsultaContent({ evolution }: { evolution: Evolution | null }) {
+  if (!evolution) {
+    return (
+      <div className="mt-3 rounded-xl border border-dashed border-border/70 px-4 py-6 text-center">
+        <FileText className="mx-auto h-6 w-6 text-muted-foreground/50" />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Escolha uma consulta anterior no seletor acima para ver o histórico.
+        </p>
+      </div>
+    );
+  }
+
+  const dataFmt = new Date(evolution.createdAt).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const shortId = evolution.id.slice(0, 6).toUpperCase();
+  const diagnostico = evolution.soap.a.compartilhavel || "";
+  const meds = evolution.prescription?.meds ?? [];
+  const evolText = evolution.evolucao ?? "";
+  const extractSection = (label: RegExp) => {
+    const m = evolText.match(new RegExp(`${label.source}\\s*[:\\-]?\\s*([\\s\\S]*?)(?:\\n\\s*\\n|$)`, "i"));
+    return m?.[1]?.trim() ?? "";
+  };
+  const examesSolicitados = extractSection(/Exames?\s+solicitad[ao]s?/i);
+  const relatorios = extractSection(/Relat[óo]rios?/i);
+
+  const secoes: { label: string; icon: typeof ClipboardList; content: ReactNode }[] = [
+    {
+      label: "Diagnóstico",
+      icon: Stethoscope,
+      content: diagnostico ? (
+        <p className="whitespace-pre-line text-sm">{diagnostico}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem diagnóstico registrado.</p>
+      ),
+    },
+    {
+      label: "Exames solicitados",
+      icon: ClipboardList,
+      content: examesSolicitados ? (
+        <p className="whitespace-pre-line text-sm">{examesSolicitados}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhum exame solicitado nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Medicamentos prescritos",
+      icon: Pill,
+      content: meds.length > 0 ? (
+        <ul className="space-y-1.5">
+          {meds.map((m, i) => (
+            <li key={i} className="rounded-lg border border-border bg-background px-2.5 py-1.5">
+              <div className="text-sm font-medium">{m.name}</div>
+              <div className="text-[11px] text-muted-foreground">{m.dosage} · {m.duration}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhuma prescrição nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Relatórios",
+      icon: FileText,
+      content: relatorios ? (
+        <p className="whitespace-pre-line text-sm">{relatorios}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem relatórios anexados.</p>
+      ),
+    },
+  ];
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+        <span>Histórico · Consulta #{shortId}</span>
+        <span className="text-muted-foreground">
+          {evolution.sealed ? "Consulta selada" : "Evolução em aberto"} · {dataFmt}
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {secoes.map((s) => (
+          <section key={s.label} className="rounded-xl border border-border bg-background p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <s.icon className="h-3.5 w-3.5 text-primary" />
+              {s.label}
+            </div>
+            <div className="mt-1.5">{s.content}</div>
+          </section>
+        ))}
       </div>
     </div>
   );
