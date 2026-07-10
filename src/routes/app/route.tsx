@@ -18,7 +18,7 @@ import { getMe, logout as logoutFn } from "@/lib/api/auth.functions";
 import { clearSession, getSession, type DoctorSession } from "@/lib/session";
 import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+
 import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 
 export const Route = createFileRoute("/app")({
@@ -187,12 +187,16 @@ function Shell({ clinic }: { clinic: Clinic }) {
         <div className="h-12" />
       </div>
 
-      <main className="flex-1 overflow-x-hidden">
-        <div className="sticky top-0 z-20 hidden items-center justify-end border-b border-border bg-background/95 px-4 py-2 backdrop-blur md:flex">
-          <Button variant="outline" size="sm" onClick={() => setKbOpen(true)}>
-            <BookOpen className="mr-1.5 h-4 w-4" /> Base de conhecimento
-          </Button>
-        </div>
+      <main className="relative flex-1 overflow-x-hidden">
+        <button
+          type="button"
+          onClick={() => setKbOpen(true)}
+          aria-label="Base de conhecimento"
+          title="Base de conhecimento"
+          className="fixed right-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground md:inline-flex"
+        >
+          <BookOpen className="h-4 w-4" />
+        </button>
         <Outlet />
         <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} />
       </main>
