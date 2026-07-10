@@ -18,7 +18,7 @@ import { getMe, logout as logoutFn } from "@/lib/api/auth.functions";
 import { clearSession, getSession, type DoctorSession } from "@/lib/session";
 import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+
 import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 
 export const Route = createFileRoute("/app")({
