@@ -239,9 +239,6 @@ function Prontuario() {
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setKbOpen(true)}>
-              <BookOpen className="mr-1 h-3.5 w-3.5" /> Base de conhecimento
-            </Button>
             <Button
               variant="ghost"
               size="sm"
