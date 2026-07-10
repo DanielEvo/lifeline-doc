@@ -318,11 +318,8 @@ export function BiomarkerPanel({
     <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Biomarcadores</h2>
-        <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Registrar exame
-        </Button>
       </div>
+
 
       {allNames.length === 0 ? (
         <div className="mt-3 rounded-xl border border-dashed border-border/70 px-4 py-6 text-center">
