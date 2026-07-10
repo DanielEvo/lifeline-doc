@@ -358,12 +358,12 @@ export function BiomarkerPanel({
               {activeExam.label} · {fmtMonthYear(activeExam.date)}
             </div>
           )}
-          <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {visibleNames.map((name) => (
               <BiomarkerChart key={name} name={name} measurements={measurements} />
             ))}
           </div>
-        </>
+        </div>
       )}
 
       <AddExamDialog
