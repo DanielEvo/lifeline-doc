@@ -935,9 +935,9 @@ function NovaEvolucao({
   };
 
   const templatesPills = [
+    { id: "historico" as const, label: "Histórico", disabled: evolutions.length === 0 },
     { id: "anamnese" as const, label: "Anamnese completa · 1ª consulta", disabled: false },
     { id: "soap" as const, label: "Evolução · retorno", disabled: false },
-    { id: "historico" as const, label: "Histórico", disabled: evolutions.length === 0 },
   ];
 
   const consultaSelecionada = historicoId
