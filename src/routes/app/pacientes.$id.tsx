@@ -396,6 +396,7 @@ function Prontuario() {
         onOpenChange={setTokenOpen}
         patientName={p.nome}
         telefone={p.telefone}
+        onAutorizado={() => setHistoricoAutorizado(true)}
       />
     </div>
   );
