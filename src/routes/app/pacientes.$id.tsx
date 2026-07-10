@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Cake,
   CalendarPlus,
   CreditCard,
@@ -59,6 +60,7 @@ import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { PatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import { SimilarCases } from "@/components/clinic/similar-cases";
+import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 import {
   ageFrom,
   DEFAULT_COLUMNS,
@@ -82,6 +84,7 @@ function Prontuario() {
   const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [agendarOpen, setAgendarOpen] = useState(false);
+  const [kbOpen, setKbOpen] = useState(false);
 
   // mesma query do kanban/pacientes → colunas do board sem roundtrip extra
   const wsq = useQuery({
@@ -239,6 +242,9 @@ function Prontuario() {
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setKbOpen(true)}>
+              <BookOpen className="mr-1 h-3.5 w-3.5" /> Base de conhecimento
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -328,6 +334,7 @@ function Prontuario() {
         patient={p}
         token={token}
       />
+      <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} />
     </div>
   );
 }
