@@ -323,23 +323,16 @@ function Prontuario() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
-          {hist.activeConsulta ? (
-            <HistoricoConsultaPanel
-              consulta={hist.activeConsulta}
-              evolution={evolutions.find((e) => e.id === hist.activeConsulta!.evolutionId) ?? null}
-              onClose={hist.clearActiveConsulta}
-            />
-          ) : (
-            <NovaEvolucao
-              token={token}
-              patientId={id}
-              onSaved={invalidate}
-              isPrimeiraConsulta={evolutions.length === 0}
-              evolutionsCount={evolutions.length}
-              historicoAutorizado={historicoAutorizado}
-              onSolicitarHistorico={() => setTokenOpen(true)}
-            />
-          )}
+          <NovaEvolucao
+            token={token}
+            patientId={id}
+            onSaved={invalidate}
+            isPrimeiraConsulta={evolutions.length === 0}
+            evolutionsCount={evolutions.length}
+            evolutions={evolutions}
+            activeHistoricoId={hist.activeConsulta?.evolutionId ?? null}
+            onActiveHistoricoChange={(id) => hist.setActiveConsulta(id)}
+          />
 
 
           {/* Linha do tempo de evoluções */}
