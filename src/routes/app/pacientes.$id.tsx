@@ -1014,18 +1014,6 @@ function NovaEvolucao({
           <SoapReadOnly soap={preview} />
         </div>
       )}
-      <div className="mt-3 space-y-1">
-        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <ClipboardList className="h-3.5 w-3.5" />
-          Plano terapêutico
-        </Label>
-        <Textarea
-          value={plano}
-          onChange={(e) => setPlano(e.target.value)}
-          rows={2}
-          placeholder="Conduta, prescrição, retorno…"
-        />
-      </div>
       <div className="mt-2 flex justify-end">
         <Button
           size="sm"
