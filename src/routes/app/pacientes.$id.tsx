@@ -335,10 +335,12 @@ function Prontuario() {
               patientId={id}
               onSaved={invalidate}
               isPrimeiraConsulta={evolutions.length === 0}
-            evolutionsCount={evolutions.length}
-            historicoAutorizado={historicoAutorizado}
-            onSolicitarHistorico={() => setTokenOpen(true)}
-          />
+              evolutionsCount={evolutions.length}
+              historicoAutorizado={historicoAutorizado}
+              onSolicitarHistorico={() => setTokenOpen(true)}
+            />
+          )}
+
 
           {/* Linha do tempo de evoluções */}
           <div className="mt-5">
