@@ -51,6 +51,7 @@ import {
   moveMyPatient,
   prescribeForEvolution,
   saveEvolution,
+  saveEvolutionNote,
   sealMyEvolution,
   updateMyPatient,
 } from "@/lib/api/clinic.functions";
@@ -356,14 +357,22 @@ function Prontuario() {
 
 // ---------------------------------------------------------------------------
 
-function SoapGrid({ soap }: { soap: Evolution["soap"] }) {
+function SoapGrid({
+  soap,
+  editableNota,
+}: {
+  soap: Evolution["soap"];
+  /** Presente só quando a evolução já foi salva — é o que dá o alvo (evolutionId)
+   *  para persistir a nota privada. No preview de Nova Evolução isso é omitido. */
+  editableNota?: { token: string; evolutionId: string; onSaved: () => void };
+}) {
   const items = [
     { k: "S", label: "Subjetivo", text: soap.s },
     { k: "O", label: "Objetivo", text: soap.o },
-    { k: "A", label: "Avaliação", text: soap.a },
+    { k: "A", label: "Avaliação", text: soap.a.compartilhavel },
     { k: "P", label: "Plano", text: soap.p },
   ].filter((i) => i.text);
-  if (items.length === 0) return null;
+  if (items.length === 0 && !editableNota) return null;
   return (
     <div className="grid gap-1.5 sm:grid-cols-2">
       {items.map((i) => (
@@ -373,6 +382,94 @@ function SoapGrid({ soap }: { soap: Evolution["soap"] }) {
           <p className="mt-0.5 text-xs leading-relaxed text-foreground/90">{i.text}</p>
         </div>
       ))}
+      {editableNota && (
+        <PrivateNoteBlock
+          notaPrivada={soap.a.notaPrivada}
+          token={editableNota.token}
+          evolutionId={editableNota.evolutionId}
+          onSaved={editableNota.onSaved}
+        />
+      )}
+    </div>
+  );
+}
+
+function PrivateNoteBlock({
+  notaPrivada,
+  token,
+  evolutionId,
+  onSaved,
+}: {
+  notaPrivada: string;
+  token: string;
+  evolutionId: string;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [texto, setTexto] = useState(notaPrivada);
+
+  const salvar = useMutation({
+    mutationFn: () => saveEvolutionNote({ data: { token, evolutionId, notaPrivada: texto } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar a nota.");
+      setEditing(false);
+      onSaved();
+    },
+  });
+
+  return (
+    <div className="rounded-lg bg-amber-50 px-2.5 py-1.5 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-900">
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <div>
+          <span className="text-[10px] font-bold text-primary">A</span>
+          <span className="ml-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Nota pessoal</span>
+          <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-900 dark:text-amber-300">
+            🔒 Visível apenas para você
+          </span>
+        </div>
+        {!editing && (
+          <button
+            onClick={() => { setTexto(notaPrivada); setEditing(true); }}
+            className="text-[10px] font-medium text-primary hover:underline"
+          >
+            {notaPrivada ? "Editar" : "Adicionar"}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="mt-1">
+          <Textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            rows={2}
+            className="text-xs"
+            autoFocus
+          />
+          <div className="mt-1 flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px]"
+              onClick={() => { setEditing(false); setTexto(notaPrivada); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              className="h-6 text-[10px]"
+              disabled={salvar.isPending}
+              onClick={() => salvar.mutate()}
+            >
+              {salvar.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              Salvar
+            </Button>
+          </div>
+        </div>
+      ) : notaPrivada ? (
+        <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{notaPrivada}</p>
+      ) : (
+        <p className="mt-0.5 text-xs italic text-muted-foreground">Sem nota — visível apenas para você.</p>
+      )}
     </div>
   );
 }
@@ -548,7 +645,10 @@ function EvolucaoCard({
       )}
 
       <div className="mt-3">
-        <SoapGrid soap={e.soap} />
+        <SoapGrid
+          soap={e.soap}
+          editableNota={{ token, evolutionId: e.id, onSaved: onChanged }}
+        />
       </div>
 
       {e.prescription && (

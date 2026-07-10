@@ -57,7 +57,25 @@ export async function updateEvolution(
       return;
     }
     e.evolucao = evolucao.trim();
-    e.soap = deriveSoap(evolucao);
+    // notaPrivada não é derivada do texto — preserva o que o médico já anotou
+    const derived = deriveSoap(evolucao);
+    e.soap = { ...derived, a: { ...derived.a, notaPrivada: e.soap.a.notaPrivada } };
+    e.updatedAt = nowIso();
+    result = { ...e };
+  });
+  return result;
+}
+
+export async function updateEvolutionNote(
+  doctorId: string,
+  id: string,
+  notaPrivada: string,
+): Promise<Evolution | { error: "not_found" }> {
+  let result: Evolution | { error: "not_found" } = { error: "not_found" };
+  await mutateRows<Evolution>(FILE, (rows) => {
+    const e = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!e) return;
+    e.soap.a.notaPrivada = notaPrivada.trim();
     e.updatedAt = nowIso();
     result = { ...e };
   });
@@ -93,7 +111,7 @@ export async function sealEvolution(
       protocol: evo.sealed.protocol,
       signature: evo.sealed.signature,
       signedAt: evo.sealed.sealedAt,
-      summary: evo.soap.a || evo.evolucao.slice(0, 120),
+      summary: evo.soap.a.compartilhavel || evo.evolucao.slice(0, 120),
     });
   }
   return evo;

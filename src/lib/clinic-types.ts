@@ -115,7 +115,14 @@ export function examStatus(ms: Measurement[]): "Saudável" | "Atenção" | "Aler
   return "Alerta";
 }
 
-export type Soap = { s: string; o: string; a: string; p: string };
+export type Soap = {
+  s: string;
+  o: string;
+  /** Avaliação: `compartilhavel` entra no resumo/timeline; `notaPrivada` é
+   *  anotação pessoal do médico, editada à parte — nunca derivada do texto. */
+  a: { compartilhavel: string; notaPrivada: string };
+  p: string;
+};
 
 export type Evolution = {
   id: string;

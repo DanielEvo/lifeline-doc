@@ -17,7 +17,7 @@ export function deriveSoap(text: string): Soap {
     .map((s) => s.trim())
     .filter(Boolean);
   const has = (str: string, arr: string[]) => arr.some((k) => str.toLowerCase().includes(k));
-  const bucket: Record<keyof Soap, string[]> = { s: [], o: [], a: [], p: [] };
+  const bucket: Record<"s" | "o" | "a" | "p", string[]> = { s: [], o: [], a: [], p: [] };
   for (const sen of sentences) {
     if (has(sen, A_KEYS)) bucket.a.push(sen);
     else if (has(sen, P_KEYS)) bucket.p.push(sen);
@@ -27,7 +27,9 @@ export function deriveSoap(text: string): Soap {
   return {
     s: bucket.s.join(" "),
     o: bucket.o.join(" "),
-    a: bucket.a.join(" "),
+    // notaPrivada nunca é derivada do texto livre — é editada manualmente
+    // pelo médico e preservada à parte pelo servidor (ver updateEvolution).
+    a: { compartilhavel: bucket.a.join(" "), notaPrivada: "" },
     p: bucket.p.join(" "),
   };
 }

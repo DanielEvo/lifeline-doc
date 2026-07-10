@@ -136,7 +136,7 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
       date: e.createdAt.slice(0, 10),
       evolutionId: e.id,
       sealed: !!e.sealed,
-      assessment: e.soap.a,
+      assessment: e.soap.a.compartilhavel,
       plan: e.soap.p,
       hasPrescription: !!e.prescription,
       evolucaoSnippet: e.evolucao,

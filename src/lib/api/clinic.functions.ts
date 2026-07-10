@@ -31,6 +31,7 @@ import {
   prescribeEvolution,
   sealEvolution,
   updateEvolution,
+  updateEvolutionNote,
 } from "../records.server";
 import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
@@ -386,6 +387,22 @@ export const saveEvolution = createServerFn({ method: "POST" })
     }
     const evolution = await createEvolution(doctor.id, data.patientId, data.evolucao);
     return { ok: true as const, evolution };
+  });
+
+export const saveEvolutionNote = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      evolutionId: z.string().min(1),
+      notaPrivada: z.string().max(2000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const result = await updateEvolutionNote(doctor.id, data.evolutionId, data.notaPrivada);
+    if ("error" in result) return { ok: false as const, error: result.error };
+    return { ok: true as const, evolution: result };
   });
 
 export const sealMyEvolution = createServerFn({ method: "POST" })
