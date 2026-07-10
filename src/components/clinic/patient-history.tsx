@@ -183,6 +183,8 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
   };
 
   const clearActiveConsulta = () => setActiveConsultaKey(null);
+  const setActiveConsulta = (evolutionId: string | null) =>
+    setActiveConsultaKey(evolutionId ? `evo-${evolutionId}` : null);
 
   const anos = new Set(events.map((e) => e.date.slice(0, 4))).size;
 
@@ -192,6 +194,7 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
     activeConsultaKey,
     activeConsulta,
     clearActiveConsulta,
+    setActiveConsulta,
     onEventClick,
     anos,
     showAll,
