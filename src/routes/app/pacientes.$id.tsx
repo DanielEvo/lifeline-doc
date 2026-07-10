@@ -2,7 +2,7 @@
 // servidor, selo digital (protocolo + assinatura SHA-256) e receita digital.
 // Selar congela a evolução — a UI esconde a edição e o servidor rejeita.
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
