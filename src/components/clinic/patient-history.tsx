@@ -193,22 +193,28 @@ export function ClinicalTimeline({
   activeKey,
   onEventClick,
   anos,
+  headerRight,
 }: {
   events: TimelineEvent[];
   activeKey: string | null;
   onEventClick: (ev: TimelineEvent) => void;
   anos: number;
+  headerRight?: React.ReactNode;
 }) {
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold">
-        Histórico clínico
-        {events.length > 0 && (
-          <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-            {events.length} evento{events.length === 1 ? "" : "s"} · {anos} ano{anos === 1 ? "" : "s"}
-          </span>
-        )}
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">
+          Histórico clínico
+          {events.length > 0 && (
+            <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+              {events.length} evento{events.length === 1 ? "" : "s"} · {anos} ano{anos === 1 ? "" : "s"}
+            </span>
+          )}
+        </h2>
+        {headerRight && <div className="flex items-center gap-2">{headerRight}</div>}
+      </div>
+
 
       {events.length === 0 ? (
         <div className="mt-3 rounded-xl border border-dashed border-border/70 px-4 py-6 text-center">
