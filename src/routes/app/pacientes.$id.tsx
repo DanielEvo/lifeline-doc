@@ -1038,6 +1038,113 @@ function NovaEvolucao({
   );
 }
 
+
+// Histórico de uma consulta específica — ocupa o lugar da "Evolução atual"
+// quando o médico clica em um nó de consulta na linha do tempo.
+function HistoricoConsultaPanel({
+  consulta,
+  evolution,
+  onClose,
+}: {
+  consulta: ConsultaEvent;
+  evolution: Evolution | null;
+  onClose: () => void;
+}) {
+  const dataFmt = new Date(`${consulta.date}T00:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const shortId = consulta.evolutionId.slice(0, 6).toUpperCase();
+  const diagnostico = consulta.assessment || evolution?.soap.a.compartilhavel || "";
+  const meds = evolution?.prescription?.meds ?? [];
+  // Exames solicitados e relatórios ainda não existem no modelo; extraímos do
+  // texto da evolução quando aparece uma seção "Exames solicitados:" ou similar.
+  const evolText = evolution?.evolucao ?? consulta.evolucaoSnippet ?? "";
+  const extractSection = (label: RegExp) => {
+    const m = evolText.match(new RegExp(`${label.source}\\s*[:\\-]?\\s*([\\s\\S]*?)(?:\\n\\s*\\n|$)`, "i"));
+    return m?.[1]?.trim() ?? "";
+  };
+  const examesSolicitados = extractSection(/Exames?\s+solicitad[ao]s?/i);
+  const relatorios = extractSection(/Relat[óo]rios?/i);
+
+  const secoes: { label: string; icon: typeof ClipboardList; content: React.ReactNode }[] = [
+    {
+      label: "Diagnóstico",
+      icon: Stethoscope,
+      content: diagnostico ? (
+        <p className="whitespace-pre-line text-sm">{diagnostico}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem diagnóstico registrado.</p>
+      ),
+    },
+    {
+      label: "Exames solicitados",
+      icon: ClipboardList,
+      content: examesSolicitados ? (
+        <p className="whitespace-pre-line text-sm">{examesSolicitados}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhum exame solicitado nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Medicamentos prescritos",
+      icon: Pill,
+      content: meds.length > 0 ? (
+        <ul className="space-y-1.5">
+          {meds.map((m, i) => (
+            <li key={i} className="rounded-lg border border-border bg-background px-2.5 py-1.5">
+              <div className="text-sm font-medium">{m.name}</div>
+              <div className="text-[11px] text-muted-foreground">{m.dosage} · {m.duration}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhuma prescrição nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Relatórios",
+      icon: FileText,
+      content: relatorios ? (
+        <p className="whitespace-pre-line text-sm">{relatorios}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem relatórios anexados.</p>
+      ),
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+            Histórico · Consulta #{shortId}
+          </div>
+          <h2 className="mt-0.5 text-sm font-semibold">
+            {consulta.sealed ? "Consulta selada" : "Evolução em aberto"} · {dataFmt}
+          </h2>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="mr-1 h-3.5 w-3.5" /> Voltar à evolução atual
+        </Button>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {secoes.map((s) => (
+          <section key={s.label} className="rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <s.icon className="h-3.5 w-3.5 text-primary" />
+              {s.label}
+            </div>
+            <div className="mt-1.5">{s.content}</div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EvolucaoCard({
   e,
   token,
