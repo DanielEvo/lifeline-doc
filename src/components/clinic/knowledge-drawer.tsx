@@ -298,7 +298,7 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
         <SheetContent
           side="right"
           overlayClassName="hidden"
-          className="flex w-[360px] flex-col gap-0 border-l border-border bg-background p-0 shadow-xl sm:max-w-none sm:w-[360px] top-14 h-[calc(100vh-3.5rem)]"
+          className="flex w-[360px] flex-col gap-0 border-l border-border bg-background p-0 shadow-xl sm:max-w-none sm:w-[360px] inset-y-auto right-0 top-14 bottom-0 h-auto"
         >
           <SheetHeader className="border-b border-border px-4 py-3">
             <SheetTitle className="flex items-center gap-2 text-sm">
