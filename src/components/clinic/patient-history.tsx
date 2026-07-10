@@ -6,7 +6,7 @@
 // gráficos do painel de biomarcadores; clicar numa consulta rola até o card
 // da evolução correspondente.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FlaskConical,
