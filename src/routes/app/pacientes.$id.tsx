@@ -2,7 +2,7 @@
 // servidor, selo digital (protocolo + assinatura SHA-256) e receita digital.
 // Selar congela a evolução — a UI esconde a edição e o servidor rejeita.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,10 +10,14 @@ import {
   ArrowLeft,
   Cake,
   CalendarPlus,
+  CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Copy,
   CreditCard,
   FileSignature,
+  FileUp,
+  KeyRound,
   Loader2,
   Lock,
   Mail,
@@ -100,6 +104,8 @@ function Prontuario() {
   const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [agendarOpen, setAgendarOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [tokenOpen, setTokenOpen] = useState(false);
 
   // mesma query do kanban/pacientes → colunas do board sem roundtrip extra
   const wsq = useQuery({
@@ -301,6 +307,16 @@ function Prontuario() {
         activeKey={hist.activeKey}
         onEventClick={hist.onEventClick}
         anos={hist.anos}
+        headerRight={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+              <FileUp className="mr-1 h-3.5 w-3.5" /> Adicionar exames
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTokenOpen(true)}>
+              <KeyRound className="mr-1 h-3.5 w-3.5" /> Solicitar histórico
+            </Button>
+          </>
+        }
       />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -371,7 +387,271 @@ function Prontuario() {
         patient={p}
         token={token}
       />
+      <UploadExamesDialog open={uploadOpen} onOpenChange={setUploadOpen} patientName={p.nome} />
+      <SolicitarHistoricoDialog
+        open={tokenOpen}
+        onOpenChange={setTokenOpen}
+        patientName={p.nome}
+        telefone={p.telefone}
+      />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Adicionar exames — dropzone drag & drop (mesmo UX do cadastro), OCR simulado.
+
+type FileEntry = { file: File; state: "reading" | "done" | "error"; errorMsg?: string };
+const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
+
+function UploadExamesDialog({
+  open,
+  onOpenChange,
+  patientName,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  patientName: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [dragging, setDragging] = useState(false);
+
+  function processFiles(list: FileList) {
+    const entries: FileEntry[] = Array.from(list).map((file) => {
+      const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
+      if (!ACCEPTED_EXTS.includes(ext)) {
+        return { file, state: "error", errorMsg: `Formato não suportado (${ext || "?"})` };
+      }
+      return { file, state: "reading" };
+    });
+    setFiles((prev) => [...prev, ...entries]);
+    entries.forEach((entry) => {
+      if (entry.state === "reading") {
+        setTimeout(() => {
+          setFiles((prev) =>
+            prev.map((f) => (f.file === entry.file ? { ...f, state: "done" as const } : f)),
+          );
+        }, 800);
+      }
+    });
+  }
+
+  const doneCount = files.filter((f) => f.state === "done").length;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setFiles([]); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileUp className="h-4 w-4 text-primary" /> Adicionar exames
+          </DialogTitle>
+          <DialogDescription>
+            Anexe PDFs ou imagens dos exames de {patientName.split(" ")[0]}. A leitura por OCR
+            popula os biomarcadores automaticamente.
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
+          }}
+          onClick={() => inputRef.current?.click()}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
+            dragging
+              ? "border-primary bg-primary/5"
+              : "border-border bg-muted/30 hover:border-primary/40 hover:bg-muted/50"
+          }`}
+        >
+          <FileUp className="h-5 w-5 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Arraste PDFs ou imagens, ou{" "}
+            <span className="text-primary underline underline-offset-2">clique para selecionar</span>
+          </p>
+          <p className="text-[11px] text-muted-foreground/70">.pdf · .jpg · .jpeg · .png</p>
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) processFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        {files.length > 0 && (
+          <ul className="mt-1 max-h-52 space-y-1.5 overflow-y-auto">
+            {files.map((entry, i) => (
+              <li
+                key={i}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                  entry.state === "error"
+                    ? "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-800"
+                    : "bg-muted/50"
+                }`}
+              >
+                {entry.state === "reading" && (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                )}
+                {entry.state === "done" && (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                )}
+                {entry.state === "error" && <X className="h-3.5 w-3.5 shrink-0 text-red-500" />}
+                <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {entry.state === "reading" && "Lendo via OCR (simulado)…"}
+                  {entry.state === "done" && "✓ lido"}
+                  {entry.state === "error" && entry.errorMsg}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFiles((prev) => prev.filter((f) => f.file !== entry.file))
+                  }
+                  className="ml-1 shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button
+            className="brand-gradient text-primary-foreground"
+            disabled={doneCount === 0}
+            onClick={() => {
+              toast.success(`${doneCount} exame${doneCount === 1 ? "" : "s"} adicionado${doneCount === 1 ? "" : "s"} ao prontuário.`);
+              onOpenChange(false);
+              setFiles([]);
+            }}
+          >
+            Salvar exames
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Solicitar histórico via token — gera código curto e mensagem para WhatsApp.
+
+function SolicitarHistoricoDialog({
+  open,
+  onOpenChange,
+  patientName,
+  telefone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  patientName: string;
+  telefone: string | null;
+}) {
+  const [token, setTokenValue] = useState("");
+  const [scope, setScope] = useState("exames");
+
+  const gerar = () => {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let t = "";
+    for (let i = 0; i < 8; i++) t += alphabet[Math.floor(Math.random() * alphabet.length)];
+    setTokenValue(`${t.slice(0, 4)}-${t.slice(4)}`);
+  };
+
+  const scopeLabel: Record<string, string> = {
+    exames: "exames laboratoriais e de imagem",
+    consultas: "consultas anteriores",
+    tudo: "todo o histórico clínico",
+  };
+
+  const mensagem = token
+    ? `Olá, ${patientName.split(" ")[0]}! Precisamos acessar seus ${scopeLabel[scope]} para dar continuidade ao seu atendimento. Use o código *${token}* em: lifeline.doc/paciente/compartilhar (válido por 72h).`
+    : "";
+
+  const copiar = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copiado.");
+    } catch {
+      toast.error("Não consegui copiar.");
+    }
+  };
+
+  const waHref = telefone && mensagem
+    ? `https://wa.me/${telefone.replace(/\D/g, "")}?text=${encodeURIComponent(mensagem)}`
+    : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setTokenValue(""); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" /> Solicitar acesso ao histórico
+          </DialogTitle>
+          <DialogDescription>
+            Gere um token único que o paciente usa para liberar o histórico entre profissionais.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">O que solicitar</Label>
+            <Select value={scope} onValueChange={setScope}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="exames">Exames (labs e imagem)</SelectItem>
+                <SelectItem value="consultas">Consultas anteriores</SelectItem>
+                <SelectItem value="tudo">Histórico completo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!token ? (
+            <Button className="w-full brand-gradient text-primary-foreground" onClick={gerar}>
+              <KeyRound className="mr-1.5 h-4 w-4" /> Gerar token
+            </Button>
+          ) : (
+            <>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Token · válido por 72h
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="font-mono text-xl font-bold tracking-widest">{token}</span>
+                  <Button size="sm" variant="ghost" onClick={() => copiar(token)}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Mensagem para o paciente
+                </div>
+                <p className="mt-1 whitespace-pre-line text-xs text-foreground/80">{mensagem}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => copiar(mensagem)}>
+                    <Copy className="mr-1 h-3.5 w-3.5" /> Copiar
+                  </Button>
+                  {waHref && (
+                    <Button size="sm" asChild className="brand-gradient text-primary-foreground">
+                      <a href={waHref} target="_blank" rel="noreferrer">Enviar via WhatsApp</a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
