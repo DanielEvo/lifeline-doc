@@ -16,6 +16,7 @@ import {
   Copy,
   CreditCard,
   FileSignature,
+  FileText,
   FileUp,
   KeyRound,
   Loader2,
