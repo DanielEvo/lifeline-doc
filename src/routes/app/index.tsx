@@ -20,14 +20,14 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
+import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { BoardDialog } from "@/components/clinic/board-dialog";
 import {
-  createMyPatient,
   getWorkspace,
   importSamplePatients,
   moveMyPatient,
 } from "@/lib/api/clinic.functions";
+import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
   formatHourBR,
@@ -86,25 +86,20 @@ function PainelDoDia() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["workspace"] }),
   });
 
+  // Fluxo unificado "Novo paciente": cadastro novo OU exames anexados a um
+  // paciente encontrado por ID (Patch A.1). A orquestração vive em runPatientIntake.
   const criar = useMutation({
-    mutationFn: (v: PatientFormValues) =>
-      createMyPatient({
-        data: {
-          token,
-          nome: v.nome,
-          nascimento: v.nascimento || null,
-          sexo: v.sexo || null,
-          cpf: v.cpf || null,
-          telefone: v.telefone || null,
-          email: v.email || null,
-          convenio: v.convenio || null,
-          queixa: v.queixa ?? "",
-          column: v.column,
-        },
-      }),
+    mutationFn: (payload: PatientIntakePayload) => runPatientIntake(token, payload),
     onSuccess: (r) => {
-      if (!r.ok) return toast.error("Não consegui cadastrar. Tente de novo.");
-      toast.success(`${r.patient.nome} no painel!`);
+      if (!r.ok) return toast.error("Não consegui salvar. Tente de novo.");
+      if (r.mode === "exames") {
+        toast.success(`Exames adicionados ao prontuário de ${r.patient.nome}.`);
+      } else {
+        toast.success(
+          `${r.patient.nome} no painel! Código: ${r.patient.patientCode} — anote para o paciente.`,
+          { duration: 7000 },
+        );
+      }
       setNovoOpen(false);
       qc.invalidateQueries({ queryKey: ["workspace"] });
     },
@@ -248,7 +243,9 @@ function PainelDoDia() {
         open={novoOpen}
         onOpenChange={setNovoOpen}
         columns={columns}
-        onSubmit={(v) => criar.mutate(v)}
+        onSubmit={(values, intake) =>
+          criar.mutate({ values, foundPatient: intake?.foundPatient ?? null, fileNames: intake?.fileNames ?? [] })
+        }
         saving={criar.isPending}
       />
       <BoardDialog open={boardOpen} onOpenChange={setBoardOpen} columns={columns} token={token} />

@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FlaskConical,
   Loader2,
+  Pill,
   Plus,
   ShieldCheck,
   Stethoscope,
@@ -69,7 +70,10 @@ type ConsultaEvent = {
   date: string;
   evolutionId: string;
   sealed: boolean;
-  summary: string;
+  assessment: string;
+  plan: string;
+  hasPrescription: boolean;
+  evolucaoSnippet: string;
 };
 
 type TimelineEvent = ExamEvent | ConsultaEvent;
@@ -140,9 +144,13 @@ export function PatientHistory({
       date: e.createdAt.slice(0, 10),
       evolutionId: e.id,
       sealed: !!e.sealed,
-      summary: e.soap.a || e.evolucao.slice(0, 90),
+      assessment: e.soap.a,
+      plan: e.soap.p,
+      hasPrescription: !!e.prescription,
+      evolucaoSnippet: e.evolucao,
     }));
-    return [...examEvents, ...consultas].sort((a, b) => a.date.localeCompare(b.date));
+    // mais recente primeiro — a linha do tempo vertical lê de cima (hoje) pra baixo
+    return [...examEvents, ...consultas].sort((a, b) => b.date.localeCompare(a.date));
   }, [examEvents, evolutions]);
 
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -197,88 +205,56 @@ export function PatientHistory({
           </p>
         </div>
       ) : (
-        <>
-          {/* Linha do tempo horizontal */}
-          <div className="relative mt-3 overflow-x-auto pb-1">
-            <div className="absolute left-0 right-0 top-[13px] h-0.5 bg-border" />
-            <div className="relative flex gap-3">
-              {events.map((ev) => {
-                const status =
-                  ev.kind === "exame" ? ev.status : ev.sealed ? "Selada" : "Rascunho";
-                const Icon = ev.kind === "exame" ? FlaskConical : ev.sealed ? ShieldCheck : Stethoscope;
-                const active = ev.key === activeKey;
-                return (
-                  <button
-                    key={ev.key}
-                    onClick={() => onEventClick(ev)}
-                    className={`w-48 shrink-0 rounded-xl border p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
-                      active ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border bg-card"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-white shadow ${NODE_TONE[status]}`}
-                      >
-                        <Icon className="h-3 w-3" />
-                      </span>
-                      <span className="text-[11px] font-semibold text-muted-foreground">
-                        {fmtMonthYear(ev.date)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 line-clamp-1 text-xs font-medium">
-                      {ev.kind === "exame" ? ev.label : ev.sealed ? "Consulta selada" : "Evolução em aberto"}
-                    </div>
-                    <div className="mt-0.5 line-clamp-2 min-h-7 text-[11px] leading-snug text-muted-foreground">
-                      {ev.kind === "exame"
-                        ? ev.markers.map((m) => `${m.name} ${m.value}`).join(" · ")
-                        : ev.summary}
-                    </div>
-                    <span className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[status]}`}>
-                      {status}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_320px]">
+          {/* Linha do tempo vertical (esquerda) */}
+          <div className="space-y-2">
+            {events.map((ev, i) => (
+              <TimelineRow
+                key={ev.key}
+                ev={ev}
+                active={ev.key === activeKey}
+                isLast={i === events.length - 1}
+                onClick={() => onEventClick(ev)}
+              />
+            ))}
           </div>
 
-          {/* Gráficos de biomarcadores */}
+          {/* Biomarcadores (direita) — coluna vertical com rolagem própria */}
           {allNames.length > 0 && (
-            <div className="mt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="lg:border-l lg:border-border lg:pl-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Biomarcadores
-                  {activeExam && !showAll && (
-                    <span className="ml-1.5 normal-case text-primary">
-                      · {activeExam.label} ({fmtMonthYear(activeExam.date)})
-                    </span>
-                  )}
                 </div>
-                {allNames.length > visibleNames.length && (
+                {allNames.length > visibleNames.length ? (
                   <button
                     onClick={() => setShowAll(true)}
                     className="text-[11px] font-medium text-primary hover:underline"
                   >
                     Mostrar todos ({allNames.length})
                   </button>
-                )}
-                {showAll && activeExam && (
+                ) : showAll && activeExam ? (
                   <button
                     onClick={() => setShowAll(false)}
                     className="text-[11px] font-medium text-primary hover:underline"
                   >
-                    Só os do evento selecionado
+                    Só do evento
                   </button>
-                )}
+                ) : null}
               </div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {activeExam && !showAll && (
+                <div className="mb-2 text-[11px] text-primary">
+                  {activeExam.label} · {fmtMonthYear(activeExam.date)}
+                </div>
+              )}
+              <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
                 {visibleNames.map((name) => (
                   <BiomarkerChart key={name} name={name} measurements={measurements} />
                 ))}
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       <AddExamDialog
@@ -289,6 +265,114 @@ export function PatientHistory({
         onDone={onChanged}
       />
     </div>
+  );
+}
+
+function TimelineRow({
+  ev,
+  active,
+  isLast,
+  onClick,
+}: {
+  ev: TimelineEvent;
+  active: boolean;
+  isLast: boolean;
+  onClick: () => void;
+}) {
+  const status = ev.kind === "exame" ? ev.status : ev.sealed ? "Selada" : "Rascunho";
+  const Icon = ev.kind === "exame" ? FlaskConical : ev.sealed ? ShieldCheck : Stethoscope;
+  const title =
+    ev.kind === "exame" ? ev.label : ev.sealed ? "Consulta selada" : "Evolução em aberto";
+  const outCount = ev.kind === "exame" ? ev.markers.filter(isOutOfRange).length : 0;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`group flex w-full gap-3 rounded-xl border p-3 text-left transition hover:border-primary/40 hover:shadow-sm ${
+        active ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border bg-card"
+      }`}
+    >
+      {/* Rail: nó + linha conectora */}
+      <div className="flex flex-col items-center">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-white shadow ${NODE_TONE[status]}`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        {!isLast && <span className="mt-1 w-px flex-1 bg-border" />}
+      </div>
+
+      {/* Conteúdo */}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-medium">{title}</span>
+            <span className="text-[11px] text-muted-foreground">{fmtMonthYear(ev.date)}</span>
+          </div>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[status]}`}>
+            {status}
+          </span>
+        </div>
+
+        {ev.kind === "exame" ? (
+          <>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {ev.markers.map((m) => {
+                const bad = isOutOfRange(m);
+                return (
+                  <span
+                    key={m.id}
+                    className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums ring-1 ${
+                      bad
+                        ? "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-900"
+                        : "bg-muted/60 text-foreground/80 ring-transparent"
+                    }`}
+                  >
+                    {m.name} {m.value}
+                    <span className="ml-0.5 font-normal text-muted-foreground">{m.unit}</span>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              {ev.markers.length} biomarcador{ev.markers.length === 1 ? "" : "es"}
+              {outCount > 0 ? (
+                <span className="text-rose-600 dark:text-rose-400"> · {outCount} alterado{outCount === 1 ? "" : "s"}</span>
+              ) : (
+                " · todos na faixa"
+              )}
+              <span className="text-primary opacity-0 transition group-hover:opacity-100"> · ver gráficos →</span>
+            </div>
+          </>
+        ) : (
+          <>
+            {ev.assessment && (
+              <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-foreground/90">
+                <span className="font-medium text-muted-foreground">A: </span>
+                {ev.assessment}
+              </p>
+            )}
+            {ev.plan && (
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                <span className="font-medium">Conduta: </span>
+                {ev.plan}
+              </p>
+            )}
+            {!ev.assessment && !ev.plan && (
+              <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-foreground/90">
+                {ev.evolucaoSnippet}
+              </p>
+            )}
+            {ev.hasPrescription && (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800 ring-1 ring-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:ring-violet-900">
+                <Pill className="h-2.5 w-2.5" />
+                Receita emitida
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </button>
   );
 }
 

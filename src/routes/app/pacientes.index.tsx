@@ -46,17 +46,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
+import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { ChargeDialog, ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
   archiveMyPatient,
-  createMyPatient,
   getWorkspace,
   moveMyPatient,
   setMyAppointmentStatus,
   setMyChargeStatus,
 } from "@/lib/api/clinic.functions";
+import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
   formatBRL,
@@ -126,25 +126,19 @@ function PainelPacientes() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["workspace"] });
 
+  // Fluxo unificado "Novo paciente" (Patch A.1) — mesmo helper do Painel do dia.
   const criar = useMutation({
-    mutationFn: (v: PatientFormValues) =>
-      createMyPatient({
-        data: {
-          token,
-          nome: v.nome,
-          nascimento: v.nascimento || null,
-          sexo: v.sexo || null,
-          cpf: v.cpf || null,
-          telefone: v.telefone || null,
-          email: v.email || null,
-          convenio: v.convenio || null,
-          queixa: v.queixa ?? "",
-          column: v.column,
-        },
-      }),
+    mutationFn: (payload: PatientIntakePayload) => runPatientIntake(token, payload),
     onSuccess: (r) => {
-      if (!r.ok) return toast.error("Não consegui cadastrar. Tente de novo.");
-      toast.success(`${r.patient.nome} cadastrado.`);
+      if (!r.ok) return toast.error("Não consegui salvar. Tente de novo.");
+      if (r.mode === "exames") {
+        toast.success(`Exames adicionados ao prontuário de ${r.patient.nome}.`);
+      } else {
+        toast.success(
+          `${r.patient.nome} cadastrado! Código: ${r.patient.patientCode}.`,
+          { duration: 7000 },
+        );
+      }
       setNovoOpen(false);
       invalidate();
     },
@@ -479,7 +473,9 @@ function PainelPacientes() {
         open={novoOpen}
         onOpenChange={setNovoOpen}
         columns={columns}
-        onSubmit={(v) => criar.mutate(v)}
+        onSubmit={(values, intake) =>
+          criar.mutate({ values, foundPatient: intake?.foundPatient ?? null, fileNames: intake?.fileNames ?? [] })
+        }
         saving={criar.isPending}
       />
       <ScheduleDialog
