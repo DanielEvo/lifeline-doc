@@ -86,6 +86,7 @@ const NAV = [
 
 function Shell({ clinic }: { clinic: Clinic }) {
   const navigate = useNavigate();
+  const [kbOpen, setKbOpen] = useState(false);
 
   const sair = async () => {
     const s = getSession();
