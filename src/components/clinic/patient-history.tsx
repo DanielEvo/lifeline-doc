@@ -208,16 +208,24 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
 export function ClinicalTimeline({
   events,
   activeKey,
+  activeConsultaKey,
   onEventClick,
   anos,
   headerRight,
 }: {
   events: TimelineEvent[];
   activeKey: string | null;
+  activeConsultaKey?: string | null;
   onEventClick: (ev: TimelineEvent) => void;
   anos: number;
   headerRight?: ReactNode;
 }) {
+  const categorias = [
+    { id: "exames", label: "Exames", Icon: FlaskConical, tone: "text-emerald-600" },
+    { id: "consultas", label: "Consultas", Icon: Stethoscope, tone: "text-sky-600" },
+    { id: "cirurgias", label: "Cirurgias", Icon: Scissors, tone: "text-rose-600" },
+  ] as const;
+
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -229,7 +237,18 @@ export function ClinicalTimeline({
             </span>
           )}
         </h2>
-        {headerRight && <div className="flex items-center gap-2">{headerRight}</div>}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium">
+            {categorias.map((c, i) => (
+              <span key={c.id} className="flex items-center gap-1">
+                {i > 0 && <span className="text-muted-foreground/40">·</span>}
+                <c.Icon className={`h-3 w-3 ${c.tone}`} />
+                <span className="text-muted-foreground">{c.label}</span>
+              </span>
+            ))}
+          </div>
+          {headerRight}
+        </div>
       </div>
 
 
@@ -248,7 +267,7 @@ export function ClinicalTimeline({
               <TimelineCard
                 key={ev.key}
                 ev={ev}
-                active={ev.key === activeKey}
+                active={ev.key === activeKey || ev.key === activeConsultaKey}
                 onClick={() => onEventClick(ev)}
               />
             ))}
@@ -258,6 +277,7 @@ export function ClinicalTimeline({
     </div>
   );
 }
+
 
 function TimelineCard({
   ev,
