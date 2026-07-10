@@ -881,12 +881,11 @@ function NovaEvolucao({
 
   const salvar = useMutation({
     mutationFn: () =>
-      saveEvolution({ data: { token, patientId, evolucao: texto, planoTerapeutico: plano } }),
+      saveEvolution({ data: { token, patientId, evolucao: texto } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar a evolução.");
       toast.success("Evolução registrada.");
       setTexto("");
-      setPlano("");
       onSaved();
     },
   });
