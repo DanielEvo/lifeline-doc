@@ -199,7 +199,7 @@ export function ClinicalTimeline({
   activeKey: string | null;
   onEventClick: (ev: TimelineEvent) => void;
   anos: number;
-  headerRight?: React.ReactNode;
+  headerRight?: ReactNode;
 }) {
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
