@@ -312,7 +312,7 @@ export function BiomarkerPanel({
   allNames: string[];
   onChanged: () => void;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
+  
 
   return (
     <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
