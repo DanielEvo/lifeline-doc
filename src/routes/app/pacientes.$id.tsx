@@ -577,7 +577,7 @@ function NovaEvolucao({
   };
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">Evolução atual</h2>
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
