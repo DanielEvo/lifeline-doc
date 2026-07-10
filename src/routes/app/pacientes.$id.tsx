@@ -78,7 +78,7 @@ import {
 } from "@/lib/api/clinic.functions";
 import { ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
-import { BiomarkerPanel, ClinicalTimeline, usePatientHistory, type ConsultaEvent } from "@/components/clinic/patient-history";
+import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import {
   ageFrom,
