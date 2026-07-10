@@ -553,11 +553,13 @@ function SolicitarHistoricoDialog({
   onOpenChange,
   patientName,
   telefone,
+  onAutorizado,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   patientName: string;
   telefone: string | null;
+  onAutorizado?: () => void;
 }) {
   const [scope, setScope] = useState("exames");
   const [sent, setSent] = useState(false);
@@ -595,6 +597,7 @@ function SolicitarHistoricoDialog({
     if (code.length !== 6) return;
     setUnlocked(true);
     toast.success("Histórico liberado pelo paciente.");
+    onAutorizado?.();
     setTimeout(() => {
       onOpenChange(false);
       reset();
