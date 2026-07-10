@@ -875,7 +875,7 @@ function NovaEvolucao({
   onSolicitarHistorico: () => void;
 }) {
   const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
-  const [plano, setPlano] = useState("");
+  
   const [template, setTemplate] = useState<"anamnese" | "soap">(isPrimeiraConsulta ? "anamnese" : "soap");
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
 
