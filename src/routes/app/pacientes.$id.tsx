@@ -301,6 +301,16 @@ function Prontuario() {
         activeKey={hist.activeKey}
         onEventClick={hist.onEventClick}
         anos={hist.anos}
+        headerRight={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+              <FileUp className="mr-1 h-3.5 w-3.5" /> Adicionar exames
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTokenOpen(true)}>
+              <KeyRound className="mr-1 h-3.5 w-3.5" /> Solicitar histórico
+            </Button>
+          </>
+        }
       />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
