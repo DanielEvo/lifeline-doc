@@ -315,7 +315,7 @@ export function BiomarkerPanel({
   const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-6 lg:self-start">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Biomarcadores</h2>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
@@ -332,7 +332,7 @@ export function BiomarkerPanel({
           </p>
         </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-2 mt-3 flex flex-wrap items-center justify-between gap-1">
             <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {allNames.length} biomarcador{allNames.length === 1 ? "" : "es"}
@@ -358,12 +358,12 @@ export function BiomarkerPanel({
               {activeExam.label} · {fmtMonthYear(activeExam.date)}
             </div>
           )}
-          <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {visibleNames.map((name) => (
               <BiomarkerChart key={name} name={name} measurements={measurements} />
             ))}
           </div>
-        </>
+        </div>
       )}
 
       <AddExamDialog
