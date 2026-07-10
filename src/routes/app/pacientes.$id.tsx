@@ -17,12 +17,12 @@ import {
   Loader2,
   Lock,
   Mail,
-  MessageCircle,
   Pencil,
   Phone,
   Pill,
   Plus,
   ShieldCheck,
+  Sparkles,
   Stethoscope,
   X,
 } from "lucide-react";
@@ -59,7 +59,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
 import {
   archiveMyPatient,
@@ -275,12 +274,18 @@ function Prontuario() {
           </div>
         </div>
 
-        {(p.queixa || p.criticalFlag) && (
+        {(p.queixa || p.criticalFlag || p.briefing) && (
           <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
             {p.criticalFlag && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span><strong>Parâmetro crítico:</strong> {p.criticalFlag}</span>
+              </div>
+            )}
+            {p.briefing && (
+              <div className="flex items-start gap-2 rounded-lg bg-cyan-50 px-3 py-2 text-xs text-cyan-900 ring-1 ring-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-300 dark:ring-cyan-900">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span><strong>Briefing da triagem IA:</strong> {p.briefing}</span>
               </div>
             )}
             {p.queixa && !p.briefing && (
@@ -305,7 +310,6 @@ function Prontuario() {
             token={token}
             patientId={id}
             onSaved={invalidate}
-            briefing={p.briefing}
             isPrimeiraConsulta={evolutions.length === 0}
             evolutionsCount={evolutions.length}
           />
@@ -534,14 +538,12 @@ function NovaEvolucao({
   token,
   patientId,
   onSaved,
-  briefing,
   isPrimeiraConsulta,
   evolutionsCount,
 }: {
   token: string;
   patientId: string;
   onSaved: () => void;
-  briefing: string | null;
   isPrimeiraConsulta: boolean;
   evolutionsCount: number;
 }) {
@@ -576,32 +578,6 @@ function NovaEvolucao({
 
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
-      {briefing && (
-        <TooltipProvider delayDuration={150}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="mb-3 cursor-help rounded-2xl border border-border bg-slate-50 p-4 dark:bg-slate-900/40">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <MessageCircle className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="text-sm font-semibold">Briefing pré-consulta</span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-900">
-                    📋 Via WhatsApp
-                  </span>
-                </div>
-                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
-                  {briefing}
-                </p>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              Gerado automaticamente a partir das mensagens do paciente no WhatsApp
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">Evolução atual</h2>
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
