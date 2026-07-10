@@ -12,6 +12,7 @@ import {
   FlaskConical,
   Loader2,
   Plus,
+  Scissors,
   ShieldCheck,
   Stethoscope,
   TrendingDown,
