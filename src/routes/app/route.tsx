@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Outlet, createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
+  BookOpen,
   KanbanSquare,
   Loader2,
   LogOut,
@@ -18,6 +19,8 @@ import { getMe, logout as logoutFn } from "@/lib/api/auth.functions";
 import { clearSession, getSession, type DoctorSession } from "@/lib/session";
 import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -83,6 +86,7 @@ const NAV = [
 
 function Shell({ clinic }: { clinic: Clinic }) {
   const navigate = useNavigate();
+  const [kbOpen, setKbOpen] = useState(false);
 
   const sair = async () => {
     const s = getSession();
@@ -170,6 +174,13 @@ function Shell({ clinic }: { clinic: Clinic }) {
                 <n.icon className="h-4 w-4" />
               </Link>
             ))}
+            <button
+              onClick={() => setKbOpen(true)}
+              aria-label="Base de conhecimento"
+              className="rounded-md px-2 py-1 text-muted-foreground"
+            >
+              <BookOpen className="h-4 w-4" />
+            </button>
             <button onClick={sair} aria-label="Sair" className="rounded-md px-2 py-1 text-muted-foreground">
               <LogOut className="h-4 w-4" />
             </button>
@@ -179,7 +190,13 @@ function Shell({ clinic }: { clinic: Clinic }) {
       </div>
 
       <main className="flex-1 overflow-x-hidden">
+        <div className="sticky top-0 z-20 hidden items-center justify-end border-b border-border bg-background/95 px-4 py-2 backdrop-blur md:flex">
+          <Button variant="outline" size="sm" onClick={() => setKbOpen(true)}>
+            <BookOpen className="mr-1.5 h-4 w-4" /> Base de conhecimento
+          </Button>
+        </div>
         <Outlet />
+        <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} />
       </main>
     </div>
   );

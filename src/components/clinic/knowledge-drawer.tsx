@@ -189,8 +189,12 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-[340px] sm:w-[400px] flex flex-col gap-0 p-0">
+      <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
+        <SheetContent
+          side="right"
+          overlayClassName="bg-black/20"
+          className="w-[340px] sm:w-[400px] flex flex-col gap-0 p-0"
+        >
           <SheetHeader className="border-b border-border px-4 py-3">
             <SheetTitle className="flex items-center gap-2 text-sm">
               <BookOpen className="h-4 w-4 text-primary" />
