@@ -903,12 +903,72 @@ function NovaEvolucao({
     setTexto(t === "anamnese" ? ANAMNESE_TEMPLATE : "");
   };
 
+  const historicoChips = [
+    { id: "consultas", label: "Consultas", Icon: Stethoscope },
+    { id: "exames", label: "Exames", Icon: ClipboardList },
+    { id: "prescricoes", label: "Prescrições", Icon: Pill },
+    { id: "alergias", label: "Alergias", Icon: AlertTriangle },
+  ] as const;
+
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Evolução atual</h2>
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
       </div>
+
+      <div
+        className={`mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border px-2 py-1.5 ${
+          historicoAutorizado
+            ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30"
+            : "border-dashed border-border bg-muted/30"
+        }`}
+        title={historicoAutorizado ? "Histórico liberado pelo paciente" : "Solicite acesso via token para consultar o histórico"}
+      >
+        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {historicoAutorizado ? (
+            <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <Lock className="h-3 w-3" />
+          )}
+          Histórico
+        </span>
+        <div className="flex flex-wrap items-center gap-1">
+          {historicoChips.map((c) => {
+            const disabled = !historicoAutorizado;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={disabled}
+                onClick={() =>
+                  toast.message(`${c.label} do paciente`, {
+                    description: "Registros históricos abertos em painel lateral.",
+                  })
+                }
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+                  disabled
+                    ? "cursor-not-allowed border-border/60 bg-background/60 text-muted-foreground/60"
+                    : "border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                }`}
+              >
+                <c.Icon className="h-3 w-3" />
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+        {!historicoAutorizado && (
+          <button
+            type="button"
+            onClick={onSolicitarHistorico}
+            className="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-primary hover:underline"
+          >
+            <KeyRound className="h-3 w-3" /> Solicitar autorização
+          </button>
+        )}
+      </div>
+
 
       <div className="mb-2 mt-2 flex flex-wrap items-center gap-2">
         <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
