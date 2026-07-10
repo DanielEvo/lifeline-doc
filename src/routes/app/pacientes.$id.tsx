@@ -875,18 +875,17 @@ function NovaEvolucao({
   onSolicitarHistorico: () => void;
 }) {
   const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
-  const [plano, setPlano] = useState("");
+  
   const [template, setTemplate] = useState<"anamnese" | "soap">(isPrimeiraConsulta ? "anamnese" : "soap");
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
 
   const salvar = useMutation({
     mutationFn: () =>
-      saveEvolution({ data: { token, patientId, evolucao: texto, planoTerapeutico: plano } }),
+      saveEvolution({ data: { token, patientId, evolucao: texto } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar a evolução.");
       toast.success("Evolução registrada.");
       setTexto("");
-      setPlano("");
       onSaved();
     },
   });
@@ -1014,18 +1013,6 @@ function NovaEvolucao({
           <SoapReadOnly soap={preview} />
         </div>
       )}
-      <div className="mt-3 space-y-1">
-        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <ClipboardList className="h-3.5 w-3.5" />
-          Plano terapêutico
-        </Label>
-        <Textarea
-          value={plano}
-          onChange={(e) => setPlano(e.target.value)}
-          rows={2}
-          placeholder="Conduta, prescrição, retorno…"
-        />
-      </div>
       <div className="mt-2 flex justify-end">
         <Button
           size="sm"
