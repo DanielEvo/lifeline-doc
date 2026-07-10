@@ -59,7 +59,6 @@ import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { PatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import { SimilarCases } from "@/components/clinic/similar-cases";
-import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 import {
   ageFrom,
   DEFAULT_COLUMNS,
