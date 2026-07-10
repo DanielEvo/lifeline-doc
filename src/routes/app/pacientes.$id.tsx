@@ -541,7 +541,8 @@ function UploadExamesDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Solicitar histórico via token — gera código curto e mensagem para WhatsApp.
+// Solicitar histórico via token — o paciente recebe o pedido, vê um código de
+// 6 dígitos no próprio dispositivo e dita para o médico durante a consulta.
 
 function SolicitarHistoricoDialog({
   open,
@@ -554,15 +555,10 @@ function SolicitarHistoricoDialog({
   patientName: string;
   telefone: string | null;
 }) {
-  const [token, setTokenValue] = useState("");
   const [scope, setScope] = useState("exames");
-
-  const gerar = () => {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let t = "";
-    for (let i = 0; i < 8; i++) t += alphabet[Math.floor(Math.random() * alphabet.length)];
-    setTokenValue(`${t.slice(0, 4)}-${t.slice(4)}`);
-  };
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
 
   const scopeLabel: Record<string, string> = {
     exames: "exames laboratoriais e de imagem",
@@ -570,9 +566,7 @@ function SolicitarHistoricoDialog({
     tudo: "todo o histórico clínico",
   };
 
-  const mensagem = token
-    ? `Olá, ${patientName.split(" ")[0]}! Precisamos acessar seus ${scopeLabel[scope]} para dar continuidade ao seu atendimento. Use o código *${token}* em: lifeline.doc/paciente/compartilhar (válido por 72h).`
-    : "";
+  const mensagem = `Olá, ${patientName.split(" ")[0]}! Precisamos acessar seus ${scopeLabel[scope]} para dar continuidade ao seu atendimento. Abra lifeline.doc/paciente/compartilhar — um código de 6 dígitos vai aparecer no seu celular. Diga esse código para o(a) médico(a) durante a consulta.`;
 
   const copiar = async (text: string) => {
     try {
@@ -583,25 +577,41 @@ function SolicitarHistoricoDialog({
     }
   };
 
-  const waHref = telefone && mensagem
+  const waHref = telefone
     ? `https://wa.me/${telefone.replace(/\D/g, "")}?text=${encodeURIComponent(mensagem)}`
     : null;
 
+  const reset = () => {
+    setSent(false);
+    setCode("");
+    setUnlocked(false);
+  };
+
+  const desbloquear = () => {
+    if (code.length !== 6) return;
+    setUnlocked(true);
+    toast.success("Histórico liberado pelo paciente.");
+    setTimeout(() => {
+      onOpenChange(false);
+      reset();
+    }, 900);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setTokenValue(""); }}>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-primary" /> Solicitar acesso ao histórico
           </DialogTitle>
           <DialogDescription>
-            Gere um token único que o paciente usa para liberar o histórico entre profissionais.
+            O paciente recebe o pedido, vê um código de 6 dígitos no próprio celular e dita para você durante a consulta.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
             <Label className="text-xs">O que solicitar</Label>
-            <Select value={scope} onValueChange={setScope}>
+            <Select value={scope} onValueChange={setScope} disabled={sent}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="exames">Exames (labs e imagem)</SelectItem>
@@ -611,40 +621,66 @@ function SolicitarHistoricoDialog({
             </Select>
           </div>
 
-          {!token ? (
-            <Button className="w-full brand-gradient text-primary-foreground" onClick={gerar}>
-              <KeyRound className="mr-1.5 h-4 w-4" /> Gerar token
-            </Button>
-          ) : (
+          {!sent ? (
             <>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Token · válido por 72h
-                </div>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="font-mono text-xl font-bold tracking-widest">{token}</span>
-                  <Button size="sm" variant="ghost" onClick={() => copiar(token)}>
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
               <div className="rounded-xl border border-border bg-card p-3">
                 <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                   Mensagem para o paciente
                 </div>
                 <p className="mt-1 whitespace-pre-line text-xs text-foreground/80">{mensagem}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => copiar(mensagem)}>
-                    <Copy className="mr-1 h-3.5 w-3.5" /> Copiar
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => copiar(mensagem)}>
+                  <Copy className="mr-1 h-3.5 w-3.5" /> Copiar mensagem
+                </Button>
+                {waHref && (
+                  <Button
+                    size="sm"
+                    asChild
+                    className="brand-gradient text-primary-foreground"
+                    onClick={() => setSent(true)}
+                  >
+                    <a href={waHref} target="_blank" rel="noreferrer">Enviar via WhatsApp</a>
                   </Button>
-                  {waHref && (
-                    <Button size="sm" asChild className="brand-gradient text-primary-foreground">
-                      <a href={waHref} target="_blank" rel="noreferrer">Enviar via WhatsApp</a>
-                    </Button>
-                  )}
-                </div>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setSent(true)}>
+                  Já enviei
+                </Button>
               </div>
             </>
+          ) : (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Digite o código que o paciente disser
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Somente o paciente vê o código no dispositivo dele. Peça que ele leia em voz alta.
+              </p>
+              <Input
+                inputMode="numeric"
+                maxLength={6}
+                autoFocus
+                placeholder="••••••"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="mt-2 text-center font-mono text-2xl tracking-[0.6em]"
+                disabled={unlocked}
+              />
+              <Button
+                className="mt-2 w-full brand-gradient text-primary-foreground"
+                disabled={code.length !== 6 || unlocked}
+                onClick={desbloquear}
+              >
+                {unlocked ? "Liberado ✓" : "Desbloquear histórico"}
+              </Button>
+              <button
+                type="button"
+                className="mt-2 w-full text-[11px] text-muted-foreground hover:underline"
+                onClick={reset}
+              >
+                Reenviar pedido
+              </button>
+            </div>
           )}
         </div>
         <DialogFooter>
