@@ -12,6 +12,7 @@ import { z } from "zod";
 import { requireDoctor } from "../auth.server";
 import {
   createPatient,
+  findPatientByCode,
   getPatient,
   importSamples,
   listPatients,
@@ -38,6 +39,15 @@ const COLUMN = z.string().min(1).max(32);
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const UNAUTH = { ok: false as const, error: "unauthorized" as const };
+
+export const lookupPatientByCode = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, code: z.string().min(1).max(20) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await findPatientByCode(doctor.id, data.code);
+    return { ok: true as const, patient: patient ?? null };
+  });
 
 export const getWorkspace = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token }))

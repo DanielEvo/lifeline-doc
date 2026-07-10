@@ -10,6 +10,14 @@ export type { ClinicColumn, Patient } from "./clinic-types";
 
 const FILE = "patients.json";
 
+const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function generatePatientCode(): string {
+  let suffix = "";
+  for (let i = 0; i < 4; i++) suffix += CHARS[Math.floor(Math.random() * CHARS.length)];
+  return `LFL-${suffix}`;
+}
+
 const TINTS = [
   "from-rose-400 to-pink-500",
   "from-cyan-400 to-teal-500",
@@ -49,11 +57,32 @@ export async function getPatient(doctorId: string, id: string): Promise<Patient 
   return rows.find((p) => p.id === id && p.doctorId === doctorId);
 }
 
+export async function findPatientByCode(
+  doctorId: string,
+  code: string,
+): Promise<Patient | undefined> {
+  const normalised = code.trim().toUpperCase();
+  const rows = await readRows<Patient>(FILE);
+  return rows.find((p) => p.doctorId === doctorId && p.patientCode === normalised);
+}
+
 export async function createPatient(doctorId: string, input: PatientInput): Promise<Patient> {
+  const rows = await readRows<Patient>(FILE);
+  let patientCode = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generatePatientCode();
+    if (!rows.some((p) => p.doctorId === doctorId && p.patientCode === candidate)) {
+      patientCode = candidate;
+      break;
+    }
+  }
+  if (!patientCode) throw new Error("Falha ao gerar patientCode único após 5 tentativas");
+
   const now = nowIso();
   const patient: Patient = {
     id: newId(),
     doctorId,
+    patientCode,
     nome: input.nome.trim(),
     nascimento: input.nascimento || null,
     sexo: input.sexo ?? null,

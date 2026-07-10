@@ -28,6 +28,8 @@ export const CONVENIOS = [
 export type Patient = {
   id: string;
   doctorId: string;
+  /** Código único dentro do namespace do médico. Formato: "LFL-XXXX" (base-36 maiúsculo). */
+  patientCode: string;
   nome: string;
   nascimento: string | null; // ISO date (yyyy-mm-dd)
   sexo: "feminino" | "masculino" | "outro" | null;
