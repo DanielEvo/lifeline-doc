@@ -363,13 +363,6 @@ export function BiomarkerPanel({
         </div>
       )}
 
-      <AddExamDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        token={token}
-        patientId={patientId}
-        onDone={onChanged}
-      />
     </div>
   );
 }
