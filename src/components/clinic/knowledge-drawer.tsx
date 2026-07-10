@@ -16,6 +16,7 @@ import {
   Trash2,
   Heart,
   Ban,
+  Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { SimilarCases } from "@/components/clinic/similar-cases";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -214,7 +216,7 @@ const STUDIES_SEED: Study[] = [
 // ---------------------------------------------------------------------------
 
 type ChatMsg = { id: string; from: "user" | "ai"; text: string };
-type TabId = "chat" | "protocolos" | "perfil" | "conhecimento" | "science";
+type TabId = "chat" | "protocolos" | "similares" | "perfil" | "conhecimento" | "science";
 
 type Props = {
   open: boolean;
@@ -314,9 +316,10 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)} className="flex flex-1 flex-col overflow-hidden">
             <div className="border-b border-border px-2 pt-2">
-              <TabsList className="grid h-auto w-full grid-cols-5 bg-muted/50 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-6 bg-muted/50 p-1">
                 <TabTrigger value="chat" icon={Sparkles} label="Chat" />
                 <TabTrigger value="protocolos" icon={BookOpen} label="Protocolos" />
+                <TabTrigger value="similares" icon={Users} label="Casos similares" />
                 <TabTrigger value="perfil" icon={UserCog} label="Perfil" />
                 <TabTrigger value="conhecimento" icon={FileText} label="Docs" />
                 <TabTrigger value="science" icon={FlaskConical} label="Science" />
@@ -447,6 +450,13 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
                 <Button variant="outline" size="sm" className="mt-3 w-full">
                   <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo protocolo
                 </Button>
+              </div>
+            </TabsContent>
+
+            {/* ---------- CASOS SIMILARES ---------- */}
+            <TabsContent value="similares" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                <SimilarCases />
               </div>
             </TabsContent>
 
@@ -652,7 +662,7 @@ function TabTrigger({
   return (
     <TabsTrigger
       value={value}
-      className="flex flex-col items-center gap-0.5 px-1 py-1.5 text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm"
+      className="flex flex-col items-center gap-0.5 px-1 py-1.5 text-center text-[10px] leading-tight data-[state=active]:bg-background data-[state=active]:shadow-sm"
     >
       <Icon className="h-3.5 w-3.5" />
       {label}

@@ -60,7 +60,6 @@ import { ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
-import { SimilarCases } from "@/components/clinic/similar-cases";
 import {
   ageFrom,
   DEFAULT_COLUMNS,
@@ -319,9 +318,6 @@ function Prontuario() {
               </div>
             )}
           </div>
-
-          {/* Apoio à decisão */}
-          <SimilarCases />
         </div>
 
         {/* Biomarcadores: painel próprio, sticky ao lado da evolução */}
