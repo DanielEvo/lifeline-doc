@@ -12,6 +12,7 @@ import {
   FlaskConical,
   Loader2,
   Plus,
+  Scissors,
   ShieldCheck,
   Stethoscope,
   TrendingDown,
@@ -112,21 +113,24 @@ function fmtShort(ymd: string): string {
 // dois pedaços via props.
 
 export function usePatientHistory(measurements: Measurement[], evolutions: Evolution[]) {
-  // eventos de exame: agrupa por data+rótulo
+  // exames: agrupados por MÊS/ANO da coleta (independente do rótulo/painel)
   const examEvents = useMemo<ExamEvent[]>(() => {
     const groups = new Map<string, Measurement[]>();
     for (const m of measurements) {
-      const key = `${m.date}|${m.label}`;
+      const key = m.date.slice(0, 7); // yyyy-mm
       groups.set(key, [...(groups.get(key) ?? []), m]);
     }
-    return [...groups.entries()].map(([key, markers]) => ({
-      key,
-      kind: "exame" as const,
-      date: markers[0].date,
-      label: markers[0].label,
-      markers,
-      status: examStatus(markers),
-    }));
+    return [...groups.entries()].map(([key, markers]) => {
+      const monthStart = `${key}-01`;
+      return {
+        key: `exam-${key}`,
+        kind: "exame" as const,
+        date: monthStart,
+        label: `Exames · ${fmtMonthYear(monthStart)}`,
+        markers,
+        status: examStatus(markers),
+      };
+    });
   }, [measurements]);
 
   const events = useMemo<TimelineEvent[]>(() => {
@@ -146,6 +150,7 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
   }, [examEvents, evolutions]);
 
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeConsultaKey, setActiveConsultaKey] = useState<string | null>(null);
   const lastExamKey = examEvents.length ? examEvents[examEvents.length - 1].key : null;
   useEffect(() => {
     // evento ativo padrão: o exame mais recente
@@ -156,6 +161,11 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
 
   const allNames = useMemo(() => [...new Set(measurements.map((m) => m.name))], [measurements]);
   const activeExam = examEvents.find((e) => e.key === activeKey);
+  const activeConsulta = useMemo<ConsultaEvent | null>(() => {
+    if (!activeConsultaKey) return null;
+    const found = events.find((e) => e.key === activeConsultaKey);
+    return found && found.kind === "consulta" ? found : null;
+  }, [activeConsultaKey, events]);
   const visibleNames = useMemo(() => {
     if (showAll || !activeExam) return allNames;
     return [...new Set(activeExam.markers.map((m) => m.name))];
@@ -164,17 +174,24 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
   const onEventClick = (ev: TimelineEvent) => {
     if (ev.kind === "exame") {
       setActiveKey(ev.key);
+      setActiveConsultaKey(null);
       setShowAll(false);
       return;
     }
-    document.getElementById(ev.key)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // consulta: ativa painel de histórico da consulta (substitui "Evolução atual")
+    setActiveConsultaKey((k) => (k === ev.key ? null : ev.key));
   };
+
+  const clearActiveConsulta = () => setActiveConsultaKey(null);
 
   const anos = new Set(events.map((e) => e.date.slice(0, 4))).size;
 
   return {
     events,
     activeKey,
+    activeConsultaKey,
+    activeConsulta,
+    clearActiveConsulta,
     onEventClick,
     anos,
     showAll,
@@ -185,22 +202,31 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
   };
 }
 
+
 // ---------------------------------------------------------------------------
 // Linha do tempo — horizontal, full-width, com scroll lateral.
 
 export function ClinicalTimeline({
   events,
   activeKey,
+  activeConsultaKey,
   onEventClick,
   anos,
   headerRight,
 }: {
   events: TimelineEvent[];
   activeKey: string | null;
+  activeConsultaKey?: string | null;
   onEventClick: (ev: TimelineEvent) => void;
   anos: number;
   headerRight?: ReactNode;
 }) {
+  const categorias = [
+    { id: "exames", label: "Exames", Icon: FlaskConical, tone: "text-emerald-600" },
+    { id: "consultas", label: "Consultas", Icon: Stethoscope, tone: "text-sky-600" },
+    { id: "cirurgias", label: "Cirurgias", Icon: Scissors, tone: "text-rose-600" },
+  ] as const;
+
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -212,7 +238,18 @@ export function ClinicalTimeline({
             </span>
           )}
         </h2>
-        {headerRight && <div className="flex items-center gap-2">{headerRight}</div>}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium">
+            {categorias.map((c, i) => (
+              <span key={c.id} className="flex items-center gap-1">
+                {i > 0 && <span className="text-muted-foreground/40">·</span>}
+                <c.Icon className={`h-3 w-3 ${c.tone}`} />
+                <span className="text-muted-foreground">{c.label}</span>
+              </span>
+            ))}
+          </div>
+          {headerRight}
+        </div>
       </div>
 
 
@@ -231,7 +268,7 @@ export function ClinicalTimeline({
               <TimelineCard
                 key={ev.key}
                 ev={ev}
-                active={ev.key === activeKey}
+                active={ev.key === activeKey || ev.key === activeConsultaKey}
                 onClick={() => onEventClick(ev)}
               />
             ))}
@@ -241,6 +278,7 @@ export function ClinicalTimeline({
     </div>
   );
 }
+
 
 function TimelineCard({
   ev,

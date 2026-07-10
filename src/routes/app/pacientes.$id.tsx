@@ -2,7 +2,7 @@
 // servidor, selo digital (protocolo + assinatura SHA-256) e receita digital.
 // Selar congela a evolução — a UI esconde a edição e o servidor rejeita.
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +16,7 @@ import {
   Copy,
   CreditCard,
   FileSignature,
+  FileText,
   FileUp,
   KeyRound,
   Loader2,
@@ -77,7 +78,7 @@ import {
 } from "@/lib/api/clinic.functions";
 import { ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
-import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
+import { BiomarkerPanel, ClinicalTimeline, usePatientHistory, type ConsultaEvent } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import {
   ageFrom,
@@ -306,6 +307,7 @@ function Prontuario() {
       <ClinicalTimeline
         events={hist.events}
         activeKey={hist.activeKey}
+        activeConsultaKey={hist.activeConsultaKey}
         onEventClick={hist.onEventClick}
         anos={hist.anos}
         headerRight={
@@ -322,16 +324,24 @@ function Prontuario() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
-          {/* Evolução atual */}
-          <NovaEvolucao
-            token={token}
-            patientId={id}
-            onSaved={invalidate}
-            isPrimeiraConsulta={evolutions.length === 0}
-            evolutionsCount={evolutions.length}
-            historicoAutorizado={historicoAutorizado}
-            onSolicitarHistorico={() => setTokenOpen(true)}
-          />
+          {hist.activeConsulta ? (
+            <HistoricoConsultaPanel
+              consulta={hist.activeConsulta}
+              evolution={evolutions.find((e) => e.id === hist.activeConsulta!.evolutionId) ?? null}
+              onClose={hist.clearActiveConsulta}
+            />
+          ) : (
+            <NovaEvolucao
+              token={token}
+              patientId={id}
+              onSaved={invalidate}
+              isPrimeiraConsulta={evolutions.length === 0}
+              evolutionsCount={evolutions.length}
+              historicoAutorizado={historicoAutorizado}
+              onSolicitarHistorico={() => setTokenOpen(true)}
+            />
+          )}
+
 
           {/* Linha do tempo de evoluções */}
           <div className="mt-5">
@@ -1023,6 +1033,113 @@ function NovaEvolucao({
           {salvar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
           Salvar evolução
         </Button>
+      </div>
+    </div>
+  );
+}
+
+
+// Histórico de uma consulta específica — ocupa o lugar da "Evolução atual"
+// quando o médico clica em um nó de consulta na linha do tempo.
+function HistoricoConsultaPanel({
+  consulta,
+  evolution,
+  onClose,
+}: {
+  consulta: ConsultaEvent;
+  evolution: Evolution | null;
+  onClose: () => void;
+}) {
+  const dataFmt = new Date(`${consulta.date}T00:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const shortId = consulta.evolutionId.slice(0, 6).toUpperCase();
+  const diagnostico = consulta.assessment || evolution?.soap.a.compartilhavel || "";
+  const meds = evolution?.prescription?.meds ?? [];
+  // Exames solicitados e relatórios ainda não existem no modelo; extraímos do
+  // texto da evolução quando aparece uma seção "Exames solicitados:" ou similar.
+  const evolText = evolution?.evolucao ?? consulta.evolucaoSnippet ?? "";
+  const extractSection = (label: RegExp) => {
+    const m = evolText.match(new RegExp(`${label.source}\\s*[:\\-]?\\s*([\\s\\S]*?)(?:\\n\\s*\\n|$)`, "i"));
+    return m?.[1]?.trim() ?? "";
+  };
+  const examesSolicitados = extractSection(/Exames?\s+solicitad[ao]s?/i);
+  const relatorios = extractSection(/Relat[óo]rios?/i);
+
+  const secoes: { label: string; icon: typeof ClipboardList; content: ReactNode }[] = [
+    {
+      label: "Diagnóstico",
+      icon: Stethoscope,
+      content: diagnostico ? (
+        <p className="whitespace-pre-line text-sm">{diagnostico}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem diagnóstico registrado.</p>
+      ),
+    },
+    {
+      label: "Exames solicitados",
+      icon: ClipboardList,
+      content: examesSolicitados ? (
+        <p className="whitespace-pre-line text-sm">{examesSolicitados}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhum exame solicitado nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Medicamentos prescritos",
+      icon: Pill,
+      content: meds.length > 0 ? (
+        <ul className="space-y-1.5">
+          {meds.map((m, i) => (
+            <li key={i} className="rounded-lg border border-border bg-background px-2.5 py-1.5">
+              <div className="text-sm font-medium">{m.name}</div>
+              <div className="text-[11px] text-muted-foreground">{m.dosage} · {m.duration}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Nenhuma prescrição nesta consulta.</p>
+      ),
+    },
+    {
+      label: "Relatórios",
+      icon: FileText,
+      content: relatorios ? (
+        <p className="whitespace-pre-line text-sm">{relatorios}</p>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Sem relatórios anexados.</p>
+      ),
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+            Histórico · Consulta #{shortId}
+          </div>
+          <h2 className="mt-0.5 text-sm font-semibold">
+            {consulta.sealed ? "Consulta selada" : "Evolução em aberto"} · {dataFmt}
+          </h2>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="mr-1 h-3.5 w-3.5" /> Voltar à evolução atual
+        </Button>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {secoes.map((s) => (
+          <section key={s.label} className="rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <s.icon className="h-3.5 w-3.5 text-primary" />
+              {s.label}
+            </div>
+            <div className="mt-1.5">{s.content}</div>
+          </section>
+        ))}
       </div>
     </div>
   );
