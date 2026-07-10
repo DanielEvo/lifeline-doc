@@ -17,7 +17,6 @@ import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
-import { Route as AppTriagemRouteImport } from './routes/app/triagem'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
 
@@ -61,11 +60,6 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppTriagemRoute = AppTriagemRouteImport.update({
-  id: '/triagem',
-  path: '/triagem',
-  getParentRoute: () => AppRouteRoute,
-} as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
   path: '/pacientes/',
@@ -84,7 +78,6 @@ export interface FileRoutesByFullPath {
   '/demo': typeof DemoRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
-  '/app/triagem': typeof AppTriagemRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -96,7 +89,6 @@ export interface FileRoutesByTo {
   '/demo': typeof DemoRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
-  '/app/triagem': typeof AppTriagemRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/app': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -110,7 +102,6 @@ export interface FileRoutesById {
   '/demo': typeof DemoRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
-  '/app/triagem': typeof AppTriagemRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -125,7 +116,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/login'
     | '/sobre'
-    | '/app/triagem'
     | '/auth/callback'
     | '/app/'
     | '/app/pacientes/$id'
@@ -137,7 +127,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/login'
     | '/sobre'
-    | '/app/triagem'
     | '/auth/callback'
     | '/app'
     | '/app/pacientes/$id'
@@ -150,7 +139,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/login'
     | '/sobre'
-    | '/app/triagem'
     | '/auth/callback'
     | '/app/'
     | '/app/pacientes/$id'
@@ -225,13 +213,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/triagem': {
-      id: '/app/triagem'
-      path: '/triagem'
-      fullPath: '/app/triagem'
-      preLoaderRoute: typeof AppTriagemRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
     '/app/pacientes/': {
       id: '/app/pacientes/'
       path: '/pacientes'
@@ -250,14 +231,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
-  AppTriagemRoute: typeof AppTriagemRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPacientesIdRoute: typeof AppPacientesIdRoute
   AppPacientesIndexRoute: typeof AppPacientesIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
-  AppTriagemRoute: AppTriagemRoute,
   AppIndexRoute: AppIndexRoute,
   AppPacientesIdRoute: AppPacientesIdRoute,
   AppPacientesIndexRoute: AppPacientesIndexRoute,
@@ -279,3 +258,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

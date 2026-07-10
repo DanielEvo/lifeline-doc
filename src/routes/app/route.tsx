@@ -10,7 +10,6 @@ import {
   KanbanSquare,
   Loader2,
   LogOut,
-  MessageSquarePlus,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -81,7 +80,6 @@ function AppLayout() {
 const NAV = [
   { to: "/app" as const, label: "Painel do dia", icon: KanbanSquare, exact: true },
   { to: "/app/pacientes" as const, label: "Pacientes", icon: Users, exact: false },
-  { to: "/app/triagem" as const, label: "Nova triagem", icon: MessageSquarePlus, exact: false },
 ];
 
 function Shell({ clinic }: { clinic: Clinic }) {
