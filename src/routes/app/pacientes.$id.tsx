@@ -860,12 +860,16 @@ function NovaEvolucao({
   onSaved,
   isPrimeiraConsulta,
   evolutionsCount,
+  historicoAutorizado,
+  onSolicitarHistorico,
 }: {
   token: string;
   patientId: string;
   onSaved: () => void;
   isPrimeiraConsulta: boolean;
   evolutionsCount: number;
+  historicoAutorizado: boolean;
+  onSolicitarHistorico: () => void;
 }) {
   const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
   const [plano, setPlano] = useState("");
