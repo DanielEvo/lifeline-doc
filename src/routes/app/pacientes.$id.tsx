@@ -329,6 +329,8 @@ function Prontuario() {
             onSaved={invalidate}
             isPrimeiraConsulta={evolutions.length === 0}
             evolutionsCount={evolutions.length}
+            historicoAutorizado={historicoAutorizado}
+            onSolicitarHistorico={() => setTokenOpen(true)}
           />
 
           {/* Linha do tempo de evoluções */}
