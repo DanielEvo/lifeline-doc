@@ -1,10 +1,11 @@
-// Ditado da consulta — como na demo: gravar → transcrição estruturada no
-// servidor → blocos de sugestão que o médico aceita, edita ou descarta antes
-// de entrarem na evolução. Nada entra no prontuário sem revisão humana.
+// Ditado da consulta — como na demo: gravar (com pausar/continuar) → parar
+// SÓ com confirmação → transcrição estruturada no servidor → blocos de
+// sugestão que o médico aceita, edita ou descarta antes de entrarem na
+// evolução. Nada entra no prontuário sem revisão humana.
 
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Check, Loader2, Mic, MicOff, Pencil, X } from "lucide-react";
+import { Check, Loader2, Mic, MicOff, Pause, Pencil, Play, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,15 +21,17 @@ type Block = {
 
 export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [confirmStop, setConfirmStop] = useState(false);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!recording) return;
+    if (!recording || paused) return;
     const id = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, [recording]);
+  }, [recording, paused]);
 
   const transcrever = useMutation({
     mutationFn: (durationSec: number) => transcribeConsult({ data: { durationSec } }),
@@ -47,12 +50,17 @@ export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
 
   const start = () => {
     setRecording(true);
+    setPaused(false);
     setSeconds(0);
     setBlocks([]);
   };
 
-  const stop = () => {
+  const requestStop = () => setConfirmStop(true);
+  const cancelStop = () => setConfirmStop(false);
+  const confirmStopAndTranscribe = () => {
     setRecording(false);
+    setPaused(false);
+    setConfirmStop(false);
     transcrever.mutate(seconds);
   };
 
@@ -83,24 +91,71 @@ export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
             ) : (
               <Mic className="mr-1.5 h-3.5 w-3.5" />
             )}
-            {transcrever.isPending ? "Transcrevendo…" : "Ditar consulta"}
+            {transcrever.isPending ? "Transcrevendo…" : "Transcrever consulta"}
           </Button>
         ) : (
-          <Button
-            type="button"
-            size="sm"
-            onClick={stop}
-            className="bg-red-600 text-white hover:bg-red-700"
-          >
-            <MicOff className="mr-1.5 h-3.5 w-3.5" />
-            Parar · {fmt(seconds)}
-          </Button>
+          <>
+            {!paused ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setPaused(true)} className="text-xs">
+                <Pause className="mr-1.5 h-3.5 w-3.5" />
+                Pausar
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setPaused(false)} className="text-xs">
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+                Continuar
+              </Button>
+            )}
+
+            <div className="relative">
+              <Button
+                type="button"
+                size="sm"
+                onClick={requestStop}
+                className="bg-red-600 text-xs text-white hover:bg-red-700"
+              >
+                <MicOff className="mr-1.5 h-3.5 w-3.5" />
+                Parar · {fmt(seconds)}
+              </Button>
+
+              {confirmStop && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-border bg-white p-3 shadow-lg dark:bg-card">
+                  <p className="text-xs font-medium text-foreground">
+                    Parar gravação e gerar transcrição?
+                  </p>
+                  <div className="mt-2.5 flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={confirmStopAndTranscribe}
+                      className="h-7 bg-teal-600 text-[11px] text-white hover:bg-teal-700"
+                    >
+                      Parar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelStop}
+                      className="h-7 text-[11px]"
+                    >
+                      Continuar gravando
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
-        {recording && (
+
+        {recording && !paused && (
           <span className="flex items-center gap-1.5 text-[11px] text-red-600 dark:text-red-400">
             <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
             gravando — fale normalmente
           </span>
+        )}
+        {recording && paused && (
+          <span className="text-[11px] text-muted-foreground">pausado — {fmt(seconds)}</span>
         )}
       </div>
 

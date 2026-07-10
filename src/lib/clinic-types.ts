@@ -103,6 +103,35 @@ export const BIOMARKER_CATALOG = [
   { name: "TSH", unit: "µUI/mL", min: 0.4, max: 4 },
 ] as const;
 
+// Catálogo de medicamentos e template de anamnese — apoiam a UI de
+// prescrição estilo Memed e o toggle de template da Evolução Atual.
+// MED_CATALOG é mock local; troque pela busca real do Memed quando a
+// integração acontecer (a estrutura de dados já é compatível).
+export const MED_CATALOG: { name: string; dosage: string; duration: string }[] = [
+  { name: "Sulfato Ferroso 40mg", dosage: "1 comprimido, 2x/dia, em jejum", duration: "90 dias" },
+  { name: "Vitamina B12 1000mcg", dosage: "1 comprimido, 1x/dia", duration: "60 dias" },
+  { name: "Ácido Fólico 5mg", dosage: "1 comprimido, 1x/dia", duration: "60 dias" },
+  { name: "Colecalciferol 50.000UI", dosage: "1 comprimido, 1x/semana", duration: "8 semanas" },
+  { name: "Metformina 850mg", dosage: "1 comprimido, 2x/dia, após refeições", duration: "Uso contínuo" },
+  { name: "Losartana 50mg", dosage: "1 comprimido, 1x/dia", duration: "Uso contínuo" },
+];
+
+export const ANAMNESE_TEMPLATE = `QUEIXA PRINCIPAL:
+
+HISTÓRIA DA DOENÇA ATUAL:
+
+ANTECEDENTES PESSOAIS E FAMILIARES:
+
+HÁBITOS DE VIDA:
+
+REVISÃO DE SISTEMAS:
+
+EXAME FÍSICO:
+
+AVALIAÇÃO:
+
+PLANO:`;
+
 export function isOutOfRange(m: Pick<Measurement, "value" | "refMin" | "refMax">): boolean {
   return m.value < m.refMin || m.value > m.refMax;
 }

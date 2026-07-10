@@ -10,22 +10,37 @@ import {
   ArrowLeft,
   Cake,
   CalendarPlus,
+  ChevronDown,
+  ClipboardList,
   CreditCard,
   FileSignature,
   Loader2,
   Lock,
   Mail,
+  MessageCircle,
   Pencil,
   Phone,
   Pill,
   Plus,
   ShieldCheck,
-  Sparkles,
+  Stethoscope,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +59,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
 import {
   archiveMyPatient,
@@ -62,9 +78,11 @@ import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/component
 import { Dictation } from "@/components/clinic/dictation";
 import {
   ageFrom,
+  ANAMNESE_TEMPLATE,
   DEFAULT_COLUMNS,
   formatDateTimeBR,
   initialsOf,
+  MED_CATALOG,
   WA_TEMPLATES,
   type Evolution,
 } from "@/lib/clinic-types";
@@ -257,18 +275,12 @@ function Prontuario() {
           </div>
         </div>
 
-        {(p.queixa || p.criticalFlag || p.briefing) && (
+        {(p.queixa || p.criticalFlag) && (
           <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
             {p.criticalFlag && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span><strong>Parâmetro crítico:</strong> {p.criticalFlag}</span>
-              </div>
-            )}
-            {p.briefing && (
-              <div className="flex items-start gap-2 rounded-lg bg-cyan-50 px-3 py-2 text-xs text-cyan-900 ring-1 ring-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-300 dark:ring-cyan-900">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span><strong>Briefing da triagem IA:</strong> {p.briefing}</span>
               </div>
             )}
             {p.queixa && !p.briefing && (
@@ -288,8 +300,15 @@ function Prontuario() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
-          {/* Nova evolução */}
-          <NovaEvolucao token={token} patientId={id} onSaved={invalidate} />
+          {/* Evolução atual */}
+          <NovaEvolucao
+            token={token}
+            patientId={id}
+            onSaved={invalidate}
+            briefing={p.briefing}
+            isPrimeiraConsulta={evolutions.length === 0}
+            evolutionsCount={evolutions.length}
+          />
 
           {/* Linha do tempo de evoluções */}
           <div className="mt-5">
@@ -354,40 +373,80 @@ function Prontuario() {
 
 // ---------------------------------------------------------------------------
 
-function SoapGrid({
+function SoapReadOnly({
   soap,
   editableNota,
 }: {
   soap: Evolution["soap"];
   /** Presente só quando a evolução já foi salva — é o que dá o alvo (evolutionId)
-   *  para persistir a nota privada. No preview de Nova Evolução isso é omitido. */
+   *  para persistir a nota privada. No preview de Evolução atual isso é omitido. */
   editableNota?: { token: string; evolutionId: string; onSaved: () => void };
 }) {
-  const items = [
-    { k: "S", label: "Subjetivo", text: soap.s },
-    { k: "O", label: "Objetivo", text: soap.o },
-    { k: "A", label: "Avaliação", text: soap.a.compartilhavel },
-    { k: "P", label: "Plano", text: soap.p },
-  ].filter((i) => i.text);
-  if (items.length === 0 && !editableNota) return null;
+  const [open, setOpen] = useState(false);
+  const rows = [
+    { k: "S", label: "Subjetivo", text: soap.s, locked: false },
+    { k: "O", label: "Objetivo", text: soap.o, locked: false },
+    { k: "A", label: "Avaliação", text: soap.a.compartilhavel, locked: true },
+    { k: "P", label: "Plano", text: soap.p, locked: false },
+  ] as const;
+
   return (
-    <div className="grid gap-1.5 sm:grid-cols-2">
-      {items.map((i) => (
-        <div key={i.k} className="rounded-lg bg-muted/60 px-2.5 py-1.5">
-          <span className="text-[10px] font-bold text-primary">{i.k}</span>
-          <span className="ml-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">{i.label}</span>
-          <p className="mt-0.5 text-xs leading-relaxed text-foreground/90">{i.text}</p>
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-2xl border border-border bg-card">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 px-4 py-3 text-left">
+        <Stethoscope className="h-4 w-4 text-muted-foreground" />
+        <span className="flex-1 text-sm font-medium">Visualização SOAP (somente leitura)</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          derivado da Evolução
+        </span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t border-border px-4 py-3">
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          Gerado automaticamente a partir da Evolução. Para corrigir, edite o campo de Evolução —
+          não há edição direta aqui.
+        </p>
+        <div className="mt-2.5 space-y-2.5">
+          {rows.map((row) => (
+            <div key={row.k}>
+              <div className="flex gap-2.5">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-800 text-[11px] font-bold text-white">
+                  {row.k}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold">{row.label}</span>
+                    {row.locked && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-900">
+                        🔒 Visível apenas para o médico
+                      </span>
+                    )}
+                  </div>
+                  {row.text ? (
+                    <p className="mt-0.5 whitespace-pre-line text-[12px] leading-relaxed text-foreground/80">
+                      {row.text}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-[12px] italic leading-relaxed text-muted-foreground">
+                      Sem dados extraídos.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {row.k === "A" && editableNota && (
+                <div className="mt-1.5 pl-[34px]">
+                  <PrivateNoteBlock
+                    notaPrivada={soap.a.notaPrivada}
+                    token={editableNota.token}
+                    evolutionId={editableNota.evolutionId}
+                    onSaved={editableNota.onSaved}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
-      {editableNota && (
-        <PrivateNoteBlock
-          notaPrivada={soap.a.notaPrivada}
-          token={editableNota.token}
-          evolutionId={editableNota.evolutionId}
-          onSaved={editableNota.onSaved}
-        />
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -475,13 +534,20 @@ function NovaEvolucao({
   token,
   patientId,
   onSaved,
+  briefing,
+  isPrimeiraConsulta,
+  evolutionsCount,
 }: {
   token: string;
   patientId: string;
   onSaved: () => void;
+  briefing: string | null;
+  isPrimeiraConsulta: boolean;
+  evolutionsCount: number;
 }) {
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
   const [plano, setPlano] = useState("");
+  const [template, setTemplate] = useState<"anamnese" | "soap">(isPrimeiraConsulta ? "anamnese" : "soap");
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
 
   const salvar = useMutation({
@@ -496,12 +562,79 @@ function NovaEvolucao({
     },
   });
 
+  const applyTemplate = (t: "anamnese" | "soap") => {
+    if (t === template) return;
+    if (texto.trim().length > 0) {
+      toast.message("Limpe o campo de evolução antes de trocar de template", {
+        description: "Isso evita perder o que você já escreveu.",
+      });
+      return;
+    }
+    setTemplate(t);
+    setTexto(t === "anamnese" ? ANAMNESE_TEMPLATE : "");
+  };
+
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+      {briefing && (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="mb-3 cursor-help rounded-2xl border border-border bg-slate-50 p-4 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-sm font-semibold">Briefing pré-consulta</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-900">
+                    📋 Via WhatsApp
+                  </span>
+                </div>
+                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground/80">
+                  {briefing}
+                </p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              Gerado automaticamente a partir das mensagens do paciente no WhatsApp
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Nova evolução</h2>
+        <h2 className="text-sm font-semibold">Evolução atual</h2>
         <span className="text-[11px] text-muted-foreground">Texto livre · o SOAP é derivado automaticamente</span>
       </div>
+
+      <div className="mb-2 mt-2 flex flex-wrap items-center gap-2">
+        <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
+          {(
+            [
+              { id: "anamnese", label: "Anamnese completa · 1ª consulta" },
+              { id: "soap", label: "Evolução · retorno" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => applyTemplate(t.id)}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
+                template === t.id
+                  ? "bg-teal-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[10px] text-muted-foreground">
+          Auto: {evolutionsCount} consulta{evolutionsCount === 1 ? "" : "s"} anterior
+          {evolutionsCount === 1 ? "" : "es"} → {isPrimeiraConsulta ? "1ª consulta" : "retorno"}
+        </span>
+      </div>
+
       <div className="mt-2">
         <Dictation
           onAppend={(t) => setTexto((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
@@ -510,17 +643,19 @@ function NovaEvolucao({
       <Textarea
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
-        rows={3}
         placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
-        className="mt-2"
+        className="mt-1.5 min-h-[140px] resize-none bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
       />
       {preview && (
         <div className="mt-2">
-          <SoapGrid soap={preview} />
+          <SoapReadOnly soap={preview} />
         </div>
       )}
       <div className="mt-3 space-y-1">
-        <Label className="text-xs font-medium text-muted-foreground">Plano terapêutico</Label>
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <ClipboardList className="h-3.5 w-3.5" />
+          Plano terapêutico
+        </Label>
         <Textarea
           value={plano}
           onChange={(e) => setPlano(e.target.value)}
@@ -619,19 +754,37 @@ function EvolucaoCard({
                 <Pill className="mr-1 h-3 w-3" /> Receita
               </Button>
             )}
-            <Button
-              size="sm"
-              disabled={selar.isPending}
-              onClick={() => selar.mutate()}
-              className="brand-gradient text-primary-foreground"
-            >
-              {selar.isPending ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <Lock className="mr-1 h-3 w-3" />
-              )}
-              Selar
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  disabled={selar.isPending}
+                  className="brand-gradient text-primary-foreground"
+                >
+                  {selar.isPending ? (
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Lock className="mr-1 h-3 w-3" />
+                  )}
+                  Finalizar Consulta
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Finalizar esta consulta?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Depois de finalizar, a evolução fica bloqueada para edição — isso não pode ser
+                    desfeito. Confira o texto, o plano terapêutico e a receita antes de continuar.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Voltar e revisar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => selar.mutate()}>
+                    Finalizar consulta
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
       </div>
@@ -665,7 +818,7 @@ function EvolucaoCard({
       )}
 
       <div className="mt-3">
-        <SoapGrid
+        <SoapReadOnly
           soap={e.soap}
           editableNota={{ token, evolutionId: e.id, onSaved: onChanged }}
         />
@@ -735,6 +888,20 @@ function ReceitaDialog({
 }) {
   const [meds, setMeds] = useState<{ name: string; dosage: string; duration: string }[]>([]);
   const [atual, setAtual] = useState("");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [freeTextOpen, setFreeTextOpen] = useState(false);
+  const [medSearch, setMedSearch] = useState("");
+
+  const catalogFiltered = useMemo(
+    () => MED_CATALOG.filter((m) => m.name.toLowerCase().includes(medSearch.toLowerCase())),
+    [medSearch],
+  );
+
+  const addFromCatalog = (m: { name: string; dosage: string; duration: string }) => {
+    setMeds((prev) => (prev.some((x) => x.name === m.name) ? prev : [...prev, { ...m }]));
+    setMedSearch("");
+    setCatalogOpen(false);
+  };
 
   const add = () => {
     const v = atual.trim();
@@ -766,22 +933,90 @@ function ReceitaDialog({
             Adicione os medicamentos com dosagem e duração — o código verificável sai na hora.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-2">
-          <Input
-            value={atual}
-            onChange={(e) => setAtual(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add();
-              }
-            }}
-            placeholder="Ex.: Sulfato Ferroso 40mg"
-          />
-          <Button type="button" variant="outline" onClick={add}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        {!catalogOpen && !freeTextOpen && (
+          <button
+            type="button"
+            onClick={() => setCatalogOpen(true)}
+            className="block w-full rounded-lg border border-dashed border-border px-3 py-2.5 text-center text-xs text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          >
+            + Adicionar medicamento à prescrição
+          </button>
+        )}
+
+        {catalogOpen && (
+          <div className="rounded-lg border border-border bg-muted/30 p-2">
+            <Input
+              autoFocus
+              value={medSearch}
+              onChange={(e) => setMedSearch(e.target.value)}
+              placeholder="Buscar medicamento…"
+              className="h-8 text-xs"
+            />
+            <div className="mt-1.5 max-h-48 space-y-0.5 overflow-y-auto">
+              {catalogFiltered.map((m) => (
+                <button
+                  key={m.name}
+                  type="button"
+                  onClick={() => addFromCatalog(m)}
+                  className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-muted"
+                >
+                  <span className="text-[12px] font-medium">{m.name}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {m.dosage} · {m.duration}
+                  </span>
+                </button>
+              ))}
+              {catalogFiltered.length === 0 && (
+                <p className="px-2 py-2 text-[11px] text-muted-foreground">
+                  Nenhum medicamento encontrado.
+                </p>
+              )}
+            </div>
+            <div className="mt-1.5 border-t border-border pt-1.5 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setCatalogOpen(false);
+                  setFreeTextOpen(true);
+                  setMedSearch("");
+                }}
+                className="text-[11px] text-primary hover:underline"
+              >
+                ou digite um medicamento não listado
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogOpen(false);
+                setMedSearch("");
+              }}
+              className="mt-1.5 w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {freeTextOpen && (
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              value={atual}
+              onChange={(e) => setAtual(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  add();
+                }
+              }}
+              placeholder="Ex.: Sulfato Ferroso 40mg"
+            />
+            <Button type="button" variant="outline" onClick={add}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         {meds.length > 0 && (
           <ul className="space-y-2">
             {meds.map((m, i) => (
