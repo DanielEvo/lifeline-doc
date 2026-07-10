@@ -332,7 +332,7 @@ export function BiomarkerPanel({
           </p>
         </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-2 mt-3 flex flex-wrap items-center justify-between gap-1">
             <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {allNames.length} biomarcador{allNames.length === 1 ? "" : "es"}
