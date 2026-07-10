@@ -56,7 +56,7 @@ import {
 } from "@/lib/api/clinic.functions";
 import { ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
-import { PatientHistory } from "@/components/clinic/patient-history";
+import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import { SimilarCases } from "@/components/clinic/similar-cases";
 import {
@@ -156,6 +156,12 @@ function Prontuario() {
     },
   });
 
+  // hooks precisam rodar em toda renderização — usa fallback vazio antes do
+  // guard de loading/erro abaixo, senão a ordem de hooks muda entre renders
+  const measurements = rec.data?.ok ? rec.data.measurements : [];
+  const evolutions = rec.data?.ok ? rec.data.evolutions : [];
+  const hist = usePatientHistory(measurements, evolutions);
+
   if (rec.isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -175,7 +181,7 @@ function Prontuario() {
     );
   }
 
-  const { patient: p, evolutions, measurements } = rec.data;
+  const { patient: p } = rec.data;
   const idade = ageFrom(p.nascimento);
 
   return (
@@ -271,48 +277,64 @@ function Prontuario() {
         )}
       </div>
 
-      {/* Histórico clínico: linha do tempo + biomarcadores (como na demo, com dados reais) */}
-      <PatientHistory
-        token={token}
-        patientId={id}
-        measurements={measurements}
-        evolutions={evolutions}
-        onChanged={invalidate}
+      {/* Linha do tempo clínica: horizontal, full-width, logo abaixo do header */}
+      <ClinicalTimeline
+        events={hist.events}
+        activeKey={hist.activeKey}
+        onEventClick={hist.onEventClick}
+        anos={hist.anos}
       />
 
-      {/* Nova evolução */}
-      <NovaEvolucao token={token} patientId={id} onSaved={invalidate} />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0">
+          {/* Nova evolução */}
+          <NovaEvolucao token={token} patientId={id} onSaved={invalidate} />
 
-      {/* Linha do tempo */}
-      <div className="mt-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Linha do tempo · {evolutions.length} registro{evolutions.length === 1 ? "" : "s"}
-        </h2>
-        {evolutions.length === 0 ? (
-          <div className="mt-3 rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center">
-            <FileSignature className="mx-auto h-7 w-7 text-muted-foreground/50" />
-            <p className="mt-2 text-sm font-medium">Prontuário em branco</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Escreva a primeira evolução acima — o SOAP se organiza sozinho.
-            </p>
+          {/* Linha do tempo de evoluções */}
+          <div className="mt-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Linha do tempo · {evolutions.length} registro{evolutions.length === 1 ? "" : "s"}
+            </h2>
+            {evolutions.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center">
+                <FileSignature className="mx-auto h-7 w-7 text-muted-foreground/50" />
+                <p className="mt-2 text-sm font-medium">Prontuário em branco</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Escreva a primeira evolução acima — o SOAP se organiza sozinho.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {evolutions.map((e) => (
+                  <EvolucaoCard
+                    key={e.id}
+                    e={e}
+                    token={token}
+                    patientId={id}
+                    onChanged={invalidate}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {evolutions.map((e) => (
-              <EvolucaoCard
-                key={e.id}
-                e={e}
-                token={token}
-                patientId={id}
-                onChanged={invalidate}
-              />
-            ))}
-          </div>
-        )}
+
+          {/* Apoio à decisão */}
+          <SimilarCases />
+        </div>
+
+        {/* Biomarcadores: painel próprio, sticky ao lado da evolução */}
+        <BiomarkerPanel
+          token={token}
+          patientId={id}
+          measurements={measurements}
+          activeExam={hist.activeExam}
+          showAll={hist.showAll}
+          setShowAll={hist.setShowAll}
+          visibleNames={hist.visibleNames}
+          allNames={hist.allNames}
+          onChanged={invalidate}
+        />
       </div>
-
-      {/* Apoio à decisão */}
-      <SimilarCases />
 
       <PatientFormDialog
         open={editOpen}
