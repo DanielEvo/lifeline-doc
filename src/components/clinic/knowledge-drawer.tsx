@@ -319,7 +319,7 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
               <TabsList className="grid h-auto w-full grid-cols-6 bg-muted/50 p-1">
                 <TabTrigger value="chat" icon={Sparkles} label="Chat" />
                 <TabTrigger value="protocolos" icon={BookOpen} label="Protocolos" />
-                <TabTrigger value="similares" icon={Users} label="Casos similares" />
+                <TabTrigger value="similares" icon={Users} label="Casos históricos" />
                 <TabTrigger value="perfil" icon={UserCog} label="Perfil" />
                 <TabTrigger value="conhecimento" icon={FileText} label="Docs" />
                 <TabTrigger value="science" icon={FlaskConical} label="Science" />
