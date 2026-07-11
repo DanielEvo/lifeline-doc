@@ -35,7 +35,8 @@ import {
 } from "../records.server";
 import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
-import { BIOMARKER_CATALOG, todayIso } from "../clinic-types";
+import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
+import { BIOMARKER_CATALOG, resolveBiomarkerName, todayIso } from "../clinic-types";
 
 const token = z.string().min(1).max(80);
 const COLUMN = z.string().min(1).max(32);
@@ -607,4 +608,80 @@ export const importSamplePatients = createServerFn({ method: "POST" })
     }
 
     return { ok: true as const, added: added.length };
+  });
+
+// ---------------------------------------------------------------------------
+// Extração de exames por IA (OCR/leitura de laudo)
+// ---------------------------------------------------------------------------
+
+export const extractExamDocument = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      fileBase64: z.string().min(1),
+      mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    try {
+      const result = await extractBiomarkersFromDocument(data.fileBase64, data.mimeType);
+      const items = result.biomarkers.map((b) => {
+        const match = resolveBiomarkerName(b.rawName);
+        return {
+          rawName: b.rawName,
+          value: b.value,
+          unit: match?.unit ?? b.unit,
+          refMin: match?.min ?? null,
+          refMax: match?.max ?? null,
+          matchedName: match?.name ?? null,
+        };
+      });
+      return { ok: true as const, collectionDate: result.collectionDate, items };
+    } catch (e) {
+      return { ok: false as const, error: "extraction_failed" as const, detail: String(e) };
+    }
+  });
+
+export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      patientId: z.string().min(1),
+      date: YMD,
+      label: z.string().max(80).optional().default("Exame · leitura por IA"),
+      items: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(60),
+            value: z.number().finite(),
+            unit: z.string().max(16),
+            refMin: z.number().finite(),
+            refMax: z.number().finite(),
+          }),
+        )
+        .min(1)
+        .max(40),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await getPatient(doctor.id, data.patientId);
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+    for (const item of data.items) {
+      await addMeasurement(doctor.id, {
+        patientId: data.patientId,
+        name: item.name,
+        unit: item.unit,
+        value: item.value,
+        refMin: item.refMin,
+        refMax: item.refMax,
+        date: data.date,
+        label: data.label,
+      });
+    }
+    await bumpExams(doctor.id, data.patientId, data.items.length);
+    return { ok: true as const, count: data.items.length };
   });

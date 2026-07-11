@@ -91,17 +91,26 @@ export type Measurement = {
 };
 
 export const BIOMARKER_CATALOG = [
-  { name: "Hemoglobina", unit: "g/dL", min: 12, max: 16 },
-  { name: "Ferritina", unit: "ng/mL", min: 30, max: 200 },
-  { name: "Vitamina D", unit: "ng/mL", min: 30, max: 100 },
-  { name: "Vitamina B12", unit: "pg/mL", min: 300, max: 900 },
-  { name: "Zinco", unit: "µg/dL", min: 70, max: 120 },
-  { name: "Creatinina", unit: "mg/dL", min: 0.5, max: 1.1 },
-  { name: "Glicemia de jejum", unit: "mg/dL", min: 70, max: 99 },
-  { name: "HbA1c", unit: "%", min: 4, max: 5.6 },
-  { name: "Colesterol total", unit: "mg/dL", min: 100, max: 190 },
-  { name: "TSH", unit: "µUI/mL", min: 0.4, max: 4 },
+  { name: "Hemoglobina", unit: "g/dL", min: 12, max: 16, synonyms: ["Hb", "HGB", "Hemoglobina Total"] },
+  { name: "Ferritina", unit: "ng/mL", min: 30, max: 200, synonyms: ["Ferritina Sérica"] },
+  { name: "Vitamina D", unit: "ng/mL", min: 30, max: 100, synonyms: ["25-OH Vitamina D", "Vitamina D Total", "25-Hidroxivitamina D"] },
+  { name: "Vitamina B12", unit: "pg/mL", min: 300, max: 900, synonyms: ["Cobalamina", "Vit B12"] },
+  { name: "Zinco", unit: "µg/dL", min: 70, max: 120, synonyms: ["Zinco Sérico"] },
+  { name: "Creatinina", unit: "mg/dL", min: 0.5, max: 1.1, synonyms: ["Cr", "Creatinina Sérica"] },
+  { name: "Glicemia de jejum", unit: "mg/dL", min: 70, max: 99, synonyms: ["Glicose", "Glicemia"] },
+  { name: "HbA1c", unit: "%", min: 4, max: 5.6, synonyms: ["Hemoglobina Glicada", "A1c"] },
+  { name: "Colesterol total", unit: "mg/dL", min: 100, max: 190, synonyms: ["Colesterol"] },
+  { name: "TSH", unit: "µUI/mL", min: 0.4, max: 4, synonyms: ["Hormônio Tireoestimulante"] },
 ] as const;
+
+export function resolveBiomarkerName(rawName: string): (typeof BIOMARKER_CATALOG)[number] | null {
+  const normalized = rawName.trim().toLowerCase();
+  for (const b of BIOMARKER_CATALOG) {
+    if (b.name.toLowerCase() === normalized) return b;
+    if ((b.synonyms as readonly string[]).some((s) => s.toLowerCase() === normalized)) return b;
+  }
+  return null;
+}
 
 // Catálogo de medicamentos e template de anamnese — apoiam a UI de
 // prescrição estilo Memed e o toggle de template da Evolução Atual.
