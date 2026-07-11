@@ -67,6 +67,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/patient-form-dialog";
 import {
   archiveMyPatient,
+  confirmExtractedMeasurements,
+  extractExamDocument,
   getPatientRecord,
   getWorkspace,
   moveMyPatient,
@@ -392,7 +394,14 @@ function Prontuario() {
         patient={p}
         token={token}
       />
-      <UploadExamesDialog open={uploadOpen} onOpenChange={setUploadOpen} patientName={p.nome} />
+      <UploadExamesDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        patientName={p.nome}
+        patientId={id}
+        token={token}
+        onSaved={invalidate}
+      />
       <SolicitarHistoricoDialog
         open={tokenOpen}
         onOpenChange={setTokenOpen}
@@ -404,26 +413,56 @@ function Prontuario() {
 }
 
 // ---------------------------------------------------------------------------
-// Adicionar exames — dropzone drag & drop (mesmo UX do cadastro), OCR simulado.
+// Adicionar exames — dropzone drag & drop (mesmo UX do cadastro), leitura via
+// IA (Gemini) com revisão do médico antes de gravar qualquer biomarcador.
 
-type FileEntry = { file: File; state: "reading" | "done" | "error"; errorMsg?: string };
+type FileEntry = {
+  file: File;
+  state: "reading" | "review" | "done" | "error";
+  errorMsg?: string;
+  extracted?: {
+    rawName: string;
+    value: number;
+    unit: string;
+    refMin: number | null;
+    refMax: number | null;
+    matchedName: string | null;
+  }[];
+  collectionDate?: string | null;
+};
 const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 function UploadExamesDialog({
   open,
   onOpenChange,
   patientName,
+  patientId,
+  token,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   patientName: string;
+  patientId: string;
+  token: string;
+  onSaved: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
 
-  function processFiles(list: FileList) {
-    const entries: FileEntry[] = Array.from(list).map((file) => {
+  async function processFiles(list: FileList) {
+    const incoming = Array.from(list);
+    const entries: FileEntry[] = incoming.map((file) => {
       const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
       if (!ACCEPTED_EXTS.includes(ext)) {
         return { file, state: "error", errorMsg: `Formato não suportado (${ext || "?"})` };
@@ -431,16 +470,73 @@ function UploadExamesDialog({
       return { file, state: "reading" };
     });
     setFiles((prev) => [...prev, ...entries]);
-    entries.forEach((entry) => {
-      if (entry.state === "reading") {
-        setTimeout(() => {
+
+    for (const entry of entries) {
+      if (entry.state !== "reading") continue;
+      try {
+        const base64 = await fileToBase64(entry.file);
+        const mimeType = entry.file.type || "application/pdf";
+        const result = await extractExamDocument({
+          data: { token, fileBase64: base64, mimeType: mimeType as any },
+        });
+        if (!result.ok) {
           setFiles((prev) =>
-            prev.map((f) => (f.file === entry.file ? { ...f, state: "done" as const } : f)),
+            prev.map((f) =>
+              f.file === entry.file
+                ? { ...f, state: "error", errorMsg: "Falha na leitura por IA" }
+                : f,
+            ),
           );
-        }, 800);
+          continue;
+        }
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.file === entry.file
+              ? { ...f, state: "review", extracted: result.items, collectionDate: result.collectionDate }
+              : f,
+          ),
+        );
+      } catch {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.file === entry.file ? { ...f, state: "error", errorMsg: "Erro ao processar arquivo" } : f,
+          ),
+        );
       }
-    });
+    }
   }
+
+  const confirmarExame = async (entry: FileEntry) => {
+    if (!entry.extracted || entry.extracted.length === 0) return;
+    const mapped = entry.extracted
+      .filter((it) => it.matchedName) // só grava o que foi reconhecido
+      .map((it) => ({
+        name: it.matchedName as string,
+        value: it.value,
+        unit: it.unit,
+        refMin: it.refMin ?? 0,
+        refMax: it.refMax ?? 0,
+      }));
+    if (mapped.length === 0) {
+      toast.error("Nenhum biomarcador reconhecido neste exame — lance manualmente.");
+      return;
+    }
+    const r = await confirmExtractedMeasurements({
+      data: {
+        token,
+        patientId,
+        date: entry.collectionDate || new Date().toISOString().slice(0, 10),
+        items: mapped,
+      },
+    });
+    if (!r.ok) {
+      toast.error("Não consegui salvar os exames.");
+      return;
+    }
+    setFiles((prev) => prev.map((f) => (f.file === entry.file ? { ...f, state: "done" } : f)));
+    toast.success(`${r.count} biomarcador${r.count === 1 ? "" : "es"} adicionado${r.count === 1 ? "" : "s"} ao histórico.`);
+    onSaved();
+  };
 
   const doneCount = files.filter((f) => f.state === "done").length;
 
@@ -452,8 +548,8 @@ function UploadExamesDialog({
             <FileUp className="h-4 w-4 text-primary" /> Adicionar exames
           </DialogTitle>
           <DialogDescription>
-            Anexe PDFs ou imagens dos exames de {patientName.split(" ")[0]}. A leitura por OCR
-            popula os biomarcadores automaticamente.
+            Anexe PDFs ou imagens dos exames de {patientName.split(" ")[0]}. A leitura por IA
+            identifica os biomarcadores — revise os valores antes de salvar.
           </DialogDescription>
         </DialogHeader>
         <div
@@ -490,38 +586,115 @@ function UploadExamesDialog({
           }}
         />
         {files.length > 0 && (
-          <ul className="mt-1 max-h-52 space-y-1.5 overflow-y-auto">
+          <ul className="mt-1 max-h-72 space-y-1.5 overflow-y-auto">
             {files.map((entry, i) => (
               <li
                 key={i}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                className={`rounded-lg px-3 py-2 text-sm ${
                   entry.state === "error"
                     ? "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-800"
                     : "bg-muted/50"
                 }`}
               >
-                {entry.state === "reading" && (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                <div className="flex items-center gap-2">
+                  {entry.state === "reading" && (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                  )}
+                  {entry.state === "review" && (
+                    <ClipboardList className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  )}
+                  {entry.state === "done" && (
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                  )}
+                  {entry.state === "error" && <X className="h-3.5 w-3.5 shrink-0 text-red-500" />}
+                  <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {entry.state === "reading" && "Lendo via IA…"}
+                    {entry.state === "review" && "Revise abaixo"}
+                    {entry.state === "done" && "✓ salvo"}
+                    {entry.state === "error" && entry.errorMsg}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFiles((prev) => prev.filter((f) => f.file !== entry.file))
+                    }
+                    className="ml-1 shrink-0 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {entry.state === "review" && entry.extracted && (
+                  <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+                    {entry.extracted.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Nenhum biomarcador identificado neste arquivo.
+                      </p>
+                    )}
+                    {entry.extracted.map((it, j) => (
+                      <div
+                        key={j}
+                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${
+                          it.matchedName
+                            ? "bg-background ring-1 ring-border"
+                            : "bg-muted/40 text-muted-foreground opacity-70"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {it.matchedName ?? `${it.rawName} · não reconhecido`}
+                        </span>
+                        <input
+                          type="number"
+                          value={it.value}
+                          onChange={(e) => {
+                            const v = e.target.valueAsNumber;
+                            setFiles((prev) =>
+                              prev.map((f, fi) =>
+                                fi === i
+                                  ? {
+                                      ...f,
+                                      extracted: f.extracted!.map((x, xi) =>
+                                        xi === j ? { ...x, value: Number.isNaN(v) ? x.value : v } : x,
+                                      ),
+                                    }
+                                  : f,
+                              ),
+                            );
+                          }}
+                          className="w-16 rounded border border-border bg-background px-1 py-0.5 text-right text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={it.unit}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFiles((prev) =>
+                              prev.map((f, fi) =>
+                                fi === i
+                                  ? {
+                                      ...f,
+                                      extracted: f.extracted!.map((x, xi) =>
+                                        xi === j ? { ...x, unit: val } : x,
+                                      ),
+                                    }
+                                  : f,
+                              ),
+                            );
+                          }}
+                          className="w-14 rounded border border-border bg-background px-1 py-0.5 text-xs"
+                        />
+                      </div>
+                    ))}
+                    <Button
+                      size="sm"
+                      className="w-full brand-gradient text-primary-foreground"
+                      disabled={entry.extracted.length === 0}
+                      onClick={() => confirmarExame(entry)}
+                    >
+                      Confirmar e salvar
+                    </Button>
+                  </div>
                 )}
-                {entry.state === "done" && (
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                )}
-                {entry.state === "error" && <X className="h-3.5 w-3.5 shrink-0 text-red-500" />}
-                <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {entry.state === "reading" && "Lendo via OCR (simulado)…"}
-                  {entry.state === "done" && "✓ lido"}
-                  {entry.state === "error" && entry.errorMsg}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFiles((prev) => prev.filter((f) => f.file !== entry.file))
-                  }
-                  className="ml-1 shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
               </li>
             ))}
           </ul>
@@ -532,7 +705,6 @@ function UploadExamesDialog({
             className="brand-gradient text-primary-foreground"
             disabled={doneCount === 0}
             onClick={() => {
-              toast.success(`${doneCount} exame${doneCount === 1 ? "" : "s"} adicionado${doneCount === 1 ? "" : "s"} ao prontuário.`);
               onOpenChange(false);
               setFiles([]);
             }}
