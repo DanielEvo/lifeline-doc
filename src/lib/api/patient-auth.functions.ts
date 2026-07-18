@@ -138,8 +138,9 @@ export const logoutPatient = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 // Timeline do paciente — vínculo com o prontuário (patientCode) ainda não
 // decidido (Pergunta 1, opções A/B/C em aberto). Por ora patientCode é
-// SEMPRE null, então isso só devolve linked:false — sem inventar dados nem
-// tentar casar por CPF/e-mail.
+// SEMPRE null, então isso só devolve linked:false — sem inventar dados
+// clínicos. Já devolve os dados autodeclarados (perfil) e o draft de
+// biomarcadores enviados pelo próprio paciente.
 // ---------------------------------------------------------------------------
 
 export const getPatientTimeline = createServerFn({ method: "POST" })
@@ -147,8 +148,132 @@ export const getPatientTimeline = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const patient = await requirePatient(data.token);
     if (!patient) return { ok: false as const, error: "unauthorized" as const };
-    if (!patient.patientCode) return { ok: true as const, linked: false as const };
-    // patient.patientCode existirá quando o vínculo (Pergunta 1) for
-    // decidido — a leitura do prontuário entra aqui nessa rodada futura.
-    return { ok: true as const, linked: false as const };
+    const registry = await findRegistryByGlobalId(patient.globalId);
+    const pendingMeasurements = await listPendingMeasurements(patient.globalId);
+    return {
+      ok: true as const,
+      linked: false as const,
+      profile: {
+        birthDate: registry?.birthDate ?? null,
+        sexo: registry?.sexo ?? null,
+        telefone: registry?.telefone ?? null,
+        cpf: registry?.cpf ?? null,
+        tipoSanguineo: registry?.patientProfile?.tipoSanguineo ?? null,
+        alergias: registry?.patientProfile?.alergias ?? null,
+      },
+      pendingMeasurements: pendingMeasurements.map((m) => ({
+        id: m.id,
+        name: m.matchedName ?? m.rawName,
+        value: m.value,
+        unit: m.unit,
+        collectionDate: m.collectionDate,
+      })),
+    };
+  });
+
+// ---------------------------------------------------------------------------
+// Perfil autodeclarado do paciente (TECH-13). Escreve em patients_registry.
+// CPF é salvo aqui mas SEM lógica de busca/match — a ligação com prontuários
+// de médicos entra numa próxima rodada.
+// ---------------------------------------------------------------------------
+
+export const updatePatientProfile = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(1),
+      birthDate: z.string().max(20).optional(),
+      sexo: z.enum(["F", "M", "outro"]).optional(),
+      telefone: z.string().max(24).optional(),
+      cpf: z.string().max(20).optional(),
+      tipoSanguineo: z.string().max(6).optional(),
+      alergias: z.string().max(500).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const patient = await requirePatient(data.token);
+    if (!patient) return { ok: false as const, error: "unauthorized" as const };
+    await updateRegistryProfile(patient.globalId, {
+      birthDate: data.birthDate,
+      sexo: data.sexo,
+      telefone: data.telefone,
+      cpf: data.cpf,
+      tipoSanguineo: data.tipoSanguineo,
+      alergias: data.alergias,
+    });
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
+// Upload de exame pelo paciente — MESMO pipeline OCR do médico
+// (extractBiomarkersFromDocument), só troca a autenticação. Nunca escreve
+// em measurements.json: só cria draft em patient_pending_measurements.
+// ---------------------------------------------------------------------------
+
+export const extractExamDocumentPatient = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(1),
+      fileBase64: z.string().min(1),
+      mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const patient = await requirePatient(data.token);
+    if (!patient) return { ok: false as const, error: "unauthorized" as const };
+    try {
+      const result = await extractBiomarkersFromDocument(data.fileBase64, data.mimeType);
+      const items = result.biomarkers.map((b) => {
+        const match = resolveBiomarkerName(b.rawName);
+        return {
+          rawName: b.rawName,
+          value: b.value,
+          unit: match?.unit ?? b.unit,
+          refMin: match?.min ?? null,
+          refMax: match?.max ?? null,
+          matchedName: match?.name ?? null,
+        };
+      });
+      return { ok: true as const, collectionDate: result.collectionDate, items };
+    } catch (e) {
+      return { ok: false as const, error: "extraction_failed" as const, detail: String(e) };
+    }
+  });
+
+export const confirmPatientMeasurements = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(1),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      items: z
+        .array(
+          z.object({
+            rawName: z.string().max(120).optional(),
+            name: z.string().min(1).max(60),
+            value: z.number().finite(),
+            unit: z.string().max(16),
+            refMin: z.number().finite().nullable().optional(),
+            refMax: z.number().finite().nullable().optional(),
+          }),
+        )
+        .min(1)
+        .max(200),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const patient = await requirePatient(data.token);
+    if (!patient) return { ok: false as const, error: "unauthorized" as const };
+    const catalogNames = new Set(BIOMARKER_CATALOG.map((b) => b.name));
+    await addPendingMeasurements(
+      patient.globalId,
+      data.items.map((it) => ({
+        rawName: it.rawName ?? it.name,
+        matchedName: catalogNames.has(it.name) ? it.name : null,
+        value: it.value,
+        unit: it.unit,
+        refMin: it.refMin ?? null,
+        refMax: it.refMax ?? null,
+        collectionDate: data.date ?? null,
+      })),
+    );
+    return { ok: true as const, added: data.items.length };
   });
