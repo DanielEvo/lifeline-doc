@@ -78,7 +78,7 @@ function Header() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Link
-            to="/login"
+            to="/entrar"
             className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground sm:block"
           >
             Entrar
