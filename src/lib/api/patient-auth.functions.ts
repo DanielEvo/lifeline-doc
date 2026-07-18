@@ -262,7 +262,7 @@ export const confirmPatientMeasurements = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const patient = await requirePatient(data.token);
     if (!patient) return { ok: false as const, error: "unauthorized" as const };
-    const catalogNames = new Set(BIOMARKER_CATALOG.map((b) => b.name));
+    const catalogNames = new Set<string>(BIOMARKER_CATALOG.map((b) => b.name));
     await addPendingMeasurements(
       patient.globalId,
       data.items.map((it) => ({
