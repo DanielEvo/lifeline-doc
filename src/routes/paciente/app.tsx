@@ -1,14 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+// Tela do paciente — mesmo vocabulário visual do Step D da demo (moldura
+// de celular + 5 tabs), mas ligada aos dados reais (perfil autodeclarado +
+// exames pendentes vindos do OCR do paciente). Não inventa métricas fake:
+// abas sem dados mostram estado vazio honesto.
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
+  CalendarDays,
   CheckCircle2,
   ClipboardList,
+  FileText,
   FileUp,
   FlaskConical,
   HeartPulse,
+  Home,
   Loader2,
   LogOut,
+  Pill,
   Save,
   ShieldCheck,
   User as UserIcon,
@@ -48,6 +57,10 @@ import {
   getPatientSession,
   type PatientSession,
 } from "@/lib/patient-session";
+import {
+  VerticalTimeline,
+  type VerticalEvent,
+} from "@/components/patient/vertical-timeline";
 
 export const Route = createFileRoute("/paciente/app")({
   head: () => ({
@@ -81,10 +94,21 @@ type TimelineData =
   | { status: "ready"; profile: Profile; pending: PendingItem[] }
   | { status: "error"; msg: string };
 
+type Tab = "home" | "history" | "exams" | "meds" | "profile";
+
+const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "home", label: "Início", icon: Home },
+  { id: "history", label: "Histórico", icon: FileText },
+  { id: "exams", label: "Exames", icon: CalendarDays },
+  { id: "meds", label: "Remédios", icon: Pill },
+  { id: "profile", label: "Perfil", icon: UserIcon },
+];
+
 function PatientAppPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<PatientSession | null>(null);
   const [state, setState] = useState<TimelineData>({ status: "loading" });
+  const [tab, setTab] = useState<Tab>("home");
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const load = async (token: string) => {
@@ -132,10 +156,34 @@ function PatientAppPage() {
 
   const firstName = session?.nome.split(" ")[0] ?? "";
 
+  // Deriva a linha do tempo vertical a partir dos exames pendentes,
+  // agrupando por mês/ano da coleta.
+  const timelineEvents = useMemo<VerticalEvent[]>(() => {
+    if (state.status !== "ready") return [];
+    const groups = new Map<string, PendingItem[]>();
+    for (const p of state.pending) {
+      const key = (p.collectionDate ?? "").slice(0, 7) || "sem-data";
+      groups.set(key, [...(groups.get(key) ?? []), p]);
+    }
+    const events: VerticalEvent[] = [];
+    for (const [key, items] of groups.entries()) {
+      const date = key === "sem-data" ? new Date().toISOString().slice(0, 10) : `${key}-01`;
+      events.push({
+        key: `exam-${key}`,
+        kind: "exame",
+        date,
+        title: `Exames enviados (${items.length})`,
+        summary: items.map((m) => `${m.name} ${m.value}${m.unit}`).join(" · "),
+        status: "Pendente",
+      });
+    }
+    return events.sort((a, b) => b.date.localeCompare(a.date));
+  }, [state]);
+
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
+    <div className="min-h-screen bg-gradient-to-br from-muted/40 via-background to-muted/20">
+      <header className="border-b border-border/60 bg-background/70 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient shadow-md shadow-primary/30">
               <Activity className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
@@ -154,70 +202,337 @@ function PatientAppPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-5 px-4 py-8">
-        <div>
+      <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 md:grid-cols-[1fr_auto_1fr]">
+        {/* painel lateral esquerdo — só em md+ */}
+        <aside className="hidden md:flex md:flex-col md:justify-center">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Meu histórico</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
             {firstName ? `Olá, ${firstName}` : "Olá"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Complete seu perfil e envie exames — eles ficam com você até um médico revisar.
+          <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+            Este é o LifeLine no seu bolso. Complete seu perfil, envie exames e acompanhe sua
+            linha do tempo — os dados oficiais aparecem quando um médico vincular seu
+            prontuário.
           </p>
-        </div>
-
-        {state.status === "loading" && (
-          <div className="flex items-center justify-center rounded-3xl border border-border bg-card p-16 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
-            Carregando…
+          <div className="mt-4 inline-flex w-fit items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+            Seus dados, sob seu controle
           </div>
-        )}
+        </aside>
 
-        {state.status === "error" && (
-          <div className="rounded-3xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-            {state.msg}
+        <PhoneFrame>
+          <PhoneStatusBar />
+          <PhoneHeader firstName={firstName} />
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-4">
+            {state.status === "loading" && (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
+                Carregando…
+              </div>
+            )}
+
+            {state.status === "error" && (
+              <div className="rounded-2xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
+                {state.msg}
+              </div>
+            )}
+
+            {state.status === "ready" && session && (
+              <>
+                {tab === "home" && (
+                  <HomeTab
+                    firstName={firstName}
+                    pendingCount={state.pending.length}
+                    profile={state.profile}
+                    onGoTo={setTab}
+                  />
+                )}
+                {tab === "history" && <HistoryTab events={timelineEvents} />}
+                {tab === "exams" && (
+                  <ExamsTab
+                    pending={state.pending}
+                    onOpenUpload={() => setUploadOpen(true)}
+                  />
+                )}
+                {tab === "meds" && <EmptyMeds />}
+                {tab === "profile" && (
+                  <ProfileTab
+                    token={session.token}
+                    profile={state.profile}
+                    onSaved={() => load(session.token)}
+                    onLogout={handleLogout}
+                  />
+                )}
+              </>
+            )}
           </div>
-        )}
 
-        {state.status === "ready" && session && (
-          <>
-            <ProfileCard
-              token={session.token}
-              profile={state.profile}
-              onSaved={() => load(session.token)}
-            />
+          <TabBar active={tab} onChange={setTab} />
+        </PhoneFrame>
 
-            <ExamsCard
-              pending={state.pending}
-              onOpenUpload={() => setUploadOpen(true)}
-            />
-
-            <UnlinkedCard />
-
-            <UploadPatientDialog
-              open={uploadOpen}
-              onOpenChange={setUploadOpen}
-              token={session.token}
-              onSaved={() => load(session.token)}
-            />
-          </>
-        )}
+        {/* espaço decorativo à direita — mantém a moldura centralizada em md+ */}
+        <div className="hidden md:block" />
       </main>
+
+      {state.status === "ready" && session && (
+        <UploadPatientDialog
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          token={session.token}
+          onSaved={() => load(session.token)}
+        />
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Perfil autodeclarado
+// Moldura de celular
 // ---------------------------------------------------------------------------
 
-function ProfileCard({
+function PhoneFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex h-[720px] w-full max-w-[400px] flex-col overflow-hidden rounded-[2.5rem] border-[10px] border-foreground/90 bg-card shadow-2xl shadow-primary/10">
+      {children}
+    </div>
+  );
+}
+
+function PhoneStatusBar() {
+  return (
+    <div className="flex items-center justify-between bg-foreground/95 px-6 py-1.5 text-[10px] font-medium text-background">
+      <span>9:41</span>
+      <span className="flex items-center gap-1">
+        <span>••••</span>
+        <span>5G</span>
+      </span>
+    </div>
+  );
+}
+
+function PhoneHeader({ firstName }: { firstName: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border bg-background px-4 py-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl brand-gradient text-primary-foreground shadow">
+        <Activity className="h-4 w-4" strokeWidth={2.5} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold tracking-tight">
+          {firstName ? `Olá, ${firstName}` : "LifeLine"}
+        </p>
+        <p className="text-[10px] text-muted-foreground">Seu histórico de saúde</p>
+      </div>
+    </div>
+  );
+}
+
+function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+  return (
+    <nav className="grid grid-cols-5 border-t border-border bg-background">
+      {TABS.map((t) => {
+        const Icon = t.icon;
+        const isActive = t.id === active;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition ${
+              isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+function HomeTab({
+  firstName,
+  pendingCount,
+  profile,
+  onGoTo,
+}: {
+  firstName: string;
+  pendingCount: number;
+  profile: Profile;
+  onGoTo: (t: Tab) => void;
+}) {
+  const profileFilled =
+    !!profile.birthDate &&
+    !!profile.sexo &&
+    !!profile.telefone &&
+    !!profile.tipoSanguineo;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 ring-1 ring-primary/10">
+        <p className="text-[10px] uppercase tracking-wide text-primary/80">Bem-vindo(a)</p>
+        <h2 className="mt-0.5 text-lg font-semibold tracking-tight">
+          {firstName ? `Olá, ${firstName}` : "Olá"}
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Seu histórico começa por aqui — envie seus exames e mantenha seu perfil atualizado.
+        </p>
+      </div>
+
+      <button
+        onClick={() => onGoTo("exams")}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:border-primary/40"
+      >
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          <FlaskConical className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Exames enviados</p>
+          <p className="text-[11px] text-muted-foreground">
+            {pendingCount === 0
+              ? "Nenhum exame ainda. Envie o primeiro."
+              : `${pendingCount} aguardando revisão médica`}
+          </p>
+        </div>
+      </button>
+
+      <button
+        onClick={() => onGoTo("profile")}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:border-primary/40"
+      >
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <UserIcon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">
+            {profileFilled ? "Perfil completo" : "Complete seu perfil"}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {profileFilled
+              ? "Suas informações estão prontas."
+              : "Nascimento, sexo, telefone e tipo sanguíneo."}
+          </p>
+        </div>
+      </button>
+
+      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center">
+        <HeartPulse className="mx-auto h-6 w-6 text-primary/70" />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Consultas oficiais aparecem quando um médico vincular seu prontuário.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function HistoryTab({ events }: { events: VerticalEvent[] }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold tracking-tight">Linha do tempo</h3>
+        <p className="text-[11px] text-muted-foreground">
+          Exames, consultas e cirurgias em ordem cronológica.
+        </p>
+      </div>
+      <VerticalTimeline events={events} />
+    </div>
+  );
+}
+
+function ExamsTab({
+  pending,
+  onOpenUpload,
+}: {
+  pending: PendingItem[];
+  onOpenUpload: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight">Meus exames</h3>
+          <p className="text-[11px] text-muted-foreground">
+            Envie PDFs ou fotos — a leitura é automática, mas só um médico valida.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={onOpenUpload}
+          className="brand-gradient shrink-0 text-primary-foreground"
+        >
+          <FileUp className="mr-1.5 h-3.5 w-3.5" />
+          Enviar
+        </Button>
+      </div>
+
+      {pending.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
+          Você ainda não enviou nenhum exame.
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {pending.map((m) => (
+            <li
+              key={m.id}
+              className="rounded-xl border border-border bg-card p-3 text-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="min-w-0 flex-1 truncate font-medium">{m.name}</p>
+                <p className="shrink-0 font-semibold tabular-nums">
+                  {m.value}
+                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                    {m.unit}
+                  </span>
+                </p>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {m.collectionDate
+                    ? `Coleta ${new Date(m.collectionDate).toLocaleDateString("pt-BR")}`
+                    : "Sem data"}
+                </span>
+                <span className="rounded-full bg-muted px-2 py-0.5 uppercase tracking-wide">
+                  Aguardando revisão
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function EmptyMeds() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <Pill className="h-7 w-7" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold">Nenhum medicamento prescrito</p>
+        <p className="mx-auto mt-1 max-w-[240px] text-[11px] text-muted-foreground">
+          Suas prescrições aparecem aqui quando um médico vincular seu histórico.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ProfileTab({
   token,
   profile,
   onSaved,
+  onLogout,
 }: {
   token: string;
   profile: Profile;
   onSaved: () => void;
+  onLogout: () => void;
 }) {
   const [form, setForm] = useState({
     birthDate: profile.birthDate ?? "",
@@ -265,20 +580,15 @@ function ProfileCard({
   };
 
   return (
-    <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <UserIcon className="h-5 w-5" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold tracking-tight">Complete seu perfil</h2>
-          <p className="text-xs text-muted-foreground">
-            Dados autodeclarados — visíveis apenas para você e para o médico que você autorizar.
-          </p>
-        </div>
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold tracking-tight">Seu perfil</h3>
+        <p className="text-[11px] text-muted-foreground">
+          Dados autodeclarados — visíveis para você e para o médico que autorizar.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="space-y-2.5 rounded-2xl border border-border bg-card p-3">
         <Field label="Data de nascimento">
           <Input
             type="date"
@@ -326,7 +636,10 @@ function ProfileCard({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="CPF (opcional)" hint="Usado no futuro para conectar a médicos que você já visitou — nunca automático.">
+        <Field
+          label="CPF (opcional)"
+          hint="Usado no futuro para conectar a médicos que você já visitou — nunca automático."
+        >
           <Input
             inputMode="numeric"
             placeholder="000.000.000-00"
@@ -334,7 +647,7 @@ function ProfileCard({
             onChange={(e) => setForm({ ...form, cpf: e.target.value })}
           />
         </Field>
-        <Field label="Alergias" className="sm:col-span-2">
+        <Field label="Alergias">
           <Textarea
             rows={2}
             placeholder="Ex.: dipirona, amendoim, látex"
@@ -342,13 +655,11 @@ function ProfileCard({
             onChange={(e) => setForm({ ...form, alergias: e.target.value })}
           />
         </Field>
-      </div>
 
-      <div className="mt-4 flex justify-end">
         <Button
           onClick={submit}
           disabled={!dirty || saving}
-          className="brand-gradient text-primary-foreground"
+          className="brand-gradient w-full text-primary-foreground"
         >
           {saving ? (
             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -358,7 +669,16 @@ function ProfileCard({
           Salvar perfil
         </Button>
       </div>
-    </section>
+
+      <Button
+        variant="outline"
+        onClick={onLogout}
+        className="w-full text-xs text-muted-foreground"
+      >
+        <LogOut className="mr-1.5 h-3.5 w-3.5" />
+        Sair da conta
+      </Button>
+    </div>
   );
 }
 
@@ -366,121 +686,22 @@ function Field({
   label,
   hint,
   children,
-  className,
 }: {
   label: string;
   hint?: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <div className={className}>
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+    <div>
+      <Label className="text-[11px] font-medium text-muted-foreground">{label}</Label>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-1 text-[11px] text-muted-foreground/80">{hint}</p>}
+      {hint && <p className="mt-1 text-[10px] text-muted-foreground/80">{hint}</p>}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Meus exames — lista + botão de upload
-// ---------------------------------------------------------------------------
-
-function ExamsCard({
-  pending,
-  onOpenUpload,
-}: {
-  pending: PendingItem[];
-  onOpenUpload: () => void;
-}) {
-  return (
-    <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <FlaskConical className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Meus exames</h2>
-            <p className="text-xs text-muted-foreground">
-              Envie PDFs ou fotos — a leitura é automática, mas só um médico valida.
-            </p>
-          </div>
-        </div>
-        <Button
-          size="sm"
-          onClick={onOpenUpload}
-          className="brand-gradient text-primary-foreground"
-        >
-          <FileUp className="mr-1.5 h-4 w-4" />
-          Enviar exame
-        </Button>
-      </div>
-
-      {pending.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-          Você ainda não enviou nenhum exame.
-        </div>
-      ) : (
-        <ul className="space-y-1.5">
-          {pending.map((m) => (
-            <li
-              key={m.id}
-              className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2 text-sm"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{m.name}</p>
-                {m.collectionDate && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Coleta {new Date(m.collectionDate).toLocaleDateString("pt-BR")}
-                  </p>
-                )}
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="font-semibold tabular-nums">
-                  {m.value}
-                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">{m.unit}</span>
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                Aguardando revisão médica
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Estado "unlinked" — histórico oficial só aparece via médico
-// ---------------------------------------------------------------------------
-
-function UnlinkedCard() {
-  return (
-    <section className="rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <HeartPulse className="h-7 w-7" />
-      </div>
-      <h2 className="mt-4 text-base font-semibold tracking-tight">
-        Aguardando seu médico liberar o acesso ao seu histórico.
-      </h2>
-      <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-        Consultas, prescrições e laudos oficiais aparecem aqui quando um profissional vincular seu
-        prontuário à sua conta.
-      </p>
-      <div className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-        Seus dados, sob seu controle
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Upload dialog — replica UploadExamesDialog do médico (mesmo pipeline OCR).
-// Não usa patientId; só o token do paciente. Escreve em pending_measurements.
+// Upload dialog — mesmo pipeline OCR do médico, escopo do paciente.
 // ---------------------------------------------------------------------------
 
 type FileEntry = {
