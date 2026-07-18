@@ -28,6 +28,7 @@ export type PatientAccount = {
   provider: "email" | "google";
   avatarUrl: string | null;
   patientCode: string | null; // vínculo com prontuário — decisão futura, sempre null por ora
+  globalId: string; // TECH-13: aponta para patients_registry.json
   createdAt: string;
 };
 
