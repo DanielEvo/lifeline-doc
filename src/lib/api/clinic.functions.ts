@@ -670,7 +670,18 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
+
+    const existing = await listMeasurements(doctor.id, data.patientId);
+    const seen = new Set(existing.map((m) => `${m.name}|${m.date}`));
+
+    let added = 0;
+    let skipped = 0;
     for (const item of data.items) {
+      const key = `${item.name}|${data.date}`;
+      if (seen.has(key)) {
+        skipped++;
+        continue;
+      }
       await addMeasurement(doctor.id, {
         patientId: data.patientId,
         name: item.name,
@@ -681,7 +692,9 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
         date: data.date,
         label: data.label,
       });
+      seen.add(key);
+      added++;
     }
-    await bumpExams(doctor.id, data.patientId, data.items.length);
-    return { ok: true as const, count: data.items.length };
+    await bumpExams(doctor.id, data.patientId, added);
+    return { ok: true as const, added, skipped };
   });

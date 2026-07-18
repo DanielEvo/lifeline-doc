@@ -27,12 +27,15 @@ Leia o documento anexado (PDF ou foto de laudo) e extraia TODOS os biomarcadores
 
 Regras:
 - rawName: nome EXATO como aparece no laudo, sem traduzir ou normalizar.
-- value: apenas o número, sem unidade.
+- value: apenas o valor da tabela principal, no campo "RESULTADO" — NUNCA um
+  valor lido de "Gráfico de Histórico" (esses são resultados de coletas
+  anteriores, não da coleta atual, e devem ser ignorados por completo).
 - unit: unidade exatamente como aparece (ex: "g/dL", "mg/dL").
 - Biomarcador repetido no laudo → retorne cada ocorrência.
-- Ignore texto livre, observações, assinatura do médico.
+- Ignore texto livre, observações, referências bibliográficas, assinatura do médico.
 - Não invente valores. Sem confiança no número, não inclua.
-- collectionDate: data de coleta se aparecer no documento, formato yyyy-mm-dd.`;
+- collectionDate: data de coleta do exame ATUAL, formato yyyy-mm-dd, geralmente
+  no campo "DATA COLETA/RECEBIMENTO" do laudo.`;
 
 export async function extractBiomarkersFromDocument(
   fileBase64: string,

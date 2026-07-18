@@ -85,6 +85,7 @@ import { Dictation } from "@/components/clinic/dictation";
 import {
   ageFrom,
   ANAMNESE_TEMPLATE,
+  BIOMARKER_CATALOG,
   DEFAULT_COLUMNS,
   formatDateTimeBR,
   initialsOf,
@@ -427,6 +428,7 @@ type FileEntry = {
     refMin: number | null;
     refMax: number | null;
     matchedName: string | null;
+    manualOverrideName?: string | null;
   }[];
   collectionDate?: string | null;
 };
@@ -509,16 +511,15 @@ function UploadExamesDialog({
   const confirmarExame = async (entry: FileEntry) => {
     if (!entry.extracted || entry.extracted.length === 0) return;
     const mapped = entry.extracted
-      .filter((it) => it.matchedName) // só grava o que foi reconhecido
-      .map((it) => ({
-        name: it.matchedName as string,
-        value: it.value,
-        unit: it.unit,
-        refMin: it.refMin ?? 0,
-        refMax: it.refMax ?? 0,
-      }));
+      .map((it) => {
+        const name = it.matchedName ?? it.manualOverrideName ?? null;
+        if (!name) return null;
+        return { name, value: it.value, unit: it.unit, refMin: it.refMin ?? 0, refMax: it.refMax ?? 0 };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
     if (mapped.length === 0) {
-      toast.error("Nenhum biomarcador reconhecido neste exame — lance manualmente.");
+      toast.error("Nenhum biomarcador mapeado neste exame — reconheça ou lance manualmente.");
       return;
     }
     const r = await confirmExtractedMeasurements({
@@ -534,7 +535,8 @@ function UploadExamesDialog({
       return;
     }
     setFiles((prev) => prev.map((f) => (f.file === entry.file ? { ...f, state: "done" } : f)));
-    toast.success(`${r.count} biomarcador${r.count === 1 ? "" : "es"} adicionado${r.count === 1 ? "" : "s"} ao histórico.`);
+    const skippedTxt = r.skipped > 0 ? ` · ${r.skipped} já existia${r.skipped === 1 ? "" : "m"} (ignorado${r.skipped === 1 ? "" : "s"})` : "";
+    toast.success(`${r.added} biomarcador${r.added === 1 ? "" : "es"} adicionado${r.added === 1 ? "" : "s"} ao histórico${skippedTxt}.`);
     onSaved();
   };
 
@@ -635,14 +637,43 @@ function UploadExamesDialog({
                       <div
                         key={j}
                         className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${
-                          it.matchedName
+                          it.matchedName || it.manualOverrideName
                             ? "bg-background ring-1 ring-border"
                             : "bg-muted/40 text-muted-foreground opacity-70"
                         }`}
                       >
-                        <span className="min-w-0 flex-1 truncate">
-                          {it.matchedName ?? `${it.rawName} · não reconhecido`}
-                        </span>
+                        {it.matchedName ? (
+                          <span className="min-w-0 flex-1 truncate">{it.matchedName}</span>
+                        ) : (
+                          <Select
+                            value={it.manualOverrideName ?? undefined}
+                            onValueChange={(val) => {
+                              setFiles((prev) =>
+                                prev.map((f, fi) =>
+                                  fi === i
+                                    ? {
+                                        ...f,
+                                        extracted: f.extracted!.map((x, xi) =>
+                                          xi === j ? { ...x, manualOverrideName: val } : x,
+                                        ),
+                                      }
+                                    : f,
+                                ),
+                              );
+                            }}
+                          >
+                            <SelectTrigger className="h-6 min-w-0 flex-1 text-xs">
+                              <SelectValue placeholder={`${it.rawName} · não reconhecido`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {BIOMARKER_CATALOG.map((b) => (
+                                <SelectItem key={b.name} value={b.name} className="text-xs">
+                                  {b.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                         <input
                           type="number"
                           value={it.value}
