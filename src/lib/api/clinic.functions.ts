@@ -662,7 +662,7 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
           }),
         )
         .min(1)
-        .max(40),
+        .max(200),
     }),
   )
   .handler(async ({ data }) => {
