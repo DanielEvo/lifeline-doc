@@ -550,8 +550,8 @@ function UploadExamesDialog({
             <FileUp className="h-4 w-4 text-primary" /> Adicionar exames
           </DialogTitle>
           <DialogDescription>
-            Anexe PDFs ou imagens dos exames de {patientName.split(" ")[0]}. A leitura por IA
-            identifica os biomarcadores — revise os valores antes de salvar.
+            Anexe PDFs ou imagens dos exames de {patientName.split(" ")[0]}. O sistema lê o
+            documento e identifica os biomarcadores — revise os valores antes de salvar.
           </DialogDescription>
         </DialogHeader>
         <div
@@ -611,7 +611,7 @@ function UploadExamesDialog({
                   {entry.state === "error" && <X className="h-3.5 w-3.5 shrink-0 text-red-500" />}
                   <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {entry.state === "reading" && "Lendo via IA…"}
+                    {entry.state === "reading" && "Lendo documento…"}
                     {entry.state === "review" && "Revise abaixo"}
                     {entry.state === "done" && "✓ salvo"}
                     {entry.state === "error" && entry.errorMsg}
