@@ -18,6 +18,13 @@ import {
   verifyPassword,
   type PatientAccount,
 } from "../patient-auth.server";
+import { updateRegistryProfile, findRegistryByGlobalId } from "../patients-registry.server";
+import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
+import { BIOMARKER_CATALOG, resolveBiomarkerName } from "../clinic-types";
+import {
+  addPendingMeasurements,
+  listPendingMeasurements,
+} from "../patient-measurements.server";
 
 type PatientAuthResult =
   | { ok: true; token: string; patient: { nome: string; email: string; avatarUrl: string | null } }
