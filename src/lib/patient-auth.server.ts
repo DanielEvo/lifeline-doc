@@ -17,6 +17,7 @@
 import crypto from "node:crypto";
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
+import { createRegistryEntry } from "./patients-registry.server";
 
 export type PatientAccount = {
   id: string;
@@ -27,6 +28,7 @@ export type PatientAccount = {
   provider: "email" | "google";
   avatarUrl: string | null;
   patientCode: string | null; // vínculo com prontuário — decisão futura, sempre null por ora
+  globalId: string; // TECH-13: aponta para patients_registry.json
   createdAt: string;
 };
 
@@ -53,8 +55,13 @@ export async function createPatient(input: {
   avatarUrl?: string | null;
 }): Promise<PatientAccount> {
   const salt = input.password ? crypto.randomBytes(12).toString("hex") : null;
+  const id = newId();
+  const registry = await createRegistryEntry(
+    { fullName: input.nome, email: input.email },
+    { type: "patient", id },
+  );
   const patient: PatientAccount = {
-    id: newId(),
+    id,
     nome: input.nome,
     email: input.email,
     passHash: input.password && salt ? hashPassword(input.password, salt) : null,
@@ -62,6 +69,7 @@ export async function createPatient(input: {
     provider: input.provider,
     avatarUrl: input.avatarUrl ?? null,
     patientCode: null,
+    globalId: registry.globalId,
     createdAt: nowIso(),
   };
   await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
