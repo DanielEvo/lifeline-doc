@@ -485,7 +485,7 @@ function UploadExamesDialog({
           setFiles((prev) =>
             prev.map((f) =>
               f.file === entry.file
-                ? { ...f, state: "error", errorMsg: "Falha na leitura por IA" }
+                ? { ...f, state: "error", errorMsg: "Falha na leitura do documento" }
                 : f,
             ),
           );
