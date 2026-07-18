@@ -16,7 +16,7 @@
 import { PDFDocument } from "pdf-lib";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
-const GEMINI_MODEL = "gemini-1.5-pro";
+const GEMINI_MODEL = "gemini-flash-latest";
 const PAGES_PER_BATCH = 4;
 const MAX_OUTPUT_TOKENS = 8192;
 const MAX_RETRIES = 3;
