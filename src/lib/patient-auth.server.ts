@@ -55,8 +55,13 @@ export async function createPatient(input: {
   avatarUrl?: string | null;
 }): Promise<PatientAccount> {
   const salt = input.password ? crypto.randomBytes(12).toString("hex") : null;
+  const id = newId();
+  const registry = await createRegistryEntry(
+    { fullName: input.nome, email: input.email },
+    { type: "patient", id },
+  );
   const patient: PatientAccount = {
-    id: newId(),
+    id,
     nome: input.nome,
     email: input.email,
     passHash: input.password && salt ? hashPassword(input.password, salt) : null,
@@ -64,6 +69,7 @@ export async function createPatient(input: {
     provider: input.provider,
     avatarUrl: input.avatarUrl ?? null,
     patientCode: null,
+    globalId: registry.globalId,
     createdAt: nowIso(),
   };
   await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
