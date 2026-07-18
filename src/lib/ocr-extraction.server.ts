@@ -7,6 +7,11 @@
 // recursivamente, até 1 página — agnóstico ao tamanho do documento e à
 // densidade de biomarcadores por página. Imagens soltas (.jpg/.png) não
 // passam por essa divisão, vão direto.
+//
+// Falha transitória (rate limit 429, 5xx, timeout de polling do File API) em
+// qualquer lote é reexecutada com backoff exponencial antes de desistir —
+// sem isso, um laudo de várias páginas processado em lotes sequenciais perde
+// silenciosamente qualquer lote que esbarre em rate limit no meio do caminho.
 
 import { PDFDocument } from "pdf-lib";
 
@@ -14,6 +19,46 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
 const GEMINI_MODEL = "gemini-1.5-pro";
 const PAGES_PER_BATCH = 4;
 const MAX_OUTPUT_TOKENS = 8192;
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1500;
+
+// Erros de HTTP da API do Gemini carregam o status — permite diferenciar
+// falha transitória (429 rate limit, 5xx) de falha permanente (400 malformado,
+// 403 sem permissão), já que só a primeira vale a pena tentar de novo.
+class GeminiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+// Reexecuta `fn` com backoff exponencial em falha transitória (rate limit,
+// erro 5xx, timeout de polling do File API, erro de rede). Falha permanente
+// (4xx que não seja 429) propaga na primeira tentativa — tentar de novo não
+// resolveria. Sem isso, um laudo de várias páginas processado em lotes
+// sequenciais perde silenciosamente qualquer lote que esbarre em rate limit
+// no meio do caminho.
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const retryable = e instanceof GeminiRequestError ? isRetryableStatus(e.status) : true;
+      if (!retryable || attempt >= MAX_RETRIES) throw e;
+      const delay = RETRY_BASE_DELAY_MS * 2 ** attempt;
+      console.error(
+        `[ocr-extraction] Tentativa ${attempt + 1}/${MAX_RETRIES + 1} falhou (${e instanceof Error ? e.message : e}) — nova tentativa em ${delay}ms.`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
 
 export type ExtractedBiomarker = { rawName: string; value: number; unit: string };
 
@@ -68,7 +113,10 @@ async function uploadFileToGemini(bytes: Uint8Array, mimeType: string, apiKey: s
     body: JSON.stringify({ file: { display_name: "exame-lifeline" } }),
   });
   if (!startRes.ok) {
-    throw new Error(`Gemini upload start error ${startRes.status}: ${(await startRes.text()).slice(0, 300)}`);
+    throw new GeminiRequestError(
+      `Gemini upload start error ${startRes.status}: ${(await startRes.text()).slice(0, 300)}`,
+      startRes.status,
+    );
   }
   const uploadUrl = startRes.headers.get("x-goog-upload-url");
   if (!uploadUrl) throw new Error("Gemini upload: URL de upload não retornada");
@@ -83,7 +131,10 @@ async function uploadFileToGemini(bytes: Uint8Array, mimeType: string, apiKey: s
     body: bytes as BodyInit,
   });
   if (!uploadRes.ok) {
-    throw new Error(`Gemini upload error ${uploadRes.status}: ${(await uploadRes.text()).slice(0, 300)}`);
+    throw new GeminiRequestError(
+      `Gemini upload error ${uploadRes.status}: ${(await uploadRes.text()).slice(0, 300)}`,
+      uploadRes.status,
+    );
   }
   const uploaded = await uploadRes.json();
   const fileUri = uploaded?.file?.uri;
@@ -95,7 +146,7 @@ async function uploadFileToGemini(bytes: Uint8Array, mimeType: string, apiKey: s
   while (state !== "ACTIVE" && attempts < 15) {
     await new Promise((r) => setTimeout(r, 1000));
     const statusRes = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${apiKey}`);
-    if (!statusRes.ok) throw new Error(`Gemini file status error ${statusRes.status}`);
+    if (!statusRes.ok) throw new GeminiRequestError(`Gemini file status error ${statusRes.status}`, statusRes.status);
     const statusJson = await statusRes.json();
     state = statusJson?.state;
     if (state === "FAILED") throw new Error("Gemini: processamento do arquivo falhou");
@@ -123,7 +174,9 @@ async function extractRaw(bytes: Uint8Array, mimeType: string, apiKey: string): 
     }),
   });
 
-  if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    throw new GeminiRequestError(`Gemini API error ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
+  }
 
   const json = await res.json();
   const candidate = json.candidates?.[0];
@@ -157,9 +210,11 @@ async function extractPageRangeRecursive(
 
   let result: RawExtraction;
   try {
-    result = await extractRaw(bytes, "application/pdf", apiKey);
+    result = await withRetry(() => extractRaw(bytes, "application/pdf", apiKey));
   } catch (e) {
-    console.error(`[ocr-extraction] Falha no lote de páginas ${pageIndices.join(",")}: ${e}`);
+    console.error(
+      `[ocr-extraction] Falha definitiva no lote de páginas ${pageIndices.join(",")} após ${MAX_RETRIES + 1} tentativa(s): ${e}`,
+    );
     return { collectionDate: null, biomarkers: [] };
   }
 
@@ -195,7 +250,7 @@ export async function extractBiomarkersFromDocument(
   if (mimeType !== "application/pdf") {
     // Imagem solta: uma página, sem necessidade de lotes.
     const bytes = Buffer.from(fileBase64, "base64");
-    const result = await extractRaw(bytes, mimeType, apiKey);
+    const result = await withRetry(() => extractRaw(bytes, mimeType, apiKey));
     return { collectionDate: result.collectionDate, biomarkers: result.biomarkers };
   }
 
