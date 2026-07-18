@@ -9,30 +9,23 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SobreRouteImport } from './routes/sobre'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as DemoRouteImport } from './routes/demo'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as DemoRouteImport } from './routes/demo'
+import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as SobreRouteImport } from './routes/sobre'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as PacienteAppRouteImport } from './routes/paciente/app'
+import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
 
-const SobreRoute = SobreRouteImport.update({
-  id: '/sobre',
-  path: '/sobre',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DemoRoute = DemoRouteImport.update({
-  id: '/demo',
-  path: '/demo',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -45,9 +38,24 @@ const AppRouteRoute = AppRouteRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SobreRoute = SobreRouteImport.update({
+  id: '/sobre',
+  path: '/sobre',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -58,6 +66,16 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PacienteAppRoute = PacienteAppRouteImport.update({
+  id: '/paciente/app',
+  path: '/paciente/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PacienteLoginRoute = PacienteLoginRouteImport.update({
+  id: '/paciente/login',
+  path: '/paciente/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
@@ -76,9 +94,12 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteRouteWithChildren
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/paciente/app': typeof PacienteAppRoute
+  '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
@@ -87,9 +108,12 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/paciente/app': typeof PacienteAppRoute
+  '/paciente/login': typeof PacienteLoginRoute
   '/app': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
@@ -100,9 +124,12 @@ export interface FileRoutesById {
   '/app': typeof AppRouteRouteWithChildren
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
+  '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/paciente/app': typeof PacienteAppRoute
+  '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
@@ -114,9 +141,12 @@ export interface FileRouteTypes {
     | '/app'
     | '/admin'
     | '/demo'
+    | '/entrar'
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/paciente/app'
+    | '/paciente/login'
     | '/app/'
     | '/app/pacientes/$id'
     | '/app/pacientes/'
@@ -125,9 +155,12 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/demo'
+    | '/entrar'
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/paciente/app'
+    | '/paciente/login'
     | '/app'
     | '/app/pacientes/$id'
     | '/app/pacientes'
@@ -137,9 +170,12 @@ export interface FileRouteTypes {
     | '/app'
     | '/admin'
     | '/demo'
+    | '/entrar'
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/paciente/app'
+    | '/paciente/login'
     | '/app/'
     | '/app/pacientes/$id'
     | '/app/pacientes/'
@@ -150,32 +186,21 @@ export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   AdminRoute: typeof AdminRoute
   DemoRoute: typeof DemoRoute
+  EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  PacienteAppRoute: typeof PacienteAppRoute
+  PacienteLoginRoute: typeof PacienteLoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sobre': {
-      id: '/sobre'
-      path: '/sobre'
-      fullPath: '/sobre'
-      preLoaderRoute: typeof SobreRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/demo': {
-      id: '/demo'
-      path: '/demo'
-      fullPath: '/demo'
-      preLoaderRoute: typeof DemoRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -192,11 +217,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sobre': {
+      id: '/sobre'
+      path: '/sobre'
+      fullPath: '/sobre'
+      preLoaderRoute: typeof SobreRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -211,6 +257,20 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paciente/app': {
+      id: '/paciente/app'
+      path: '/paciente/app'
+      fullPath: '/paciente/app'
+      preLoaderRoute: typeof PacienteAppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paciente/login': {
+      id: '/paciente/login'
+      path: '/paciente/login'
+      fullPath: '/paciente/login'
+      preLoaderRoute: typeof PacienteLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/pacientes/': {
@@ -251,9 +311,12 @@ const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   AdminRoute: AdminRoute,
   DemoRoute: DemoRoute,
+  EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  PacienteAppRoute: PacienteAppRoute,
+  PacienteLoginRoute: PacienteLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
