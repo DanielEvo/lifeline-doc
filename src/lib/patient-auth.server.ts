@@ -17,6 +17,7 @@
 import crypto from "node:crypto";
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
+import { createRegistryEntry } from "./patients-registry.server";
 
 export type PatientAccount = {
   id: string;
