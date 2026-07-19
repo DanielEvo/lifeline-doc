@@ -139,6 +139,19 @@ export function AppointmentCalendar({
     },
   });
 
+  const remarcar = useMutation({
+    mutationFn: (v: { id: string; dateTime: string }) =>
+      rescheduleAppointment({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui remarcar.");
+      toast.success(
+        `Remarcado para ${new Date(r.appointment.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+      );
+      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: () => toast.error("Não consegui remarcar."),
+  });
+
   const shift = (dir: -1 | 1) => {
     const d = new Date(cursor);
     if (view === "dia") d.setDate(d.getDate() + dir);
