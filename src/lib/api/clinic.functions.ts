@@ -23,7 +23,7 @@ import {
 } from "../patients.server";
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
-import { createAppointment, listAppointments, setAppointmentStatus } from "../agenda.server";
+import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
 import { createCharge, listCharges, setChargeStatus } from "../billing.server";
 import {
   createEvolution,
