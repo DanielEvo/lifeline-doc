@@ -90,7 +90,7 @@ function AdminPacientes() {
                 </td>
               </tr>
             )}
-            {rows.map((p) => (
+            {rows.map((p: (typeof rows)[number]) => (
               <tr key={p.id} className="border-t border-border">
                 <td className="px-4 py-3 font-medium">{p.nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.email}</td>

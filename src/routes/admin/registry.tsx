@@ -25,7 +25,7 @@ function AdminRegistry() {
             Nenhuma entrada de registry ainda.
           </div>
         )}
-        {rows.map((r) => (
+        {rows.map((r: (typeof rows)[number]) => (
           <div key={r.globalId} className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span className="font-semibold">{r.fullName}</span>

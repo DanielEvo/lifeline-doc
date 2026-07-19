@@ -88,7 +88,7 @@ function AdminMedicos() {
                 </td>
               </tr>
             )}
-            {rows.map((d) => (
+            {rows.map((d: (typeof rows)[number]) => (
               <tr key={d.id} className="border-t border-border">
                 <td className="px-4 py-3 font-medium">{d.nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">{d.email}</td>
