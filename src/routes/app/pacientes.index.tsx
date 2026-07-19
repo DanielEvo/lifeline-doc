@@ -470,13 +470,30 @@ function PainelPacientes() {
         )}
       </div>
 
-      {/* Agenda drag & drop */}
-      <AppointmentCalendar
-        token={token}
-        patients={ativos}
-        appointments={appointments}
-        onOpenPatient={abrir}
-      />
+      {/* Agenda drag & drop — só pacientes visíveis na tabela acima com agendamento */}
+      {(() => {
+        const idsVisiveis = new Set<string>(
+          view === "todos"
+            ? listaTodos.map((p) => p.id)
+            : view === "hoje"
+              ? listaHoje.map((a) => a.patientId)
+              : view === "faltas"
+                ? listaFaltas.map((a) => a.patientId)
+                : listaCobrancas.map((c) => c.patientId),
+        );
+        const apptsVisiveis = appointments.filter((a) => idsVisiveis.has(a.patientId));
+        const idsComAgenda = new Set(apptsVisiveis.map((a) => a.patientId));
+        const pacientesVisiveis = ativos.filter((p) => idsComAgenda.has(p.id));
+        return (
+          <AppointmentCalendar
+            token={token}
+            patients={pacientesVisiveis}
+            appointments={apptsVisiveis}
+            onOpenPatient={abrir}
+          />
+        );
+      })()}
+
 
 
       {/* Dialogs */}
