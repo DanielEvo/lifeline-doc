@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { scheduleAppointment } from "@/lib/api/clinic.functions";
+import { scheduleAppointment, rescheduleAppointment } from "@/lib/api/clinic.functions";
 import {
   formatHourBR,
   initialsOf,
