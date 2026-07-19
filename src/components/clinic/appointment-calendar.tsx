@@ -230,6 +230,7 @@ export function AppointmentCalendar({
             appointments={appointments}
             byId={byId}
             onDropPatient={openConfirm}
+            onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
           />
         )}
@@ -240,6 +241,7 @@ export function AppointmentCalendar({
             appointments={appointments}
             byId={byId}
             onDropPatient={openConfirm}
+            onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
           />
         )}
@@ -253,9 +255,10 @@ export function AppointmentCalendar({
       </div>
 
       <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-        Dica: arraste um paciente da lista acima até um horário para agendar.
+        Dica: arraste um card de consulta para outro horário para remarcar.
         Até {MAX_PARALLEL} pacientes por horário — o 3º dispara alerta.
       </div>
+
 
       {/* Confirmação */}
       <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
