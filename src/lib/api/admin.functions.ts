@@ -87,7 +87,7 @@ export const adminDashboard = createServerFn({ method: "GET" }).handler(async ()
 export const adminListDoctors = createServerFn({ method: "GET" }).handler(async () => {
   await requireAdmin();
   const rows = await readRows<Doctor>(DOCTORS);
-  return { rows: rows.map(stripSecrets) };
+  return { rows: rows.map(stripSecrets) as Omit<Doctor, "passHash" | "salt">[] };
 });
 
 export const adminResetDoctorPassword = createServerFn({ method: "POST" })
