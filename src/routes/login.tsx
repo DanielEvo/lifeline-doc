@@ -237,6 +237,17 @@ function LoginPage() {
               </Button>
             </form>
 
+            {mode === "login" ? (
+              <div className="mt-3 text-right">
+                <Link
+                  to="/esqueci-senha"
+                  className="text-xs text-muted-foreground transition hover:text-primary"
+                >
+                  Esqueci minha senha
+                </Link>
+              </div>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setMode(mode === "login" ? "register" : "login")}

@@ -79,7 +79,7 @@ function PatientLoginPage() {
     if (busy) return;
     setBusy("google");
     try {
-      const redirectUri = `${window.location.origin}/auth/callback`;
+      const redirectUri = `${window.location.origin}/paciente/auth/callback`;
       const start = await patientGoogleAuthStart({ data: { redirectUri } });
       if (start.url) {
         window.location.assign(start.url);
@@ -231,6 +231,17 @@ function PatientLoginPage() {
                 {mode === "login" ? "Entrar" : "Criar conta e entrar"}
               </Button>
             </form>
+
+            {mode === "login" ? (
+              <div className="mt-3 text-right">
+                <Link
+                  to="/paciente/esqueci-senha"
+                  className="text-xs text-muted-foreground transition hover:text-primary"
+                >
+                  Esqueci minha senha
+                </Link>
+              </div>
+            ) : null}
 
             <button
               type="button"
