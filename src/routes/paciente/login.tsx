@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   loginPatient,
-  patientGoogleAuthStart,
   patientGoogleLogin,
   registerPatient,
 } from "@/lib/api/patient-auth.functions";
