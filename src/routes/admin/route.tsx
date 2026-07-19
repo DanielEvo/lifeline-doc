@@ -1,7 +1,7 @@
 // Layout admin — sidebar + guard. beforeLoad chama adminStatus; se não
 // desbloqueado, redireciona para /admin/entrar.
 
-import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, LogOut, ShieldCheck, Stethoscope, User, Users, Beaker } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,12 +22,13 @@ export const Route = createFileRoute("/admin")({
 
 function AdminLayout() {
   const navigate = useNavigate();
-  const path =
-    typeof window !== "undefined" ? window.location.pathname : "/admin";
+  // SSR-safe: leia o pathname pelo router, não por window (evita hydration mismatch).
+  const path = useRouterState({ select: (s) => s.location.pathname });
   const isEntrar = path === "/admin/entrar";
 
   // Tela de login não usa o shell — renderiza direto
   if (isEntrar) return <Outlet />;
+
 
   const nav: Array<{
     to: "/admin" | "/admin/medicos" | "/admin/pacientes" | "/admin/registry" | "/admin/testes";
