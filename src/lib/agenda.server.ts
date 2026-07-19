@@ -50,3 +50,20 @@ export async function setAppointmentStatus(
   });
   return updated;
 }
+
+export async function updateAppointmentDateTime(
+  doctorId: string,
+  id: string,
+  dateTime: string,
+): Promise<Appointment | undefined> {
+  let updated: Appointment | undefined;
+  await mutateRows<Appointment>(FILE, (rows) => {
+    const a = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!a) return;
+    a.dateTime = dateTime;
+    a.updatedAt = nowIso();
+    updated = { ...a };
+  });
+  return updated;
+}
+
