@@ -49,6 +49,7 @@ import {
 import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { PageHeader } from "@/components/clinic/page-header";
 import { ChargeDialog, ScheduleDialog } from "@/components/clinic/action-dialogs";
+import { AppointmentCalendar } from "@/components/clinic/appointment-calendar";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
   archiveMyPatient,
@@ -422,8 +423,8 @@ function PainelPacientes() {
         )}
       </div>
 
-      {/* Conteúdo da visão */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+      {/* Conteúdo da visão — bloco fixo com rolagem interna */}
+      <div className="mt-4 max-h-[380px] overflow-y-auto rounded-2xl border border-border bg-card">
         {view === "todos" && (
           <VistaTodos
             lista={listaTodos}
@@ -468,6 +469,15 @@ function PainelPacientes() {
           />
         )}
       </div>
+
+      {/* Agenda drag & drop */}
+      <AppointmentCalendar
+        token={token}
+        patients={ativos}
+        appointments={appointments}
+        onOpenPatient={abrir}
+      />
+
 
       {/* Dialogs */}
       <PatientFormDialog
