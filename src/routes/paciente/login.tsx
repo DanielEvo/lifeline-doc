@@ -79,12 +79,6 @@ function PatientLoginPage() {
     if (busy) return;
     setBusy("google");
     try {
-      const redirectUri = `${window.location.origin}/auth/callback`;
-      const start = await patientGoogleAuthStart({ data: { redirectUri } });
-      if (start.url) {
-        window.location.assign(start.url);
-        return;
-      }
       const r = await patientGoogleLogin({ data: {} });
       if (r.ok) finish(r);
       else toast.error(r.error);
