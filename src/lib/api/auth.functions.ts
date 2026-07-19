@@ -123,3 +123,39 @@ export const logout = createServerFn({ method: "POST" })
     await revokeSession(data.token);
     return { ok: true as const };
   });
+
+// ---------------------------------------------------------------------------
+// Password reset — solicita link e consome token. Sem envio de e-mail real
+// ainda: quando o token é gerado, devLink volta com a URL montada pelo
+// cliente para exibição na tela (fluxo simulado, aprovado pelo produto).
+// ---------------------------------------------------------------------------
+
+import {
+  createPasswordReset,
+  consumePasswordReset,
+} from "../auth.server";
+
+export const requestPasswordReset = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      email: z.string().email().max(160),
+      origin: z.string().url().max(200),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const token = await createPasswordReset(data.email);
+    // Nunca revela se o e-mail existe. devLink só vem quando geramos token.
+    const devLink = token ? `${data.origin}/redefinir-senha?token=${token}` : null;
+    return { ok: true as const, devLink };
+  });
+
+export const resetPassword = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(10).max(200),
+      newPassword: z.string().min(6).max(120),
+    }),
+  )
+  .handler(async ({ data }) => {
+    return consumePasswordReset(data.token, data.newPassword);
+  });

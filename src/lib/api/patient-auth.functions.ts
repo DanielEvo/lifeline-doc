@@ -277,3 +277,38 @@ export const confirmPatientMeasurements = createServerFn({ method: "POST" })
     );
     return { ok: true as const, added: data.items.length };
   });
+
+// ---------------------------------------------------------------------------
+// Password reset do paciente — espelha auth.functions.ts, tabela e sessões
+// totalmente separadas. Sem envio real de e-mail: devLink volta para
+// exibição na tela (fluxo simulado aprovado pelo produto).
+// ---------------------------------------------------------------------------
+
+import {
+  createPatientPasswordReset,
+  consumePatientPasswordReset,
+} from "../patient-auth.server";
+
+export const requestPatientPasswordReset = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      email: z.string().email().max(160),
+      origin: z.string().url().max(200),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const token = await createPatientPasswordReset(data.email);
+    const devLink = token ? `${data.origin}/paciente/redefinir-senha?token=${token}` : null;
+    return { ok: true as const, devLink };
+  });
+
+export const resetPatientPassword = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(10).max(200),
+      newPassword: z.string().min(6).max(120),
+    }),
+  )
+  .handler(async ({ data }) => {
+    return consumePatientPasswordReset(data.token, data.newPassword);
+  });

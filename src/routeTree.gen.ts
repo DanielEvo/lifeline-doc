@@ -10,17 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SobreRouteImport } from './routes/sobre'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as PacienteRedefinirSenhaRouteImport } from './routes/paciente/redefinir-senha'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
+import { Route as PacienteEsqueciSenhaRouteImport } from './routes/paciente/esqueci-senha'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
+import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
 
 const SobreRoute = SobreRouteImport.update({
@@ -28,9 +33,19 @@ const SobreRoute = SobreRouteImport.update({
   path: '/sobre',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
+  id: '/esqueci-senha',
+  path: '/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -63,9 +78,19 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const PacienteRedefinirSenhaRoute = PacienteRedefinirSenhaRouteImport.update({
+  id: '/paciente/redefinir-senha',
+  path: '/paciente/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PacienteLoginRoute = PacienteLoginRouteImport.update({
   id: '/paciente/login',
   path: '/paciente/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PacienteEsqueciSenhaRoute = PacienteEsqueciSenhaRouteImport.update({
+  id: '/paciente/esqueci-senha',
+  path: '/paciente/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PacienteAppRoute = PacienteAppRouteImport.update({
@@ -83,6 +108,11 @@ const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   path: '/pacientes/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const PacienteAuthCallbackRoute = PacienteAuthCallbackRouteImport.update({
+  id: '/paciente/auth/callback',
+  path: '/paciente/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppPacientesIdRoute = AppPacientesIdRouteImport.update({
   id: '/pacientes/$id',
   path: '/pacientes/$id',
@@ -95,13 +125,18 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/paciente/redefinir-senha': typeof PacienteRedefinirSenhaRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -109,13 +144,18 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/paciente/redefinir-senha': typeof PacienteRedefinirSenhaRoute
   '/app': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
 }
 export interface FileRoutesById {
@@ -125,13 +165,18 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/paciente/redefinir-senha': typeof PacienteRedefinirSenhaRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
 }
 export interface FileRouteTypes {
@@ -142,13 +187,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/sobre'
     | '/auth/callback'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
+    | '/paciente/redefinir-senha'
     | '/app/'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -156,13 +206,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/sobre'
     | '/auth/callback'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
+    | '/paciente/redefinir-senha'
     | '/app'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes'
   id:
     | '__root__'
@@ -171,13 +226,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/sobre'
     | '/auth/callback'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
+    | '/paciente/redefinir-senha'
     | '/app/'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes/'
   fileRoutesById: FileRoutesById
 }
@@ -187,11 +247,16 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   DemoRoute: typeof DemoRoute
   EntrarRoute: typeof EntrarRoute
+  EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   LoginRoute: typeof LoginRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   SobreRoute: typeof SobreRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   PacienteAppRoute: typeof PacienteAppRoute
+  PacienteEsqueciSenhaRoute: typeof PacienteEsqueciSenhaRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
+  PacienteRedefinirSenhaRoute: typeof PacienteRedefinirSenhaRoute
+  PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -203,11 +268,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SobreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/esqueci-senha': {
+      id: '/esqueci-senha'
+      path: '/esqueci-senha'
+      fullPath: '/esqueci-senha'
+      preLoaderRoute: typeof EsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -252,11 +331,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/paciente/redefinir-senha': {
+      id: '/paciente/redefinir-senha'
+      path: '/paciente/redefinir-senha'
+      fullPath: '/paciente/redefinir-senha'
+      preLoaderRoute: typeof PacienteRedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/paciente/login': {
       id: '/paciente/login'
       path: '/paciente/login'
       fullPath: '/paciente/login'
       preLoaderRoute: typeof PacienteLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paciente/esqueci-senha': {
+      id: '/paciente/esqueci-senha'
+      path: '/paciente/esqueci-senha'
+      fullPath: '/paciente/esqueci-senha'
+      preLoaderRoute: typeof PacienteEsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/paciente/app': {
@@ -279,6 +372,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/pacientes/'
       preLoaderRoute: typeof AppPacientesIndexRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/paciente/auth/callback': {
+      id: '/paciente/auth/callback'
+      path: '/paciente/auth/callback'
+      fullPath: '/paciente/auth/callback'
+      preLoaderRoute: typeof PacienteAuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/pacientes/$id': {
       id: '/app/pacientes/$id'
@@ -312,22 +412,17 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   DemoRoute: DemoRoute,
   EntrarRoute: EntrarRoute,
+  EsqueciSenhaRoute: EsqueciSenhaRoute,
   LoginRoute: LoginRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
   SobreRoute: SobreRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   PacienteAppRoute: PacienteAppRoute,
+  PacienteEsqueciSenhaRoute: PacienteEsqueciSenhaRoute,
   PacienteLoginRoute: PacienteLoginRoute,
+  PacienteRedefinirSenhaRoute: PacienteRedefinirSenhaRoute,
+  PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

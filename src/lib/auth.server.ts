@@ -198,3 +198,75 @@ export async function exchangeGoogleCode(
     return { error: "id_token do Google ilegível." };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Password reset — token único, expira em 30 min, invalida todas as sessões
+// do médico ao trocar a senha. Tabela dedicada (password_resets.json).
+// ---------------------------------------------------------------------------
+
+type PasswordReset = {
+  token: string;
+  doctorId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+};
+
+const PASSWORD_RESETS = "password_resets.json";
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+/** Cria um token de reset se o e-mail existir. Retorna o token para o
+ *  chamador montar o link — quando o e-mail não existe, retorna null (a
+ *  server fn nunca revela isso para o cliente). */
+export async function createPasswordReset(email: string): Promise<string | null> {
+  const doctor = await findDoctorByEmail(email);
+  if (!doctor) return null;
+  if (doctor.provider === "google" && !doctor.passHash) return null; // conta só Google
+  const token = crypto.randomBytes(32).toString("hex");
+  const now = Date.now();
+  await mutateRows<PasswordReset>(PASSWORD_RESETS, (rows) => {
+    // limpa expirados/usados enquanto grava
+    const alive = rows.filter(
+      (r) => r.usedAt === null && Date.parse(r.expiresAt) > now && r.doctorId !== doctor.id,
+    );
+    alive.push({
+      token,
+      doctorId: doctor.id,
+      createdAt: nowIso(),
+      expiresAt: new Date(now + RESET_TTL_MS).toISOString(),
+      usedAt: null,
+    });
+    return alive;
+  });
+  return token;
+}
+
+/** Consome um token de reset trocando a senha e revogando todas as sessões
+ *  do médico. Retorna false se o token não existe, expirou ou já foi usado. */
+export async function consumePasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const rows = await readRows<PasswordReset>(PASSWORD_RESETS);
+  const reset = rows.find((r) => r.token === token);
+  if (!reset) return { ok: false, error: "Link inválido." };
+  if (reset.usedAt) return { ok: false, error: "Este link já foi usado." };
+  if (Date.parse(reset.expiresAt) <= Date.now())
+    return { ok: false, error: "Link expirado. Peça um novo." };
+  const salt = crypto.randomBytes(12).toString("hex");
+  const passHash = hashPassword(newPassword, salt);
+  await mutateRows<Doctor>(DOCTORS, (rows) => {
+    const d = rows.find((x) => x.id === reset.doctorId);
+    if (d) {
+      d.salt = salt;
+      d.passHash = passHash;
+    }
+  });
+  await mutateRows<PasswordReset>(PASSWORD_RESETS, (rows) => {
+    const r = rows.find((x) => x.token === token);
+    if (r) r.usedAt = nowIso();
+  });
+  // revoga todas as sessões ativas dessa conta
+  await mutateRows<Session>(SESSIONS, (rows) => rows.filter((s) => s.doctorId !== reset.doctorId));
+  return { ok: true };
+}
