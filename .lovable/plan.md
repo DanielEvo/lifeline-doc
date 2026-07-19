@@ -1,81 +1,86 @@
 
-## O que vai mudar
+## 1. Google 403 "logo após clicar em Entrar com Google"
 
-Dois fluxos independentes — médico e paciente — sem misturar contas.
+Esse erro vem do próprio Google (antes de escolher conta), então o problema está na configuração do OAuth Client, **não** no código. As causas típicas, em ordem:
 
-### 1) Login com Google de verdade
+1. **redirect_uri não autorizado** — o backend está enviando `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app/auth/callback` e `.../paciente/auth/callback`, e essas URIs exatas precisam estar em *Authorized redirect URIs* no OAuth Client do Google Cloud.
+2. **App em modo Testing sem seu e-mail como *Test user*** — na tela de consentimento OAuth, se o publishing status estiver *Testing*, só e-mails cadastrados em *Test users* conseguem entrar; qualquer outro leva a 403 `access_denied`.
+3. **Origem não autorizada** — o domínio precisa aparecer em *Authorized JavaScript origins*.
 
-Hoje o backend já tem o fluxo OAuth 2.0 real implementado (`googleAuthUrl`, `exchangeGoogleCode`, state HMAC-assinado, `/auth/callback`). Ele só cai no "modo demo" (persona fixa) quando as variáveis `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` não estão configuradas. O mesmo vale para o lado paciente, que reaproveita esses helpers.
+### O que você precisa fazer no Google Cloud Console
 
-**O que preciso de você:** criar credenciais no Google Cloud Console e me passar os dois valores para eu salvar como secrets (via formulário seguro, não em texto):
+No OAuth 2.0 Client ID que gerou o `GOOGLE_CLIENT_ID` atual:
 
-1. Acesse https://console.cloud.google.com/apis/credentials
-2. "Criar credenciais" → "ID do cliente OAuth" → tipo "Aplicativo da Web"
-3. Em **URIs de redirecionamento autorizados**, adicione TODOS estes (médico e paciente compartilham o mesmo callback, mas precisamos cobrir preview + produção + dev local):
-   - `https://lifeline-doc.lovable.app/auth/callback`
-   - `https://lifeline-doc.lovable.app/paciente/auth/callback`
-   - `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app/auth/callback`
-   - `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app/paciente/auth/callback`
-   - `http://localhost:8080/auth/callback`
-   - `http://localhost:8080/paciente/auth/callback`
-4. Em **Domínios autorizados** da tela de consentimento: `lovable.app`
-5. Copie **Client ID** e **Client Secret** — eu vou pedir esses dois via formulário seguro.
+**Authorized JavaScript origins**
+- `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app`
+- `https://lifeline-doc.lovable.app`
+- `http://localhost:8080` (dev)
 
-**Código que muda:**
-- Criar `src/routes/paciente/auth.callback.tsx` (espelha `src/routes/auth.callback.tsx`, chama `patientGoogleExchange` e redireciona para `/paciente/app`).
-- Nenhuma outra alteração no fluxo Google — assim que os secrets existirem, `googleAuthStart` passa a devolver a URL real e o "modo demo" some sozinho.
+**Authorized redirect URIs**
+- `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app/auth/callback`
+- `https://id-preview--908a1f64-b354-430b-bf2d-4d4c6207b563.lovable.app/paciente/auth/callback`
+- `https://lifeline-doc.lovable.app/auth/callback`
+- `https://lifeline-doc.lovable.app/paciente/auth/callback`
+- `http://localhost:8080/auth/callback`
+- `http://localhost:8080/paciente/auth/callback`
 
-### 2) Fluxo completo de senha
+**OAuth consent screen**
+- Publishing status: **In production** (recomendado — libera qualquer conta Google), ou
+- Manter *Testing* e adicionar em *Test users* todos os e-mails que vão logar (seu, do time, dos revisores).
 
-Backend novo, espelhado para médico e paciente (arquivos separados, tabelas JSON separadas — nunca cruzam):
+Salve, aguarde ~1 min para propagar e teste de novo. Nenhuma mudança de código é necessária para resolver o 403 — o backend já monta o URL correto.
 
-**Backend — médico** (`src/lib/auth.server.ts` + `src/lib/api/auth.functions.ts`):
-- Novo arquivo `password_resets.json` com registros `{ token, doctorId, createdAt, expiresAt, usedAt }`.
-- `createPasswordReset(email)` — gera token aleatório (32 bytes hex), TTL 30 min, sempre retorna sucesso silencioso (não vaza se o e-mail existe).
-- `consumePasswordReset(token, newPassword)` — valida existência, expiração, `usedAt=null`; marca `usedAt`, atualiza `passHash`/`salt` do médico, **revoga todas as sessões ativas** dessa conta (por segurança).
-- Server fns: `requestPasswordReset({email})` e `resetPassword({token, newPassword})`.
+Se depois desses ajustes o 403 persistir, quero um print da tela de erro do Google (ela mostra qual redirect_uri o servidor recebeu e o motivo exato — resolvo em cima disso).
 
-**Backend — paciente** (`src/lib/patient-auth.server.ts` + `src/lib/api/patient-auth.functions.ts`):
-- Arquivo separado `patient_password_resets.json`.
-- Funções análogas: `requestPatientPasswordReset`, `resetPatientPassword`.
+## 2. Rota /admin com senha mestra
 
-**Simulação de e-mail (por enquanto):** a server fn `requestPasswordReset` retorna `{ ok: true, devLink: string | null }`. Quando não há infra de e-mail configurada, `devLink` traz a URL completa (`${origem}/redefinir-senha?token=...` ou `/paciente/redefinir-senha?token=...`). A tela mostra o link clicável direto — depois é só trocar por envio real de e-mail sem mexer no resto do fluxo.
+Painel de admin isolado, protegido por senha mestra guardada em env server-only. Bypass do login normal — não cria conta de médico nem de paciente. Escopo: ver/editar qualquer paciente e prontuário, gerenciar contas, e (num próximo passo) editar conteúdo de site.
 
-**Frontend — 4 telas novas:**
+### Segredos
 
-1. `src/routes/esqueci-senha.tsx` — campo de e-mail, botão "Enviar link", mostra o `devLink` numa caixa destacada quando volta.
-2. `src/routes/redefinir-senha.tsx` — lê `?token=` da URL, dois campos (nova senha + confirmação, mínimo 6 chars, precisam bater), chama `resetPassword`, redireciona para `/login` com toast "Senha alterada, entre novamente".
-3. `src/routes/paciente/esqueci-senha.tsx` — idem, chama `requestPatientPasswordReset`.
-4. `src/routes/paciente/redefinir-senha.tsx` — idem, chama `resetPatientPassword`, redireciona para `/paciente/login`.
+- `ADMIN_PASSWORD` — senha mestra (você escolhe, adiciona via secret form).
+- `ADMIN_SESSION_SECRET` — 32 chars aleatórios, gerados automaticamente, criptografam o cookie de sessão do admin.
 
-**Ganchos nas telas existentes:**
-- `src/routes/login.tsx`: link discreto "Esqueci minha senha" abaixo do campo de senha → `/esqueci-senha`.
-- `src/routes/paciente/login.tsx`: mesmo link → `/paciente/esqueci-senha`.
+Ambos server-only; nunca vão para o bundle do cliente.
 
-### Regras de segurança respeitadas
+### Backend (novo)
 
-- Token de reset: 32 bytes aleatórios, uso único (`usedAt`), expira em 30 min.
-- Requisição de reset nunca revela se o e-mail está cadastrado (mensagem genérica "Se o e-mail existir, um link será enviado" + `devLink` só aparece quando de fato criamos o token).
-- Ao trocar a senha, **todas as sessões ativas daquela conta são revogadas** — quem estava logado precisa entrar de novo.
-- Namespaces 100% separados entre médico e paciente (tabelas, server fns, rotas).
+**`src/lib/admin-session.server.ts`** — helpers `useSession` com cookie `lifeline-admin` (7 dias, httpOnly, secure, sameSite lax) e `requireAdmin()` que joga `redirect({ to: "/admin/entrar" })` se não estiver desbloqueado.
 
-## Diagrama de rotas
+**`src/lib/api/admin.functions.ts`** — server fns, todas passam por `requireAdmin()` exceto o unlock:
+- `adminUnlock({ password })` — compara com `ADMIN_PASSWORD` via `timingSafeEqual` sobre hashes SHA-256, marca `unlocked:true` na sessão.
+- `adminLock()` — limpa a sessão.
+- `adminListDoctors()` / `adminListPatients()` — lê `doctors.json` / `patient_accounts.json`, devolve sem `passHash`/`salt`.
+- `adminListRegistry()` — lê `patients_registry.json`.
+- `adminResetDoctorPassword({ doctorId, newPassword })` / `adminResetPatientPassword({ patientId, newPassword })` — gera novo salt+hash, revoga todas as sessões do usuário.
+- `adminDeleteDoctor({ doctorId })` / `adminDeletePatient({ patientId })` — remove conta e sessões (registry preservado — dado clínico).
+- `adminImpersonateDoctor({ doctorId })` — cria uma sessão real (via `createSession`) e devolve o token, para o admin abrir /app "como o médico". Mesma coisa para paciente com `createPatientSession`.
+- `adminListPatientsForDoctor({ doctorId })` — lista prontuários acessíveis, reusando funções existentes de `patients.server.ts`.
 
-```text
-Médico:            /login  ──►  /esqueci-senha  ──►  /redefinir-senha?token=…  ──►  /login
-Paciente:  /paciente/login  ──►  /paciente/esqueci-senha  ──►  /paciente/redefinir-senha?token=…  ──►  /paciente/login
-Google:    /login (ou /paciente/login) ──► Google ──► /auth/callback (ou /paciente/auth/callback) ──► /app (ou /paciente/app)
-```
+### Frontend (novo)
 
-## Fora de escopo desta rodada
+**`src/routes/admin/entrar.tsx`** — tela pública, campo de senha único, chama `adminUnlock`. Erro genérico se falhar. Sucesso → `/admin`.
 
-- Envio real de e-mail (fica simulado com link na tela, como você autorizou).
-- Rate limiting nas requisições de reset (dá para adicionar depois).
-- "Trocar senha estando logado" (fluxo diferente, não pedido).
+**`src/routes/admin/route.tsx`** — layout com `beforeLoad` chamando `requireAdmin()` via server fn (throw redirect para `/admin/entrar` se cookie inválido). Sidebar com: Dashboard, Médicos, Pacientes, Registry, Conteúdo. Botão "Sair" chama `adminLock`.
 
-## Ordem de execução (quando você aprovar)
+**`src/routes/admin/index.tsx`** — contagens rápidas (nº de médicos, pacientes, entradas do registry).
 
-1. Backend do reset (médico e paciente).
-2. 4 telas novas + link "Esqueci minha senha" nos dois logins.
-3. Rota `/paciente/auth/callback`.
-4. Pedir `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` via formulário seguro.
+**`src/routes/admin/medicos.tsx`** — tabela de médicos com ações: resetar senha (dialog), apagar, "entrar como" (chama `adminImpersonateDoctor`, salva o token retornado em `localStorage` via `setSession` e navega para `/app` numa nova aba).
+
+**`src/routes/admin/pacientes.tsx`** — mesma coisa para contas de paciente, com "entrar como" abrindo `/paciente/app`.
+
+**`src/routes/admin/registry.tsx`** — leitura das entradas globais de paciente (globalId, perfil autodeclarado, criador).
+
+**`src/routes/admin/conteudo.tsx`** — placeholder por enquanto: lista das rotas públicas (`/`, `/sobre`, `/demo`) com nota "edição inline em próxima iteração — hoje o conteúdo é código". (Editar essas páginas via UI exige um CMS; posso montar num patch seguinte se você quiser.)
+
+### O que NÃO muda
+- Nada nas rotas de médico (`/login`, `/app/*`) ou paciente (`/paciente/*`).
+- Nenhum arquivo existente de auth.
+- A rota `/admin` atual (`src/routes/admin.tsx` — vou checar o que faz e substituir pelo layout novo, se for placeholder; se tiver conteúdo relevante, movo para `/admin/legacy`).
+
+### Depois do plano aprovado, vou pedir
+
+- `ADMIN_PASSWORD` via secret form (você define o valor).
+- `ADMIN_SESSION_SECRET` é gerado automaticamente (não precisa fornecer).
+
+Depois de aprovado, aplico tudo em uma leva de edits e valido typecheck.
