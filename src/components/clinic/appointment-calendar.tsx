@@ -4,7 +4,7 @@
 // salvo em localStorage por médico. Um alerta laranja aparece quando 3+
 // pacientes caem no mesmo horário; a partir do 4º o slot bloqueia o drop.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -429,14 +429,9 @@ function TimeGrid({
         })}
         {/* rows */}
         {rows.map((r) => (
-          <>
-            <div
-              key={`t-${r.hour}-${r.minute}`}
-              className="flex items-start justify-end bg-card px-1.5 py-1 text-[10px] tabular-nums text-muted-foreground"
-            >
-              {r.minute === 0
-                ? `${String(r.hour).padStart(2, "0")}:00`
-                : ""}
+          <Fragment key={`row-${r.hour}-${r.minute}`}>
+            <div className="flex items-start justify-end bg-card px-1.5 py-1 text-[10px] tabular-nums text-muted-foreground">
+              {r.minute === 0 ? `${String(r.hour).padStart(2, "0")}:00` : ""}
             </div>
             {days.map((d) => {
               const slotDate = new Date(d);
@@ -454,7 +449,7 @@ function TimeGrid({
                 />
               );
             })}
-          </>
+          </Fragment>
         ))}
       </div>
     </div>
