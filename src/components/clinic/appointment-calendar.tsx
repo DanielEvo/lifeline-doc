@@ -387,6 +387,7 @@ function TimeGrid({
   appointments,
   byId,
   onDropPatient,
+  onMoveAppointment,
   onOpenPatient,
 }: {
   days: Date[];
@@ -394,6 +395,7 @@ function TimeGrid({
   appointments: Appointment[];
   byId: Map<string, Patient>;
   onDropPatient: (patientId: string, dateTime: string) => void;
+  onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onOpenPatient?: (p: Patient) => void;
 }) {
   const { slotMinutes, startHour, endHour } = settings;
