@@ -464,6 +464,7 @@ function TimeGrid({
                   appts={appts}
                   byId={byId}
                   onDropPatient={onDropPatient}
+                  onMoveAppointment={onMoveAppointment}
                   onOpenPatient={onOpenPatient}
                 />
               );
