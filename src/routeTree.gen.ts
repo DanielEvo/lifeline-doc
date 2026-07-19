@@ -25,6 +25,10 @@ import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteEsqueciSenhaRouteImport } from './routes/paciente/esqueci-senha'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AdminTestesRouteImport } from './routes/admin/testes'
+import { Route as AdminRegistryRouteImport } from './routes/admin/registry'
+import { Route as AdminPacientesRouteImport } from './routes/admin/pacientes'
+import { Route as AdminMedicosRouteImport } from './routes/admin/medicos'
 import { Route as AdminEntrarRouteImport } from './routes/admin/entrar'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
@@ -110,6 +114,26 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTestesRoute = AdminTestesRouteImport.update({
+  id: '/testes',
+  path: '/testes',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRegistryRoute = AdminRegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminPacientesRoute = AdminPacientesRouteImport.update({
+  id: '/pacientes',
+  path: '/pacientes',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminMedicosRoute = AdminMedicosRouteImport.update({
+  id: '/medicos',
+  path: '/medicos',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminEntrarRoute = AdminEntrarRouteImport.update({
   id: '/entrar',
   path: '/entrar',
@@ -142,6 +166,10 @@ export interface FileRoutesByFullPath {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/admin/entrar': typeof AdminEntrarRoute
+  '/admin/medicos': typeof AdminMedicosRoute
+  '/admin/pacientes': typeof AdminPacientesRoute
+  '/admin/registry': typeof AdminRegistryRoute
+  '/admin/testes': typeof AdminTestesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
@@ -162,6 +190,10 @@ export interface FileRoutesByTo {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/admin/entrar': typeof AdminEntrarRoute
+  '/admin/medicos': typeof AdminMedicosRoute
+  '/admin/pacientes': typeof AdminPacientesRoute
+  '/admin/registry': typeof AdminRegistryRoute
+  '/admin/testes': typeof AdminTestesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
@@ -185,6 +217,10 @@ export interface FileRoutesById {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sobre': typeof SobreRoute
   '/admin/entrar': typeof AdminEntrarRoute
+  '/admin/medicos': typeof AdminMedicosRoute
+  '/admin/pacientes': typeof AdminPacientesRoute
+  '/admin/registry': typeof AdminRegistryRoute
+  '/admin/testes': typeof AdminTestesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
@@ -209,6 +245,10 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/sobre'
     | '/admin/entrar'
+    | '/admin/medicos'
+    | '/admin/pacientes'
+    | '/admin/registry'
+    | '/admin/testes'
     | '/auth/callback'
     | '/paciente/app'
     | '/paciente/esqueci-senha'
@@ -229,6 +269,10 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/sobre'
     | '/admin/entrar'
+    | '/admin/medicos'
+    | '/admin/pacientes'
+    | '/admin/registry'
+    | '/admin/testes'
     | '/auth/callback'
     | '/paciente/app'
     | '/paciente/esqueci-senha'
@@ -251,6 +295,10 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/sobre'
     | '/admin/entrar'
+    | '/admin/medicos'
+    | '/admin/pacientes'
+    | '/admin/registry'
+    | '/admin/testes'
     | '/auth/callback'
     | '/paciente/app'
     | '/paciente/esqueci-senha'
@@ -395,6 +443,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/testes': {
+      id: '/admin/testes'
+      path: '/testes'
+      fullPath: '/admin/testes'
+      preLoaderRoute: typeof AdminTestesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/registry': {
+      id: '/admin/registry'
+      path: '/registry'
+      fullPath: '/admin/registry'
+      preLoaderRoute: typeof AdminRegistryRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/pacientes': {
+      id: '/admin/pacientes'
+      path: '/pacientes'
+      fullPath: '/admin/pacientes'
+      preLoaderRoute: typeof AdminPacientesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/medicos': {
+      id: '/admin/medicos'
+      path: '/medicos'
+      fullPath: '/admin/medicos'
+      preLoaderRoute: typeof AdminMedicosRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/entrar': {
       id: '/admin/entrar'
       path: '/entrar'
@@ -428,11 +504,19 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteRouteChildren {
   AdminEntrarRoute: typeof AdminEntrarRoute
+  AdminMedicosRoute: typeof AdminMedicosRoute
+  AdminPacientesRoute: typeof AdminPacientesRoute
+  AdminRegistryRoute: typeof AdminRegistryRoute
+  AdminTestesRoute: typeof AdminTestesRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminEntrarRoute: AdminEntrarRoute,
+  AdminMedicosRoute: AdminMedicosRoute,
+  AdminPacientesRoute: AdminPacientesRoute,
+  AdminRegistryRoute: AdminRegistryRoute,
+  AdminTestesRoute: AdminTestesRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 

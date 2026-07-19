@@ -34,10 +34,14 @@ function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
 }
 
-function stripSecrets<T extends { passHash: string | null; salt: string | null }>(row: T) {
+type PublicAccount = Omit<Doctor, "passHash" | "salt">;
+function stripSecrets<T extends { passHash: string | null; salt: string | null }>(
+  row: T,
+): Omit<T, "passHash" | "salt"> {
   const { passHash: _p, salt: _s, ...rest } = row;
   return rest;
 }
+export type { PublicAccount };
 
 // ---------- Sessão admin ----------
 

@@ -29,13 +29,18 @@ function AdminLayout() {
   // Tela de login não usa o shell — renderiza direto
   if (isEntrar) return <Outlet />;
 
-  const nav = [
+  const nav: Array<{
+    to: "/admin" | "/admin/medicos" | "/admin/pacientes" | "/admin/registry" | "/admin/testes";
+    label: string;
+    icon: typeof LayoutDashboard;
+    exact?: boolean;
+  }> = [
     { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
     { to: "/admin/medicos", label: "Médicos", icon: Stethoscope },
     { to: "/admin/pacientes", label: "Pacientes", icon: Users },
     { to: "/admin/registry", label: "Registry global", icon: User },
     { to: "/admin/testes", label: "Painel de testes", icon: Beaker },
-  ] as const;
+  ];
 
   const sair = async () => {
     await adminLock();
