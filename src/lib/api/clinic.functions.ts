@@ -23,7 +23,7 @@ import {
 } from "../patients.server";
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
-import { createAppointment, listAppointments, setAppointmentStatus } from "../agenda.server";
+import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
 import { createCharge, listCharges, setChargeStatus } from "../billing.server";
 import {
   createEvolution,
@@ -270,6 +270,27 @@ export const setMyAppointmentStatus = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
     const appointment = await setAppointmentStatus(doctor.id, data.id, data.status);
+    return appointment
+      ? { ok: true as const, appointment }
+      : { ok: false as const, error: "not_found" as const };
+  });
+
+export const rescheduleAppointment = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      id: z.string().min(1),
+      dateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida"),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const appointment = await updateAppointmentDateTime(
+      doctor.id,
+      data.id,
+      new Date(data.dateTime).toISOString(),
+    );
     return appointment
       ? { ok: true as const, appointment }
       : { ok: false as const, error: "not_found" as const };

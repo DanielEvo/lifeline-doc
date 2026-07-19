@@ -616,12 +616,6 @@ function VistaTodos({
             key={p.id}
             className="cursor-pointer"
             onClick={() => onAbrir(p)}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData("application/x-patient-id", p.id);
-              e.dataTransfer.setData("text/plain", p.id);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
           >
             <TableCell><Avatar p={p} /></TableCell>
             <TableCell className="hidden max-w-52 lg:table-cell">

@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { scheduleAppointment } from "@/lib/api/clinic.functions";
+import { scheduleAppointment, rescheduleAppointment } from "@/lib/api/clinic.functions";
 import {
   formatHourBR,
   initialsOf,
@@ -58,6 +58,7 @@ type CalendarSettings = {
 const DEFAULTS: CalendarSettings = { slotMinutes: 30, startHour: 8, endHour: 19 };
 const MAX_PARALLEL = 3;
 const DRAG_KEY = "application/x-patient-id";
+const DRAG_APPT = "application/x-appointment-id";
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = [
@@ -138,6 +139,19 @@ export function AppointmentCalendar({
     },
   });
 
+  const remarcar = useMutation({
+    mutationFn: (v: { id: string; dateTime: string }) =>
+      rescheduleAppointment({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui remarcar.");
+      toast.success(
+        `Remarcado para ${new Date(r.appointment.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+      );
+      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: () => toast.error("Não consegui remarcar."),
+  });
+
   const shift = (dir: -1 | 1) => {
     const d = new Date(cursor);
     if (view === "dia") d.setDate(d.getDate() + dir);
@@ -216,6 +230,7 @@ export function AppointmentCalendar({
             appointments={appointments}
             byId={byId}
             onDropPatient={openConfirm}
+            onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
           />
         )}
@@ -226,6 +241,7 @@ export function AppointmentCalendar({
             appointments={appointments}
             byId={byId}
             onDropPatient={openConfirm}
+            onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
           />
         )}
@@ -239,9 +255,10 @@ export function AppointmentCalendar({
       </div>
 
       <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-        Dica: arraste um paciente da lista acima até um horário para agendar.
+        Dica: arraste um card de consulta para outro horário para remarcar.
         Até {MAX_PARALLEL} pacientes por horário — o 3º dispara alerta.
       </div>
+
 
       {/* Confirmação */}
       <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
@@ -370,6 +387,7 @@ function TimeGrid({
   appointments,
   byId,
   onDropPatient,
+  onMoveAppointment,
   onOpenPatient,
 }: {
   days: Date[];
@@ -377,6 +395,7 @@ function TimeGrid({
   appointments: Appointment[];
   byId: Map<string, Patient>;
   onDropPatient: (patientId: string, dateTime: string) => void;
+  onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onOpenPatient?: (p: Patient) => void;
 }) {
   const { slotMinutes, startHour, endHour } = settings;
@@ -445,6 +464,7 @@ function TimeGrid({
                   appts={appts}
                   byId={byId}
                   onDropPatient={onDropPatient}
+                  onMoveAppointment={onMoveAppointment}
                   onOpenPatient={onOpenPatient}
                 />
               );
@@ -461,32 +481,47 @@ function Slot({
   appts,
   byId,
   onDropPatient,
+  onMoveAppointment,
   onOpenPatient,
 }: {
   slotDate: Date;
   appts: Appointment[];
   byId: Map<string, Patient>;
   onDropPatient: (patientId: string, dateTime: string) => void;
+  onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onOpenPatient?: (p: Patient) => void;
 }) {
   const [hover, setHover] = useState(false);
   const full = appts.length >= MAX_PARALLEL;
   const warn = appts.length >= 2; // 2 já sinaliza; 3 é o limite
+  const targetIso = toIsoLocal(slotDate);
 
   return (
     <div
       onDragOver={(e) => {
-        if (full) return;
+        // aceita drop se houver espaço OU se for reordenação dentro do mesmo slot
+        const types = e.dataTransfer.types;
+        const isAppt = types.includes(DRAG_APPT);
+        if (full && !(isAppt && appts.some((a) => new Date(a.dateTime).getTime() === slotDate.getTime()))) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
+        e.dataTransfer.dropEffect = "move";
         setHover(true);
       }}
       onDragLeave={() => setHover(false)}
       onDrop={(e) => {
         setHover(false);
+        const apptId = e.dataTransfer.getData(DRAG_APPT);
+        if (apptId) {
+          // não remarca se o card foi solto no mesmo slot
+          const sameSlot = appts.some((a) => a.id === apptId);
+          if (sameSlot) return;
+          if (full) return;
+          onMoveAppointment(apptId, targetIso);
+          return;
+        }
         if (full) return;
-        const id = e.dataTransfer.getData(DRAG_KEY) || e.dataTransfer.getData("text/plain");
-        if (id) onDropPatient(id, toIsoLocal(slotDate));
+        const patientId = e.dataTransfer.getData(DRAG_KEY) || e.dataTransfer.getData("text/plain");
+        if (patientId) onDropPatient(patientId, targetIso);
       }}
       className={`relative min-h-[36px] bg-card p-0.5 transition ${
         hover ? "bg-primary/10 ring-1 ring-primary" : ""
@@ -510,9 +545,14 @@ function Slot({
           return (
             <button
               key={a.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(DRAG_APPT, a.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
               onClick={() => onOpenPatient?.(p)}
-              title={`${p.nome} · ${formatHourBR(a.dateTime)}${a.note ? ` · ${a.note}` : ""}`}
-              className={`flex max-w-full items-center gap-1 truncate rounded-md bg-gradient-to-br ${p.tint} px-1.5 py-0.5 text-[10px] font-medium text-white shadow ${
+              title={`${p.nome} · ${formatHourBR(a.dateTime)}${a.note ? ` · ${a.note}` : ""} — arraste para remarcar`}
+              className={`flex max-w-full cursor-grab items-center gap-1 truncate rounded-md bg-gradient-to-br ${p.tint} px-1.5 py-0.5 text-[10px] font-medium text-white shadow active:cursor-grabbing ${
                 warn ? "ring-1 ring-amber-400" : ""
               }`}
             >
