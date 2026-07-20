@@ -238,19 +238,34 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
     },
   ]);
 
-  const sendChat = () => {
+  const [sending, setSending] = useState(false);
+
+  const sendChat = async () => {
     const t = chatInput.trim();
-    if (!t) return;
-    setMessages((m) => [
-      ...m,
-      { id: crypto.randomUUID(), from: "user", text: t },
-      {
-        id: crypto.randomUUID(),
-        from: "ai",
-        text: "(demo) Aqui entrará a resposta da IA usando seus protocolos, biblioteca e Science.",
-      },
-    ]);
+    if (!t || sending) return;
+    const userMsg: ChatMsg = { id: crypto.randomUUID(), from: "user", text: t };
+    const history = [...messages, userMsg];
+    setMessages(history);
     setChatInput("");
+    setSending(true);
+    const placeholderId = crypto.randomUUID();
+    setMessages((m) => [...m, { id: placeholderId, from: "ai", text: "…" }]);
+    try {
+      const payload = history
+        .filter((m) => m.id !== "welcome")
+        .map((m) => ({
+          role: (m.from === "user" ? "user" : "assistant") as "user" | "assistant",
+          content: m.text,
+        }));
+      const { reply } = await askKnowledgeAssistant({ data: { messages: payload } });
+      setMessages((m) => m.map((x) => (x.id === placeholderId ? { ...x, text: reply } : x)));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao consultar assistente.";
+      setMessages((m) => m.filter((x) => x.id !== placeholderId));
+      toast.error(msg);
+    } finally {
+      setSending(false);
+    }
   };
 
   // protocolos
