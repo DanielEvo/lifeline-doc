@@ -9,7 +9,6 @@ export type BoardColumn = { id: string; title: string; hint: string };
 
 export const DEFAULT_COLUMNS: BoardColumn[] = [
   { id: "triagem", title: "Triagem / Pré-Consulta", hint: "Aguardando atendimento" },
-  { id: "atendimento", title: "Em Atendimento", hint: "Consulta em andamento" },
   { id: "aguardando", title: "Aguardando Exames", hint: "Solicitações enviadas" },
   { id: "retorno", title: "Retorno Agendado", hint: "Exames recebidos · retorno marcado" },
   { id: "estavel", title: "Estável / Check-up", hint: "Acompanhamento sem queixa" },
