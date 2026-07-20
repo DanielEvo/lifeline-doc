@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { askKnowledgeAssistant } from "@/lib/knowledge-chat.functions";
+import { toast } from "sonner";
 import {
   BookOpen,
   Search,
