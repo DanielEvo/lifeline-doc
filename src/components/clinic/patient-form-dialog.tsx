@@ -203,10 +203,24 @@ export function PatientFormDialog({
           <DialogTitle>{isEdit ? "Editar paciente" : "Novo paciente"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Os dados alimentam o prontuário e o painel do dia."
+              ? "Contato, convênio e status podem mudar. Identidade (nome, nascimento, sexo, CPF) é fixa após o cadastro."
               : "Busque por ID para reencontrar um paciente, ou cadastre um novo. Anexe exames se tiver."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Identidade — somente leitura no modo edição; nome/nascimento/sexo/CPF
+            não são exibidos como campos editáveis (dado fixo pós-cadastro). */}
+        {isEdit && patient && (
+          <div className="rounded-xl border border-border bg-muted/30 p-3">
+            <div className="text-sm font-medium">{patient.nome}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {ageFrom(patient.nascimento) !== null && `${ageFrom(patient.nascimento)} anos`}
+              {patient.sexo && ` · ${patient.sexo}`}
+              {patient.cpf && ` · CPF ${patient.cpf}`}
+              {patient.patientCode && ` · Código ${patient.patientCode}`}
+            </div>
+          </div>
+        )}
 
         {/* Bloco de busca por ID — só no modo criação */}
         {!isEdit && (
@@ -280,41 +294,47 @@ export function PatientFormDialog({
           </div>
         )}
 
-        {/* Campos de cadastro — escondidos quando achou paciente por ID */}
+        {/* Campos de cadastro — escondidos quando achou paciente por ID.
+            Nome/nascimento/sexo/CPF só aparecem no cadastro NOVO — no modo
+            edição são fixos e já foram mostrados no card de identidade acima. */}
         {showForm && (
           <form onSubmit={submitNew} className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 space-y-1">
-              <Label htmlFor="pf-nome" className="text-xs">Nome completo *</Label>
-              <Input id="pf-nome" {...form.register("nome")} placeholder="Maria de Souza" />
-              {err.nome && <p className="text-[11px] text-destructive">{err.nome.message}</p>}
-            </div>
+            {!isEdit && (
+              <>
+                <div className="col-span-2 space-y-1">
+                  <Label htmlFor="pf-nome" className="text-xs">Nome completo *</Label>
+                  <Input id="pf-nome" {...form.register("nome")} placeholder="Maria de Souza" />
+                  {err.nome && <p className="text-[11px] text-destructive">{err.nome.message}</p>}
+                </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="pf-nasc" className="text-xs">Nascimento</Label>
-              <Input id="pf-nasc" type="date" {...form.register("nascimento")} />
-              {err.nascimento && <p className="text-[11px] text-destructive">{err.nascimento.message}</p>}
-            </div>
+                <div className="space-y-1">
+                  <Label htmlFor="pf-nasc" className="text-xs">Nascimento</Label>
+                  <Input id="pf-nasc" type="date" {...form.register("nascimento")} />
+                  {err.nascimento && <p className="text-[11px] text-destructive">{err.nascimento.message}</p>}
+                </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Sexo</Label>
-              <Select
-                value={form.watch("sexo") || ""}
-                onValueChange={(v) => form.setValue("sexo", v as PatientFormValues["sexo"])}
-              >
-                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="feminino">Feminino</SelectItem>
-                  <SelectItem value="masculino">Masculino</SelectItem>
-                  <SelectItem value="outro">Outro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Sexo</Label>
+                  <Select
+                    value={form.watch("sexo") || ""}
+                    onValueChange={(v) => form.setValue("sexo", v as PatientFormValues["sexo"])}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="feminino">Feminino</SelectItem>
+                      <SelectItem value="masculino">Masculino</SelectItem>
+                      <SelectItem value="outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="pf-cpf" className="text-xs">CPF</Label>
-              <Input id="pf-cpf" {...form.register("cpf")} placeholder="000.000.000-00" />
-              {err.cpf && <p className="text-[11px] text-destructive">{err.cpf.message}</p>}
-            </div>
+                <div className="space-y-1">
+                  <Label htmlFor="pf-cpf" className="text-xs">CPF</Label>
+                  <Input id="pf-cpf" {...form.register("cpf")} placeholder="000.000.000-00" />
+                  {err.cpf && <p className="text-[11px] text-destructive">{err.cpf.message}</p>}
+                </div>
+              </>
+            )}
 
             <div className="space-y-1">
               <Label htmlFor="pf-tel" className="text-xs">WhatsApp / Telefone</Label>

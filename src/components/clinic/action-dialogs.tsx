@@ -24,16 +24,31 @@ export function invalidateWorkspace(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["workspace"] });
 }
 
+function addDaysIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function ScheduleDialog({
   open,
   onOpenChange,
   patient,
   token,
+  title = "Agendar consulta",
+  defaultDaysAhead = 0,
+  defaultNote = "",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   patient: Patient | null;
   token: string;
+  /** Título do dialog — customizável para o fluxo "agendar retorno" pós-consulta. */
+  title?: string;
+  /** Quantos dias a partir de hoje a data inicial sugere (0 = hoje). */
+  defaultDaysAhead?: number;
+  /** Observação pré-preenchida (ex.: "Retorno" ao vir do fluxo de finalizar consulta). */
+  defaultNote?: string;
 }) {
   const qc = useQueryClient();
   const [data, setData] = useState(todayIso());
@@ -42,10 +57,11 @@ export function ScheduleDialog({
 
   useEffect(() => {
     if (open) {
-      setData(todayIso());
+      setData(addDaysIso(defaultDaysAhead));
       setHora("09:00");
-      setNota("");
+      setNota(defaultNote);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const agendar = useMutation({
@@ -74,7 +90,7 @@ export function ScheduleDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarPlus className="h-4 w-4 text-primary" />
-            Agendar consulta
+            {title}
           </DialogTitle>
           <DialogDescription>{patient?.nome}</DialogDescription>
         </DialogHeader>

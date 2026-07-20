@@ -265,7 +265,9 @@ export function ClinicalTimeline({
         </div>
       ) : (
         <div className="relative mt-3 overflow-x-auto pb-1">
-          <div className="absolute left-0 right-0 top-[13px] h-0.5 bg-border" />
+          {/* Alinhada ao centro vertical do nó circular de cada card (ver
+              TimelineCard: p-2.5 + border + ícone h-6 ⇒ centro a 23px do topo). */}
+          <div className="absolute left-0 right-0 top-[23px] h-0.5 bg-border" />
           <div className="relative flex gap-3">
             {events.map((ev) => (
               <TimelineCard

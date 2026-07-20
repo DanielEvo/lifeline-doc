@@ -92,6 +92,7 @@ import {
   MED_CATALOG,
   WA_TEMPLATES,
   type Evolution,
+  type Patient,
 } from "@/lib/clinic-types";
 import { deriveSoap } from "@/lib/soap";
 import { clearSession } from "@/lib/session";
@@ -359,6 +360,7 @@ function Prontuario() {
                     e={e}
                     token={token}
                     patientId={id}
+                    patient={p}
                     onChanged={invalidate}
                   />
                 ))}
@@ -1349,16 +1351,21 @@ function EvolucaoCard({
   e,
   token,
   patientId,
+  patient,
   onChanged,
 }: {
   e: Evolution;
   token: string;
   patientId: string;
+  patient: Patient;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [texto, setTexto] = useState(e.evolucao);
   const [receitaOpen, setReceitaOpen] = useState(false);
+  // Ao finalizar a consulta, oferece marcar o retorno na hora — evita o
+  // paciente sair sem próximo agendamento definido.
+  const [retornoOpen, setRetornoOpen] = useState(false);
 
   const salvar = useMutation({
     mutationFn: () =>
@@ -1379,6 +1386,7 @@ function EvolucaoCard({
         description: `Protocolo ${r.evolution.sealed?.protocol}`,
       });
       onChanged();
+      setRetornoOpen(true);
     },
   });
 
@@ -1533,6 +1541,15 @@ function EvolucaoCard({
         evolutionId={e.id}
         patientId={patientId}
         onDone={onChanged}
+      />
+      <ScheduleDialog
+        open={retornoOpen}
+        onOpenChange={setRetornoOpen}
+        patient={patient}
+        token={token}
+        title="Agendar retorno"
+        defaultDaysAhead={30}
+        defaultNote="Retorno"
       />
     </div>
   );
