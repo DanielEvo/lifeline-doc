@@ -25,6 +25,7 @@ import {
   UserX,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,8 +54,10 @@ import { AppointmentCalendar } from "@/components/clinic/appointment-calendar";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
   archiveMyPatient,
+  generateChargePaymentLink,
   getWorkspace,
   moveMyPatient,
+  sendWhatsAppNow,
   setMyAppointmentStatus,
   setMyChargeStatus,
 } from "@/lib/api/clinic.functions";
@@ -179,6 +182,40 @@ function PainelPacientes() {
     onSuccess: (r, v) => {
       if (!r.ok) return;
       toast.success(v.status === "pago" ? "Pagamento registrado. 💚" : "Cobrança reaberta.");
+      invalidate();
+    },
+  });
+
+  const enviarAgora = useMutation({
+    mutationFn: (v: { telefone: string; texto: string }) => sendWhatsAppNow({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        toast.error(
+          r.error === "not_configured"
+            ? "Envio automático não configurado (defina WHATSAPP_ACCESS_TOKEN no .env)."
+            : "Falha ao enviar pela API do WhatsApp.",
+        );
+        return;
+      }
+      toast.success("Mensagem enviada automaticamente.");
+    },
+  });
+
+  const gerarLink = useMutation({
+    mutationFn: (id: string) =>
+      generateChargePaymentLink({
+        data: { token, id, origin: typeof window !== "undefined" ? window.location.origin : "" },
+      }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        toast.error(
+          r.error === "not_configured"
+            ? "Pagamento online não configurado (defina STRIPE_SECRET_KEY no .env)."
+            : "Não consegui gerar o link de pagamento.",
+        );
+        return;
+      }
+      toast.success("Link de pagamento gerado.");
       invalidate();
     },
   });
@@ -465,6 +502,10 @@ function PainelPacientes() {
             medico={medico}
             onAbrir={abrir}
             onStatus={(id, status) => chargeStatus.mutate({ id, status })}
+            onGerarLink={(id) => gerarLink.mutate(id)}
+            gerandoLinkId={gerarLink.isPending ? gerarLink.variables : null}
+            onEnviarAgora={(telefone, texto) => enviarAgora.mutate({ telefone, texto })}
+            enviandoAgora={enviarAgora.isPending}
             filtro={cobrancaFiltro}
           />
         )}
@@ -838,6 +879,10 @@ function VistaCobrancas({
   medico,
   onAbrir,
   onStatus,
+  onGerarLink,
+  gerandoLinkId,
+  onEnviarAgora,
+  enviandoAgora,
   filtro,
 }: {
   lista: Charge[];
@@ -845,6 +890,10 @@ function VistaCobrancas({
   medico: string;
   onAbrir: (p: Patient) => void;
   onStatus: (id: string, status: Charge["status"]) => void;
+  onGerarLink: (id: string) => void;
+  gerandoLinkId: string | null;
+  onEnviarAgora: (telefone: string, texto: string) => void;
+  enviandoAgora: boolean;
   filtro: "abertas" | "atrasadas" | "pagas";
 }) {
   if (lista.length === 0)
@@ -877,6 +926,26 @@ function VistaCobrancas({
             <div className="flex items-center gap-1.5">
               {c.status === "pendente" ? (
                 <>
+                  {c.paymentUrl ? (
+                    <a
+                      href={c.paymentUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] font-medium text-primary underline underline-offset-2"
+                    >
+                      Link de pagamento
+                    </a>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[11px] text-muted-foreground"
+                      disabled={gerandoLinkId === c.id}
+                      onClick={() => onGerarLink(c.id)}
+                    >
+                      {gerandoLinkId === c.id ? "Gerando…" : "Gerar link de pagamento"}
+                    </Button>
+                  )}
                   <WhatsAppButton
                     telefone={p.telefone}
                     text={WA_TEMPLATES.cobrar(
@@ -884,10 +953,31 @@ function VistaCobrancas({
                       formatBRL(c.valor),
                       c.vencimento.split("-").reverse().join("/"),
                       medico,
+                      c.paymentUrl,
                     )}
                     title="Cobrar no WhatsApp"
                     size="md"
                   />
+                  <button
+                    type="button"
+                    title="Enviar automaticamente pela API do WhatsApp (sem abrir o app)"
+                    disabled={enviandoAgora || !p.telefone}
+                    onClick={() =>
+                      onEnviarAgora(
+                        p.telefone!,
+                        WA_TEMPLATES.cobrar(
+                          p.nome,
+                          formatBRL(c.valor),
+                          c.vencimento.split("-").reverse().join("/"),
+                          medico,
+                          c.paymentUrl,
+                        ),
+                      )
+                    }
+                    className="text-muted-foreground transition hover:text-primary disabled:opacity-40"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                  </button>
                   <Button variant="outline" size="sm" onClick={() => onStatus(c.id, "pago")} className="text-xs">
                     <Check className="mr-1 h-3.5 w-3.5" />
                     Recebi

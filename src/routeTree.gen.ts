@@ -19,8 +19,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
+import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
+import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
 
 const SobreRoute = SobreRouteImport.update({
@@ -73,6 +75,11 @@ const PacienteAppRoute = PacienteAppRouteImport.update({
   path: '/paciente/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConfirmarEmailTokenRoute = ConfirmarEmailTokenRouteImport.update({
+  id: '/confirmar-email/$token',
+  path: '/confirmar-email/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -82,6 +89,11 @@ const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
   path: '/pacientes/',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const PacienteAuthCallbackRoute = PacienteAuthCallbackRouteImport.update({
+  id: '/paciente/auth/callback',
+  path: '/paciente/auth/callback',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppPacientesIdRoute = AppPacientesIdRouteImport.update({
   id: '/pacientes/$id',
@@ -98,10 +110,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -112,10 +126,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
 }
 export interface FileRoutesById {
@@ -128,10 +144,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
+  '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
 }
 export interface FileRouteTypes {
@@ -145,10 +163,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -159,10 +179,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes'
   id:
     | '__root__'
@@ -174,10 +196,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/sobre'
     | '/auth/callback'
+    | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
     | '/app/pacientes/$id'
+    | '/paciente/auth/callback'
     | '/app/pacientes/'
   fileRoutesById: FileRoutesById
 }
@@ -190,8 +214,10 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
+  PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -266,6 +292,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PacienteAppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/confirmar-email/$token': {
+      id: '/confirmar-email/$token'
+      path: '/confirmar-email/$token'
+      fullPath: '/confirmar-email/$token'
+      preLoaderRoute: typeof ConfirmarEmailTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -279,6 +312,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/pacientes/'
       preLoaderRoute: typeof AppPacientesIndexRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/paciente/auth/callback': {
+      id: '/paciente/auth/callback'
+      path: '/paciente/auth/callback'
+      fullPath: '/paciente/auth/callback'
+      preLoaderRoute: typeof PacienteAuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/pacientes/$id': {
       id: '/app/pacientes/$id'
@@ -315,8 +355,10 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
+  PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

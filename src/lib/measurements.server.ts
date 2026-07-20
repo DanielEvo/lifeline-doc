@@ -25,6 +25,7 @@ export async function addMeasurement(
     refMax: number;
     date: string;
     label: string;
+    motivo?: string | null;
   },
 ): Promise<Measurement> {
   const m: Measurement = { id: newId(), doctorId, ...input, createdAt: nowIso() };

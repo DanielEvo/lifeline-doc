@@ -6,10 +6,11 @@
 // gráficos do painel de biomarcadores; clicar numa consulta rola até o card
 // da evolução correspondente.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FlaskConical,
+  Heart,
   Loader2,
   Plus,
   Scissors,
@@ -64,6 +65,8 @@ export type ExamEvent = {
   label: string;
   markers: Measurement[];
   status: ReturnType<typeof examStatus>;
+  /** razões de solicitação únicas informadas ao confirmar os exames do mês */
+  motivos: string[];
 };
 
 export type ConsultaEvent = {
@@ -129,6 +132,7 @@ export function usePatientHistory(measurements: Measurement[], evolutions: Evolu
         label: `Exames · ${fmtMonthYear(monthStart)}`,
         markers,
         status: examStatus(markers),
+        motivos: [...new Set(markers.map((m) => m.motivo).filter((x): x is string => !!x?.trim()))],
       };
     });
   }, [measurements]);
@@ -230,6 +234,30 @@ export function ClinicalTimeline({
     { id: "cirurgias", label: "Cirurgias", Icon: Scissors, tone: "text-rose-600" },
   ] as const;
 
+  // Affordance de scroll: só mostra o fade de cada lado quando há mais
+  // conteúdo pra rolar naquela direção — sem isso, o overflow-x-auto existe
+  // mas nada na tela avisa o médico que dá pra arrastar.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => {
+      setCanScrollLeft(el.scrollLeft > 4);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, [events.length]);
+
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -264,20 +292,30 @@ export function ClinicalTimeline({
           </p>
         </div>
       ) : (
-        <div className="relative mt-3 overflow-x-auto pb-1">
-          {/* Alinhada ao centro vertical do nó circular de cada card (ver
-              TimelineCard: p-2.5 + border + ícone h-6 ⇒ centro a 23px do topo). */}
-          <div className="absolute left-0 right-0 top-[23px] h-0.5 bg-border" />
-          <div className="relative flex gap-3">
-            {events.map((ev) => (
-              <TimelineCard
-                key={ev.key}
-                ev={ev}
-                active={ev.key === activeKey || ev.key === activeConsultaKey}
-                onClick={() => onEventClick(ev)}
-              />
-            ))}
+        <div className="relative mt-3">
+          <div ref={scrollerRef} className="overflow-x-auto pb-1">
+            {/* Alinhada ao centro vertical do nó circular de cada card (ver
+                TimelineCard: p-2.5 + border + ícone h-6 ⇒ centro a 23px do topo).
+                Gradiente fica mais vivo à direita — o presente puxa o olhar. */}
+            <div className="absolute left-0 right-0 top-[23px] h-0.5 bg-gradient-to-r from-border via-primary/30 to-primary/70" />
+            <div className="relative flex gap-3">
+              {events.map((ev, i) => (
+                <TimelineCard
+                  key={ev.key}
+                  ev={ev}
+                  active={ev.key === activeKey || ev.key === activeConsultaKey}
+                  isLatest={i === events.length - 1}
+                  onClick={() => onEventClick(ev)}
+                />
+              ))}
+            </div>
           </div>
+          {canScrollLeft && (
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent" />
+          )}
+          {canScrollRight && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent" />
+          )}
         </div>
       )}
     </div>
@@ -288,10 +326,12 @@ export function ClinicalTimeline({
 function TimelineCard({
   ev,
   active,
+  isLatest,
   onClick,
 }: {
   ev: TimelineEvent;
   active: boolean;
+  isLatest: boolean;
   onClick: () => void;
 }) {
   const status = ev.kind === "exame" ? ev.status : ev.sealed ? "Selada" : "Rascunho";
@@ -300,7 +340,7 @@ function TimelineCard({
     ev.kind === "exame" ? ev.label : ev.sealed ? "Consulta selada" : "Evolução em aberto";
   const summary =
     ev.kind === "exame"
-      ? ev.markers.map((m) => `${m.name} ${m.value}`).join(" · ")
+      ? ev.motivos.join(" · ") || ev.markers.map((m) => `${m.name} ${m.value}`).join(" · ")
       : ev.assessment || ev.evolucaoSnippet;
 
   return (
@@ -311,10 +351,20 @@ function TimelineCard({
       }`}
     >
       <div className="flex items-center gap-2">
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-white shadow ${NODE_TONE[status]}`}
-        >
-          <Icon className="h-3 w-3" />
+        <span className="relative shrink-0">
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br text-white shadow ${NODE_TONE[status]}`}
+          >
+            <Icon className="h-3 w-3" />
+          </span>
+          {isLatest && (
+            <span
+              title="Registro mais recente"
+              className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-white shadow ring-2 ring-card"
+            >
+              <Heart className="h-2 w-2" fill="currentColor" />
+            </span>
+          )}
         </span>
         <span className="text-[11px] font-semibold text-muted-foreground">
           {fmtMonthYear(ev.date)}
@@ -355,10 +405,13 @@ export function BiomarkerPanel({
   allNames: string[];
   onChanged: () => void;
 }) {
-  
+  const allMonths = useMemo(
+    () => [...new Set(measurements.map((m) => monthKey(m.date)))].sort(),
+    [measurements],
+  );
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
+    <div className="flex max-h-[70vh] flex-col rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Biomarcadores</h2>
       </div>
@@ -400,7 +453,7 @@ export function BiomarkerPanel({
           )}
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {visibleNames.map((name) => (
-              <BiomarkerChart key={name} name={name} measurements={measurements} />
+              <BiomarkerChart key={name} name={name} measurements={measurements} allMonths={allMonths} />
             ))}
           </div>
         </div>
@@ -410,7 +463,23 @@ export function BiomarkerPanel({
   );
 }
 
-function BiomarkerChart({ name, measurements }: { name: string; measurements: Measurement[] }) {
+/** yyyy-mm de uma data yyyy-mm-dd. */
+function monthKey(ymd: string): string {
+  return ymd.slice(0, 7);
+}
+
+function BiomarkerChart({
+  name,
+  measurements,
+  allMonths,
+}: {
+  name: string;
+  measurements: Measurement[];
+  /** União ordenada de todos os meses com QUALQUER biomarcador do paciente —
+   *  garante que todo gráfico use o mesmo eixo X, mesmo quando este
+   *  biomarcador específico só tem dado em parte desses meses. */
+  allMonths: string[];
+}) {
   const series = measurements
     .filter((m) => m.name === name)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -419,7 +488,22 @@ function BiomarkerChart({ name, measurements }: { name: string; measurements: Me
   const prev = series.length > 1 ? series[series.length - 2] : null;
   const out = isOutOfRange(last);
   const trendDown = prev !== null && last.value < prev.value;
-  const data = series.map((m) => ({ x: fmtShort(m.date), v: m.value }));
+
+  // último valor de cada mês (se houver 2 coletas no mesmo mês, fica o mais recente)
+  const byMonth = new Map<string, Measurement>();
+  for (const m of series) byMonth.set(monthKey(m.date), m);
+
+  // Meses sem coleta deste biomarcador viram v:null (gap na linha), NUNCA 0 —
+  // 0 é um valor clínico real possível e não pode ser confundido com "sem dado".
+  const data = allMonths.map((month) => {
+    const m = byMonth.get(month);
+    return {
+      x: fmtShort(`${month}-01`),
+      v: m ? m.value : null,
+      bad: m ? isOutOfRange(m) : false,
+    };
+  });
+
   const vals = series.map((m) => m.value).concat([last.refMin, last.refMax]);
   const yMin = Math.min(...vals);
   const yMax = Math.max(...vals);
@@ -447,16 +531,17 @@ function BiomarkerChart({ name, measurements }: { name: string; measurements: Me
             <YAxis hide domain={[yMin - pad, yMax + pad]} />
             <Tooltip
               contentStyle={{ fontSize: 11, borderRadius: 8, padding: "4px 8px" }}
-              formatter={(v) => [`${v} ${last.unit}`, name]}
+              formatter={(v) => (v === null || v === undefined ? ["sem coleta", name] : [`${v} ${last.unit}`, name])}
             />
             <Line
               type="monotone"
               dataKey="v"
               stroke="#0891b2"
               strokeWidth={2}
+              connectNulls={false}
               dot={({ cx, cy, payload, index }) => {
-                const m = series[index];
-                const bad = m && isOutOfRange(m);
+                if (payload.v === null || payload.v === undefined) return <g key={`${name}-${index}`} />;
+                const bad = payload.bad as boolean;
                 return (
                   <circle
                     key={`${name}-${index}`}

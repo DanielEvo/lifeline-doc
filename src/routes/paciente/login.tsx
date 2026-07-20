@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   loginPatient,
+  patientGoogleAuthStart,
   patientGoogleLogin,
   registerPatient,
 } from "@/lib/api/patient-auth.functions";
@@ -74,10 +75,19 @@ function PatientLoginPage() {
     }
   };
 
+  // OAuth real quando o servidor tem credenciais Google; sem elas (dev),
+  // cai no login simulado — mesma conta + sessão reais no backend, mesmo
+  // padrão do lado médico (src/routes/login.tsx).
   const withGoogle = async () => {
     if (busy) return;
     setBusy("google");
     try {
+      const redirectUri = `${window.location.origin}/paciente/auth/callback`;
+      const start = await patientGoogleAuthStart({ data: { redirectUri } });
+      if (start.url) {
+        window.location.assign(start.url);
+        return; // segue no /paciente/auth/callback
+      }
       const r = await patientGoogleLogin({ data: {} });
       if (r.ok) finish(r);
       else toast.error(r.error);

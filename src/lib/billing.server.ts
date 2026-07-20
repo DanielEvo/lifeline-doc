@@ -27,6 +27,7 @@ export async function createCharge(
     vencimento: input.vencimento,
     status: "pendente",
     pagoEm: null,
+    paymentUrl: null,
     createdAt: nowIso(),
   };
   await mutateRows<Charge>(FILE, (rows) => {
@@ -46,6 +47,21 @@ export async function setChargeStatus(
     if (!c) return;
     c.status = status;
     c.pagoEm = status === "pago" ? nowIso() : null;
+    updated = { ...c };
+  });
+  return updated;
+}
+
+export async function setChargePaymentUrl(
+  doctorId: string,
+  id: string,
+  paymentUrl: string,
+): Promise<Charge | undefined> {
+  let updated: Charge | undefined;
+  await mutateRows<Charge>(FILE, (rows) => {
+    const c = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!c) return;
+    c.paymentUrl = paymentUrl;
     updated = { ...c };
   });
   return updated;

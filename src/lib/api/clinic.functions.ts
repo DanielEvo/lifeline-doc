@@ -9,7 +9,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireDoctor } from "../auth.server";
+import { requireDoctor, updateDoctorMemedProfile } from "../auth.server";
 import {
   bumpExams,
   createPatient,
@@ -24,7 +24,10 @@ import {
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
-import { createCharge, listCharges, setChargeStatus } from "../billing.server";
+import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
+import { getMemedPrescriberToken, isMemedConfigured } from "../memed.server";
+import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
+import { createStripeCheckoutLink, isStripeConfigured } from "../payments.server";
 import {
   createEvolution,
   listEvolutions,
@@ -41,6 +44,19 @@ import { BIOMARKER_CATALOG, resolveBiomarkerName, todayIso } from "../clinic-typ
 const token = z.string().min(1).max(80);
 const COLUMN = z.string().min(1).max(32);
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+// Antecedentes pessoais — mesmo fragmento em createMyPatient e
+// updateMyPatient para não divergir a validação entre os dois.
+const CLINICAL_FIELDS = {
+  tipoSanguineo: z.string().max(4).nullish(),
+  tabagismo: z.enum(["nunca", "ex_fumante", "fumante"]).nullish(),
+  etilismo: z.enum(["nunca", "ex_etilista", "etilista"]).nullish(),
+  comorbidades: z.array(z.string().max(60)).max(20).optional(),
+  alergias: z.string().max(300).nullish(),
+  medicacaoContinua: z.string().max(300).nullish(),
+  pesoKg: z.number().min(0).max(500).nullish(),
+  alturaCm: z.number().min(0).max(280).nullish(),
+};
 
 const UNAUTH = { ok: false as const, error: "unauthorized" as const };
 
@@ -140,6 +156,7 @@ export const createMyPatient = createServerFn({ method: "POST" })
       convenio: z.string().max(60).nullish(),
       queixa: z.string().max(300).optional().default(""),
       column: COLUMN.optional(),
+      ...CLINICAL_FIELDS,
     }),
   )
   .handler(async ({ data }) => {
@@ -170,6 +187,7 @@ export const updateMyPatient = createServerFn({ method: "POST" })
       column: COLUMN.optional(),
       adherence: z.number().min(0).max(100).nullish(),
       criticalFlag: z.string().max(160).nullish(),
+      ...CLINICAL_FIELDS,
     }),
   )
   .handler(async ({ data }) => {
@@ -333,6 +351,90 @@ export const setMyChargeStatus = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const charge = await setChargeStatus(doctor.id, data.id, data.status);
     return charge ? { ok: true as const, charge } : { ok: false as const, error: "not_found" as const };
+  });
+
+export const generateChargePaymentLink = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, id: z.string().min(1), origin: z.string().max(200) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const charges = await listCharges(doctor.id);
+    const charge = charges.find((c) => c.id === data.id);
+    if (!charge) return { ok: false as const, error: "not_found" as const };
+    const link = await createStripeCheckoutLink({
+      descricao: charge.descricao,
+      valorReais: charge.valor,
+      successUrl: `${data.origin}/app/pacientes?pago=1`,
+      cancelUrl: `${data.origin}/app/pacientes`,
+    });
+    if (!link.ok) return { ok: false as const, error: link.error, detail: link.detail };
+    const updated = await setChargePaymentUrl(doctor.id, data.id, link.url);
+    return updated
+      ? { ok: true as const, charge: updated }
+      : { ok: false as const, error: "not_found" as const };
+  });
+
+// ---------------------------------------------------------------------------
+// Integrações — Memed (prescrição real) e WhatsApp Business (envio automático)
+// ---------------------------------------------------------------------------
+
+export const getMemedStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    if (!isMemedConfigured()) return { ok: true as const, state: "not_configured" as const };
+    if (!doctor.crm || !doctor.crmUf || !doctor.cpfMedico) {
+      return { ok: true as const, state: "missing_profile" as const };
+    }
+    const result = await getMemedPrescriberToken(doctor);
+    if (!result.ok) return { ok: true as const, state: "error" as const, detail: result.detail };
+    return { ok: true as const, state: "ready" as const, memedToken: result.token };
+  });
+
+export const saveMemedProfile = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      crm: z.string().min(1).max(20),
+      crmUf: z.string().length(2),
+      cpfMedico: z.string().min(11).max(14),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const updated = await updateDoctorMemedProfile(doctor.id, {
+      crm: data.crm,
+      crmUf: data.crmUf,
+      cpfMedico: data.cpfMedico,
+    });
+    return updated ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
+  });
+
+export const sendWhatsAppNow = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, telefone: z.string().min(8).max(24), texto: z.string().min(1).max(1000) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    if (!isWhatsAppApiConfigured()) return { ok: false as const, error: "not_configured" as const };
+    const result = await sendWhatsAppTextReal(data.telefone, data.texto);
+    return result.ok
+      ? { ok: true as const }
+      : { ok: false as const, error: result.error, detail: result.detail };
+  });
+
+export const getIntegrationsStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    return {
+      ok: true as const,
+      memed: isMemedConfigured(),
+      whatsapp: isWhatsAppApiConfigured(),
+      stripe: isStripeConfigured(),
+    };
   });
 
 // ---------------------------------------------------------------------------
@@ -672,6 +774,7 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
       patientId: z.string().min(1),
       date: YMD,
       label: z.string().max(80).optional().default("Exame · leitura por IA"),
+      motivo: z.string().max(200).nullish(),
       items: z
         .array(
           z.object({
@@ -712,6 +815,7 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
         refMax: item.refMax,
         date: data.date,
         label: data.label,
+        motivo: data.motivo || null,
       });
       seen.add(key);
       added++;
