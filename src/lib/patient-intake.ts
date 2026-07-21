@@ -49,6 +49,14 @@ export async function runPatientIntake(
       convenio: values.convenio || null,
       queixa: values.queixa ?? "",
       column: values.column,
+      tipoSanguineo: values.tipoSanguineo || null,
+      tabagismo: (values.tabagismo || null) as "nunca" | "ex_fumante" | "fumante" | null,
+      etilismo: (values.etilismo || null) as "nunca" | "ex_etilista" | "etilista" | null,
+      comorbidades: values.comorbidades ?? [],
+      alergias: values.alergias || null,
+      medicacaoContinua: values.medicacaoContinua || null,
+      pesoKg: values.pesoKg ? Number(values.pesoKg) : null,
+      alturaCm: values.alturaCm ? Number(values.alturaCm) : null,
     },
   });
   if (!created.ok) return { ok: false, error: created.error, mode: "novo" };

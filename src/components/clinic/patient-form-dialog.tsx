@@ -44,7 +44,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { lookupPatientByCode } from "@/lib/api/clinic.functions";
 import { useClinic } from "@/lib/clinic-context";
-import { ageFrom, CONVENIOS, type BoardColumn, type Patient } from "@/lib/clinic-types";
+import {
+  ageFrom,
+  CONVENIOS,
+  COMORBIDADES_CATALOGO,
+  ETILISMO_LABEL,
+  TABAGISMO_LABEL,
+  TIPOS_SANGUINEOS,
+  type BoardColumn,
+  type Patient,
+} from "@/lib/clinic-types";
 
 const schema = z.object({
   nome: z.string().min(2, "Nome muito curto").max(120),
@@ -63,6 +72,14 @@ const schema = z.object({
   convenio: z.string().max(60).optional(),
   queixa: z.string().max(300).optional(),
   column: z.string().min(1),
+  tipoSanguineo: z.string().max(4).optional(),
+  tabagismo: z.enum(["nunca", "ex_fumante", "fumante", ""]).optional(),
+  etilismo: z.enum(["nunca", "ex_etilista", "etilista", ""]).optional(),
+  comorbidades: z.array(z.string()).optional(),
+  alergias: z.string().max(300).optional(),
+  medicacaoContinua: z.string().max(300).optional(),
+  pesoKg: z.string().max(6).optional(), // texto no form; convertido pro chamador
+  alturaCm: z.string().max(6).optional(),
 });
 
 export type PatientFormValues = z.infer<typeof schema>;
@@ -101,6 +118,14 @@ export function PatientFormDialog({
     convenio: "",
     queixa: "",
     column: firstCol,
+    tipoSanguineo: "",
+    tabagismo: "",
+    etilismo: "",
+    comorbidades: [],
+    alergias: "",
+    medicacaoContinua: "",
+    pesoKg: "",
+    alturaCm: "",
   };
 
   const form = useForm<PatientFormValues>({
@@ -139,6 +164,14 @@ export function PatientFormDialog({
             convenio: patient.convenio ?? "",
             queixa: patient.queixa,
             column: patient.column,
+            tipoSanguineo: patient.tipoSanguineo ?? "",
+            tabagismo: patient.tabagismo ?? "",
+            etilismo: patient.etilismo ?? "",
+            comorbidades: patient.comorbidades ?? [],
+            alergias: patient.alergias ?? "",
+            medicacaoContinua: patient.medicacaoContinua ?? "",
+            pesoKg: patient.pesoKg != null ? String(patient.pesoKg) : "",
+            alturaCm: patient.alturaCm != null ? String(patient.alturaCm) : "",
           }
         : blank,
     );
@@ -360,11 +393,125 @@ export function PatientFormDialog({
               <Label htmlFor="pf-email" className="text-xs">E-mail</Label>
               <Input id="pf-email" type="email" {...form.register("email")} placeholder="paciente@email.com" />
               {err.email && <p className="text-[11px] text-destructive">{err.email.message}</p>}
+              {isEdit && patient?.email && (
+                <p className="text-[11px] text-muted-foreground">
+                  Trocar um e-mail já cadastrado exige confirmação do paciente — ele recebe um link
+                  de aprovação (envie por WhatsApp na tela do paciente).
+                </p>
+              )}
+              {isEdit && patient?.pendingEmail && (
+                <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  Já existe uma troca pendente para {patient.pendingEmail} — salvar aqui substitui esse pedido.
+                </p>
+              )}
             </div>
 
             <div className="col-span-2 space-y-1">
               <Label htmlFor="pf-queixa" className="text-xs">Motivo / queixa atual</Label>
               <Textarea id="pf-queixa" rows={2} {...form.register("queixa")} placeholder="Ex.: fadiga há 4 semanas + dispneia aos esforços" />
+            </div>
+
+            {/* Antecedentes pessoais — aparecem como badges no cabeçalho do
+                prontuário. Nenhum é obrigatório; o médico preenche aos poucos. */}
+            <div className="col-span-2 mt-1 border-t border-border/60 pt-3">
+              <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Antecedentes pessoais
+              </Label>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Tipo sanguíneo</Label>
+              <Select
+                value={form.watch("tipoSanguineo") || ""}
+                onValueChange={(v) => form.setValue("tipoSanguineo", v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_SANGUINEOS.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="pf-peso" className="text-xs">Peso (kg)</Label>
+                <Input id="pf-peso" inputMode="decimal" {...form.register("pesoKg")} placeholder="70" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="pf-altura" className="text-xs">Altura (cm)</Label>
+                <Input id="pf-altura" inputMode="decimal" {...form.register("alturaCm")} placeholder="170" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Tabagismo</Label>
+              <Select
+                value={form.watch("tabagismo") || ""}
+                onValueChange={(v) => form.setValue("tabagismo", v as PatientFormValues["tabagismo"])}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(TABAGISMO_LABEL) as [string, string][]).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Etilismo</Label>
+              <Select
+                value={form.watch("etilismo") || ""}
+                onValueChange={(v) => form.setValue("etilismo", v as PatientFormValues["etilismo"])}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(ETILISMO_LABEL) as [string, string][]).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">Comorbidades</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {COMORBIDADES_CATALOGO.map((c) => {
+                  const list = form.watch("comorbidades") ?? [];
+                  const active = list.includes(c);
+                  return (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() =>
+                        form.setValue(
+                          "comorbidades",
+                          active ? list.filter((x) => x !== c) : [...list, c],
+                        )
+                      }
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 transition ${
+                        active
+                          ? "bg-primary text-primary-foreground ring-primary"
+                          : "bg-background text-muted-foreground ring-border hover:text-foreground"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="pf-alergias" className="text-xs">Alergias</Label>
+              <Input id="pf-alergias" {...form.register("alergias")} placeholder="Ex.: dipirona, látex" maxLength={300} />
+            </div>
+
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="pf-medcont" className="text-xs">Medicação contínua</Label>
+              <Input id="pf-medcont" {...form.register("medicacaoContinua")} placeholder="Ex.: losartana 50mg 1x/dia" maxLength={300} />
             </div>
 
             <div className="col-span-2 space-y-1">

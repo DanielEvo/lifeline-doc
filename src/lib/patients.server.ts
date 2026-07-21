@@ -40,6 +40,14 @@ export type PatientInput = {
   criticalFlag?: string | null;
   adherence?: number | null;
   briefing?: string | null;
+  tipoSanguineo?: string | null;
+  tabagismo?: Patient["tabagismo"];
+  etilismo?: Patient["etilismo"];
+  comorbidades?: string[];
+  alergias?: string | null;
+  medicacaoContinua?: string | null;
+  pesoKg?: number | null;
+  alturaCm?: number | null;
 };
 
 export async function listPatients(
@@ -89,6 +97,17 @@ export async function createPatient(doctorId: string, input: PatientInput): Prom
     cpf: input.cpf?.trim() || null,
     telefone: input.telefone?.trim() || null,
     email: input.email?.trim() || null,
+    pendingEmail: null,
+    pendingEmailToken: null,
+    pendingEmailRequestedAt: null,
+    tipoSanguineo: input.tipoSanguineo || null,
+    tabagismo: input.tabagismo ?? null,
+    etilismo: input.etilismo ?? null,
+    comorbidades: input.comorbidades ?? [],
+    alergias: input.alergias?.trim() || null,
+    medicacaoContinua: input.medicacaoContinua?.trim() || null,
+    pesoKg: input.pesoKg ?? null,
+    alturaCm: input.alturaCm ?? null,
     convenio: input.convenio?.trim() || null,
     queixa: input.queixa?.trim() || "",
     column: input.column ?? "triagem",
@@ -121,8 +140,39 @@ export async function updatePatient(
     if (patch.sexo !== undefined) p.sexo = patch.sexo ?? null;
     if (patch.cpf !== undefined) p.cpf = patch.cpf?.trim() || null;
     if (patch.telefone !== undefined) p.telefone = patch.telefone?.trim() || null;
-    if (patch.email !== undefined) p.email = patch.email?.trim() || null;
+    if (patch.email !== undefined) {
+      const nextEmail = patch.email?.trim() || null;
+      const hadEmail = !!p.email;
+      const changed = nextEmail !== p.email;
+      if (!hadEmail || !changed) {
+        // Primeiro e-mail cadastrado, ou nenhuma mudança real: aplica direto.
+        p.email = nextEmail;
+        p.pendingEmail = null;
+        p.pendingEmailToken = null;
+        p.pendingEmailRequestedAt = null;
+      } else if (nextEmail) {
+        // Trocar um e-mail já existente é sensível (é a credencial de login
+        // do paciente) — fica pendente até ele confirmar pelo link.
+        p.pendingEmail = nextEmail;
+        p.pendingEmailToken = newId(24);
+        p.pendingEmailRequestedAt = nowIso();
+      } else {
+        // Limpar o e-mail (nextEmail === null) não é sensível — aplica direto.
+        p.email = null;
+        p.pendingEmail = null;
+        p.pendingEmailToken = null;
+        p.pendingEmailRequestedAt = null;
+      }
+    }
     if (patch.convenio !== undefined) p.convenio = patch.convenio?.trim() || null;
+    if (patch.tipoSanguineo !== undefined) p.tipoSanguineo = patch.tipoSanguineo || null;
+    if (patch.tabagismo !== undefined) p.tabagismo = patch.tabagismo ?? null;
+    if (patch.etilismo !== undefined) p.etilismo = patch.etilismo ?? null;
+    if (patch.comorbidades !== undefined) p.comorbidades = patch.comorbidades;
+    if (patch.alergias !== undefined) p.alergias = patch.alergias?.trim() || null;
+    if (patch.medicacaoContinua !== undefined) p.medicacaoContinua = patch.medicacaoContinua?.trim() || null;
+    if (patch.pesoKg !== undefined) p.pesoKg = patch.pesoKg ?? null;
+    if (patch.alturaCm !== undefined) p.alturaCm = patch.alturaCm ?? null;
     if (patch.queixa !== undefined) p.queixa = patch.queixa.trim();
     if (patch.column !== undefined && patch.column) p.column = patch.column;
     if (patch.criticalFlag !== undefined) p.criticalFlag = patch.criticalFlag;
@@ -195,4 +245,45 @@ export async function importSamples(doctorId: string): Promise<Patient[]> {
     added.push(await createPatient(doctorId, s));
   }
   return added;
+}
+
+// ---------------------------------------------------------------------------
+// Confirmação de troca de e-mail — link público de uso único, sem exigir
+// login do paciente (a conta de login do paciente ainda não é ligada ao
+// prontuário do médico — ver BKL-37 no PRD). O token é a única credencial.
+
+/** Busca em TODOS os médicos — a página pública de confirmação não sabe
+ *  (nem deve saber) qual médico originou a troca. */
+export async function findPatientByEmailToken(token: string): Promise<Patient | undefined> {
+  const rows = await readRows<Patient>(FILE);
+  return rows.find((p) => p.pendingEmailToken === token);
+}
+
+export async function confirmEmailChange(token: string): Promise<Patient | undefined> {
+  let updated: Patient | undefined;
+  await mutateRows<Patient>(FILE, (rows) => {
+    const p = rows.find((r) => r.pendingEmailToken === token);
+    if (!p || !p.pendingEmail) return;
+    p.email = p.pendingEmail;
+    p.pendingEmail = null;
+    p.pendingEmailToken = null;
+    p.pendingEmailRequestedAt = null;
+    p.updatedAt = nowIso();
+    updated = { ...p };
+  });
+  return updated;
+}
+
+export async function rejectEmailChange(token: string): Promise<Patient | undefined> {
+  let updated: Patient | undefined;
+  await mutateRows<Patient>(FILE, (rows) => {
+    const p = rows.find((r) => r.pendingEmailToken === token);
+    if (!p) return;
+    p.pendingEmail = null;
+    p.pendingEmailToken = null;
+    p.pendingEmailRequestedAt = null;
+    p.updatedAt = nowIso();
+    updated = { ...p };
+  });
+  return updated;
 }

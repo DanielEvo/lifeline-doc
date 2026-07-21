@@ -9,7 +9,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   Cake,
+  CalendarClock,
   CalendarPlus,
+  Check,
   CheckCircle2,
   ChevronDown,
   ClipboardList,
@@ -69,28 +71,39 @@ import {
   archiveMyPatient,
   confirmExtractedMeasurements,
   extractExamDocument,
+  getMemedStatus,
   getPatientRecord,
   getWorkspace,
   moveMyPatient,
   prescribeForEvolution,
+  rescheduleAppointment,
   saveEvolution,
   saveEvolutionNote,
+  saveMemedProfile,
   sealMyEvolution,
+  setMyAppointmentStatus,
   updateMyPatient,
 } from "@/lib/api/clinic.functions";
-import { ScheduleDialog } from "@/components/clinic/action-dialogs";
+import { invalidateWorkspace, ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
+import { SimilarCases } from "@/components/clinic/similar-cases";
 import {
   ageFrom,
   ANAMNESE_TEMPLATE,
   BIOMARKER_CATALOG,
+  calcImc,
   DEFAULT_COLUMNS,
+  ETILISMO_LABEL,
+  formatDateBR,
   formatDateTimeBR,
+  formatHourBR,
   initialsOf,
   MED_CATALOG,
+  TABAGISMO_LABEL,
   WA_TEMPLATES,
+  type Appointment,
   type Evolution,
   type Patient,
 } from "@/lib/clinic-types";
@@ -159,6 +172,14 @@ function Prontuario() {
           convenio: v.convenio || null,
           queixa: v.queixa ?? "",
           column: v.column,
+          tipoSanguineo: v.tipoSanguineo || null,
+          tabagismo: (v.tabagismo || null) as "nunca" | "ex_fumante" | "fumante" | null,
+          etilismo: (v.etilismo || null) as "nunca" | "ex_etilista" | "etilista" | null,
+          comorbidades: v.comorbidades ?? [],
+          alergias: v.alergias || null,
+          medicacaoContinua: v.medicacaoContinua || null,
+          pesoKg: v.pesoKg ? Number(v.pesoKg) : null,
+          alturaCm: v.alturaCm ? Number(v.alturaCm) : null,
         },
       }),
     onSuccess: (r) => {
@@ -250,6 +271,40 @@ function Prontuario() {
                 )}
                 {p.cpf && <span>CPF {p.cpf}</span>}
               </div>
+              {(p.tipoSanguineo || p.tabagismo || p.etilismo || (p.pesoKg && p.alturaCm) || (p.comorbidades && p.comorbidades.length > 0) || p.alergias) && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {p.tipoSanguineo && (
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
+                      Tipo {p.tipoSanguineo}
+                    </span>
+                  )}
+                  {p.tabagismo && p.tabagismo !== "nunca" && (
+                    <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:ring-orange-900">
+                      {TABAGISMO_LABEL[p.tabagismo]}
+                    </span>
+                  )}
+                  {p.etilismo && p.etilismo !== "nunca" && (
+                    <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:ring-orange-900">
+                      {ETILISMO_LABEL[p.etilismo]}
+                    </span>
+                  )}
+                  {p.pesoKg && p.alturaCm && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+                      {p.pesoKg}kg · {p.alturaCm}cm · IMC {calcImc(p.pesoKg, p.alturaCm)}
+                    </span>
+                  )}
+                  {p.comorbidades?.map((c) => (
+                    <span key={c} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-900">
+                      {c}
+                    </span>
+                  ))}
+                  {p.alergias && (
+                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-900">
+                      ⚠ Alergia: {p.alergias}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -268,9 +323,6 @@ function Prontuario() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={() => setAgendarOpen(true)}>
-              <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Agendar
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
             </Button>
@@ -304,7 +356,34 @@ function Prontuario() {
             )}
           </div>
         )}
+
+        {p.pendingEmail && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-900">
+            <span>
+              <strong>E-mail pendente de confirmação:</strong> {p.pendingEmail} — o paciente precisa
+              aprovar antes de valer.
+            </span>
+            <WhatsAppButton
+              telefone={p.telefone}
+              text={WA_TEMPLATES.confirmarEmail(
+                p.nome,
+                `${typeof window !== "undefined" ? window.location.origin : ""}/confirmar-email/${p.pendingEmailToken}`,
+                medico,
+              )}
+              title="Enviar link de confirmação"
+              size="md"
+            />
+          </div>
+        )}
       </div>
+
+      <MiniAgenda
+        appointments={
+          wsq.data?.ok ? wsq.data.appointments.filter((a) => a.patientId === id) : []
+        }
+        token={token}
+        onAgendar={() => setAgendarOpen(true)}
+      />
 
       {/* Linha do tempo clínica: horizontal, full-width, logo abaixo do header */}
       <ClinicalTimeline
@@ -325,7 +404,7 @@ function Prontuario() {
         }
       />
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0">
           <NovaEvolucao
             token={token}
@@ -383,6 +462,11 @@ function Prontuario() {
         />
       </div>
 
+      {/* Casos históricos: só faz sentido durante o atendimento deste
+          paciente (comparação de perfil clínico) — vive aqui, não num
+          drawer global. */}
+      <SimilarCases />
+
       <PatientFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
@@ -433,6 +517,10 @@ type FileEntry = {
     manualOverrideName?: string | null;
   }[];
   collectionDate?: string | null;
+  /** true = usuário já viu o aviso de descarte parcial e pediu pra confirmar mesmo assim */
+  confirmingDiscard?: boolean;
+  /** razão clínica da solicitação — aparece no card da linha do tempo */
+  motivo?: string;
 };
 const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
 
@@ -443,6 +531,179 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Mini-agenda nativa do paciente — próximas consultas + histórico curto,
+// direto na tela do prontuário, sem sair para a agenda geral.
+
+function MiniAgenda({
+  appointments,
+  token,
+  onAgendar,
+}: {
+  appointments: Appointment[];
+  token: string;
+  onAgendar: () => void;
+}) {
+  const qc = useQueryClient();
+  const [reagendando, setReagendando] = useState<string | null>(null);
+  const [novaData, setNovaData] = useState("");
+  const [novaHora, setNovaHora] = useState("");
+
+  const upcoming = [...appointments]
+    .filter((a) => a.status !== "faltou" && a.status !== "realizada")
+    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+  const past = [...appointments]
+    .filter((a) => a.status === "faltou" || a.status === "realizada")
+    .sort((a, b) => b.dateTime.localeCompare(a.dateTime))
+    .slice(0, 3);
+
+  const status = useMutation({
+    mutationFn: (v: { id: string; status: Appointment["status"] }) =>
+      setMyAppointmentStatus({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui atualizar a consulta.");
+      invalidateWorkspace(qc);
+    },
+  });
+
+  const reagendar = useMutation({
+    mutationFn: (v: { id: string; dateTime: string }) =>
+      rescheduleAppointment({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui remarcar.");
+      toast.success("Consulta remarcada.");
+      setReagendando(null);
+      invalidateWorkspace(qc);
+    },
+  });
+
+  return (
+    <div className="mt-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+          <CalendarClock className="h-4 w-4 text-primary" /> Agenda
+        </h2>
+        <Button variant="outline" size="sm" onClick={onAgendar}>
+          <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Agendar
+        </Button>
+      </div>
+
+      {upcoming.length === 0 && past.length === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">Nenhuma consulta agendada ainda.</p>
+      )}
+
+      {upcoming.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {upcoming.map((a) => (
+            <li
+              key={a.id}
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs"
+            >
+              <span className="font-medium">
+                {formatDateBR(a.dateTime)} · {formatHourBR(a.dateTime)}
+              </span>
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                  a.status === "confirmada"
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {a.status === "confirmada" ? "Confirmada" : "Agendada"}
+              </span>
+              {a.note && <span className="text-muted-foreground">· {a.note}</span>}
+              <span className="ml-auto flex items-center gap-1.5">
+                {reagendando === a.id ? (
+                  <>
+                    <input
+                      type="date"
+                      value={novaData}
+                      onChange={(e) => setNovaData(e.target.value)}
+                      className="rounded border border-border bg-background px-1 py-0.5 text-[11px]"
+                    />
+                    <input
+                      type="time"
+                      value={novaHora}
+                      onChange={(e) => setNovaHora(e.target.value)}
+                      className="rounded border border-border bg-background px-1 py-0.5 text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      disabled={!novaData || !novaHora || reagendar.isPending}
+                      onClick={() => reagendar.mutate({ id: a.id, dateTime: `${novaData}T${novaHora}:00` })}
+                      className="rounded bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReagendando(null)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {a.status !== "confirmada" && (
+                      <button
+                        type="button"
+                        title="Confirmar"
+                        onClick={() => status.mutate({ id: a.id, status: "confirmada" })}
+                        className="text-muted-foreground hover:text-emerald-600"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      title="Remarcar"
+                      onClick={() => {
+                        setReagendando(a.id);
+                        setNovaData(a.dateTime.slice(0, 10));
+                        setNovaHora(a.dateTime.slice(11, 16));
+                      }}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Marcar falta"
+                      onClick={() => status.mutate({ id: a.id, status: "faltou" })}
+                      className="text-muted-foreground hover:text-red-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {past.length > 0 && (
+        <div className="mt-2 border-t border-border/60 pt-2">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Anteriores
+          </p>
+          <ul className="mt-1 space-y-1">
+            {past.map((a) => (
+              <li key={a.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span>{formatDateBR(a.dateTime)}</span>
+                <span className={a.status === "faltou" ? "text-red-600 dark:text-red-400" : ""}>
+                  {a.status === "realizada" ? "Realizada" : "Faltou"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function UploadExamesDialog({
@@ -510,7 +771,7 @@ function UploadExamesDialog({
     }
   }
 
-  const confirmarExame = async (entry: FileEntry) => {
+  const confirmarExame = async (entry: FileEntry, force = false) => {
     if (!entry.extracted || entry.extracted.length === 0) return;
     const mapped = entry.extracted
       .map((it) => {
@@ -524,11 +785,21 @@ function UploadExamesDialog({
       toast.error("Nenhum biomarcador mapeado neste exame — reconheça ou lance manualmente.");
       return;
     }
+    const unmappedCount = entry.extracted.length - mapped.length;
+    // Descarte parcial não pode ser silencioso — exige uma confirmação explícita
+    // antes de gravar, ou o médico pode não perceber que um resultado sumiu.
+    if (unmappedCount > 0 && !force) {
+      setFiles((prev) =>
+        prev.map((f) => (f.file === entry.file ? { ...f, confirmingDiscard: true } : f)),
+      );
+      return;
+    }
     const r = await confirmExtractedMeasurements({
       data: {
         token,
         patientId,
         date: entry.collectionDate || new Date().toISOString().slice(0, 10),
+        motivo: entry.motivo?.trim() || null,
         items: mapped,
       },
     });
@@ -718,14 +989,71 @@ function UploadExamesDialog({
                         />
                       </div>
                     ))}
-                    <Button
-                      size="sm"
-                      className="w-full brand-gradient text-primary-foreground"
-                      disabled={entry.extracted.length === 0}
-                      onClick={() => confirmarExame(entry)}
-                    >
-                      Confirmar e salvar
-                    </Button>
+                    {entry.extracted.length > 0 && (
+                      <input
+                        type="text"
+                        value={entry.motivo ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFiles((prev) =>
+                            prev.map((f, fi) => (fi === i ? { ...f, motivo: val } : f)),
+                          );
+                        }}
+                        placeholder="Motivo da solicitação (opcional) — ex.: investigar fadiga"
+                        maxLength={200}
+                        className="w-full rounded border border-border bg-background px-2 py-1 text-xs placeholder:text-muted-foreground/60"
+                      />
+                    )}
+                    {entry.confirmingDiscard ? (
+                      (() => {
+                        const mappedCount = entry.extracted.filter(
+                          (it) => it.matchedName || it.manualOverrideName,
+                        ).length;
+                        const discardCount = entry.extracted.length - mappedCount;
+                        return (
+                          <div className="rounded-lg bg-amber-50 p-2.5 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
+                            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                              {mappedCount} de {entry.extracted.length} biomarcador
+                              {entry.extracted.length === 1 ? "" : "es"} ser
+                              {mappedCount === 1 ? "á" : "ão"} salvo{mappedCount === 1 ? "" : "s"} —{" "}
+                              <strong>{discardCount} sem correspondência será{discardCount === 1 ? "" : "ão"} ignorado{discardCount === 1 ? "" : "s"}</strong>.
+                            </p>
+                            <div className="mt-2 flex gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() =>
+                                  setFiles((prev) =>
+                                    prev.map((f) =>
+                                      f.file === entry.file ? { ...f, confirmingDiscard: false } : f,
+                                    ),
+                                  )
+                                }
+                              >
+                                Voltar e mapear
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="flex-1 brand-gradient text-primary-foreground"
+                                onClick={() => confirmarExame(entry, true)}
+                              >
+                                Salvar mesmo assim
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full brand-gradient text-primary-foreground"
+                        disabled={entry.extracted.length === 0}
+                        onClick={() => confirmarExame(entry)}
+                      >
+                        Confirmar e salvar
+                      </Button>
+                    )}
                   </div>
                 )}
               </li>
@@ -1608,6 +1936,25 @@ function ReceitaDialog({
     },
   });
 
+  // Status da integração real com a Memed — puramente informativo aqui: a
+  // receita continua sendo emitida pelo fluxo simulado abaixo até o embed
+  // do widget oficial (data-token) ser validado com credenciais reais.
+  const memedStatus = useQuery({
+    queryKey: ["memed-status"],
+    queryFn: () => getMemedStatus({ data: { token } }),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const [crmForm, setCrmForm] = useState({ crm: "", crmUf: "", cpfMedico: "" });
+  const saveMemed = useMutation({
+    mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar o CRM.");
+      toast.success("CRM salvo — gerando token Memed…");
+      memedStatus.refetch();
+    },
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -1617,6 +1964,58 @@ function ReceitaDialog({
             Adicione os medicamentos com dosagem e duração — o código verificável sai na hora.
           </DialogDescription>
         </DialogHeader>
+
+        {memedStatus.data?.ok && memedStatus.data.state === "not_configured" && (
+          <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
+            Prescrição digital via Memed (integração real) não configurada — defina{" "}
+            <code className="rounded bg-muted px-1">MEMED_API_KEY</code> e{" "}
+            <code className="rounded bg-muted px-1">MEMED_SECRET_KEY</code> no ambiente. Por enquanto a
+            receita abaixo é registrada localmente, com código verificável próprio.
+          </p>
+        )}
+        {memedStatus.data?.ok && memedStatus.data.state === "missing_profile" && (
+          <div className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
+            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+              Memed configurada — falta seu CRM para emitir prescrição digital real.
+            </p>
+            <div className="flex gap-1.5">
+              <input
+                value={crmForm.crm}
+                onChange={(e) => setCrmForm((f) => ({ ...f, crm: e.target.value }))}
+                placeholder="CRM"
+                className="w-20 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
+              <input
+                value={crmForm.crmUf}
+                onChange={(e) => setCrmForm((f) => ({ ...f, crmUf: e.target.value.toUpperCase() }))}
+                placeholder="UF"
+                maxLength={2}
+                className="w-12 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
+              <input
+                value={crmForm.cpfMedico}
+                onChange={(e) => setCrmForm((f) => ({ ...f, cpfMedico: e.target.value }))}
+                placeholder="CPF"
+                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
+              <Button
+                size="sm"
+                className="text-xs"
+                disabled={!crmForm.crm || !crmForm.crmUf || !crmForm.cpfMedico || saveMemed.isPending}
+                onClick={() => saveMemed.mutate()}
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+        )}
+        {memedStatus.data?.ok && memedStatus.data.state === "ready" && (
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
+            ✓ Token Memed emitido para seu CRM. O embed do widget oficial ainda usa o fluxo abaixo
+            enquanto validamos o contrato de eventos com credenciais reais — ver PRD.
+          </p>
+        )}
+
         {!catalogOpen && !freeTextOpen && (
           <button
             type="button"

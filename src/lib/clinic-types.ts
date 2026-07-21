@@ -35,6 +35,13 @@ export type Patient = {
   cpf: string | null;
   telefone: string | null;
   email: string | null;
+  // E-mail é a credencial de login do paciente — trocar exige a confirmação
+  // dele (link de uso único), nunca o médico sozinho. Telefone não tem essa
+  // trava: é livremente editável (baixo risco, alta frequência de correção
+  // operacional). Ver runPatientIntake / requestEmailChange.
+  pendingEmail: string | null;
+  pendingEmailToken: string | null;
+  pendingEmailRequestedAt: string | null;
   convenio: string | null; // "Particular", "Unimed", … (livre)
   queixa: string;
   column: ClinicColumn;
@@ -44,9 +51,56 @@ export type Patient = {
   examsCount: number;
   tint: string;
   archived: boolean;
+  // Antecedentes pessoais — conjunto mínimo inspirado na estrutura de
+  // anamnese esperada pela Resolução CFM 1.821/2007 (prontuário eletrônico)
+  // e pelo Manual de Certificação SBIS-CFM. Editável pelo médico; badges no
+  // cabeçalho do prontuário (ver pacientes.$id.tsx).
+  tipoSanguineo: string | null; // "O+", "A-", … — ver TIPOS_SANGUINEOS
+  tabagismo: Tabagismo | null;
+  etilismo: Etilismo | null;
+  comorbidades: string[]; // subconjunto de COMORBIDADES_CATALOGO (+ livres)
+  alergias: string | null;
+  medicacaoContinua: string | null;
+  pesoKg: number | null;
+  alturaCm: number | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export type Tabagismo = "nunca" | "ex_fumante" | "fumante";
+export type Etilismo = "nunca" | "ex_etilista" | "etilista";
+
+export const TABAGISMO_LABEL: Record<Tabagismo, string> = {
+  nunca: "Nunca fumou",
+  ex_fumante: "Ex-fumante",
+  fumante: "Fumante",
+};
+
+export const ETILISMO_LABEL: Record<Etilismo, string> = {
+  nunca: "Não bebe",
+  ex_etilista: "Ex-etilista",
+  etilista: "Etilista",
+};
+
+export const TIPOS_SANGUINEOS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
+
+export const COMORBIDADES_CATALOGO = [
+  "Diabetes",
+  "Hipertensão",
+  "Doença cardíaca",
+  "Doença renal",
+  "Asma / DPOC",
+  "Obesidade",
+  "Hipotireoidismo",
+  "Depressão / Ansiedade",
+] as const;
+
+/** IMC a partir de peso(kg)/altura(cm) — null se faltar qualquer dado. */
+export function calcImc(pesoKg: number | null, alturaCm: number | null): number | null {
+  if (!pesoKg || !alturaCm) return null;
+  const alturaM = alturaCm / 100;
+  return Math.round((pesoKg / (alturaM * alturaM)) * 10) / 10;
+}
 
 export type AppointmentStatus = "agendada" | "confirmada" | "realizada" | "faltou";
 
@@ -70,6 +124,7 @@ export type Charge = {
   vencimento: string; // yyyy-mm-dd
   status: "pendente" | "pago";
   pagoEm: string | null;
+  paymentUrl?: string | null; // link de checkout real (Stripe), quando gerado
   createdAt: string;
 };
 
@@ -86,6 +141,7 @@ export type Measurement = {
   refMax: number;
   date: string; // yyyy-mm-dd (data da coleta)
   label: string; // "Check-up de rotina", "Exames via WhatsApp"…
+  motivo?: string | null; // razão clínica da solicitação (ex.: "investigar fadiga")
   createdAt: string;
 };
 
@@ -304,10 +360,12 @@ export function waLink(telefone: string, text: string): string {
 export const WA_TEMPLATES = {
   confirmar: (paciente: string, hora: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Confirmando sua consulta hoje às ${hora}. Qualquer imprevisto, me avise por aqui. — ${medico}`,
-  cobrar: (paciente: string, valor: string, venc: string, medico: string) =>
-    `Olá, ${paciente.split(" ")[0]}! Tudo bem? Passando para lembrar do pagamento de ${valor} com vencimento em ${venc}. Qualquer dúvida estou à disposição. — ${medico}`,
+  cobrar: (paciente: string, valor: string, venc: string, medico: string, paymentUrl?: string | null) =>
+    `Olá, ${paciente.split(" ")[0]}! Tudo bem? Passando para lembrar do pagamento de ${valor} com vencimento em ${venc}.${paymentUrl ? ` Link para pagar: ${paymentUrl}` : ""} Qualquer dúvida estou à disposição. — ${medico}`,
   reengajar: (paciente: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Sentimos sua falta na última consulta. Vamos remarcar? Me diga o melhor dia e horário para você. — ${medico}`,
   livre: (paciente: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Aqui é do consultório — ${medico}.`,
+  confirmarEmail: (paciente: string, link: string, medico: string) =>
+    `Olá, ${paciente.split(" ")[0]}! Pedi para atualizar seu e-mail no cadastro do consultório. Só confirme se foi você mesmo quem pediu: ${link} — ${medico}`,
 };

@@ -17,6 +17,11 @@ export type Doctor = {
   provider: "email" | "google";
   avatarUrl: string | null;
   createdAt: string;
+  // Credenciais de prescritor — só usadas para registrar o médico na Memed
+  // (real API, ver memed.server.ts). Sem elas o token real não é emitido.
+  crm: string | null;
+  crmUf: string | null;
+  cpfMedico: string | null;
 };
 
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
@@ -51,11 +56,30 @@ export async function createDoctor(input: {
     provider: input.provider,
     avatarUrl: input.avatarUrl ?? null,
     createdAt: nowIso(),
+    crm: null,
+    crmUf: null,
+    cpfMedico: null,
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
   });
   return doctor;
+}
+
+export async function updateDoctorMemedProfile(
+  doctorId: string,
+  input: { crm: string; crmUf: string; cpfMedico: string },
+): Promise<Doctor | undefined> {
+  let updated: Doctor | undefined;
+  await mutateRows<Doctor>(DOCTORS, (rows) => {
+    const d = rows.find((r) => r.id === doctorId);
+    if (!d) return;
+    d.crm = input.crm.trim();
+    d.crmUf = input.crmUf.trim().toUpperCase();
+    d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
+    updated = { ...d };
+  });
+  return updated;
 }
 
 export function verifyPassword(doctor: Doctor, password: string): boolean {
