@@ -16,14 +16,17 @@ import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
+import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
 const SobreRoute = SobreRouteImport.update({
   id: '/sobre',
@@ -60,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssinaturaIndexRoute = AssinaturaIndexRouteImport.update({
+  id: '/assinatura/',
+  path: '/assinatura/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -85,6 +93,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
+  id: '/assinatura/retorno',
+  path: '/assinatura/retorno',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
   path: '/pacientes/',
@@ -100,6 +113,12 @@ const AppPacientesIdRoute = AppPacientesIdRouteImport.update({
   path: '/pacientes/$id',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const ApiPublicPaymentsWebhookRoute =
+  ApiPublicPaymentsWebhookRouteImport.update({
+    id: '/api/public/payments/webhook',
+    path: '/api/public/payments/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -109,14 +128,17 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
+  '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -125,14 +147,17 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app': typeof AppIndexRoute
+  '/assinatura': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,14 +168,17 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
+  '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -162,14 +190,17 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
+    | '/assinatura/'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
+    | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -178,14 +209,17 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app'
+    | '/assinatura'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes'
+    | '/api/public/payments/webhook'
   id:
     | '__root__'
     | '/'
@@ -195,14 +229,17 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
+    | '/assinatura/'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
+    | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -213,11 +250,14 @@ export interface RootRouteChildren {
   EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
+  AssinaturaRetornoRoute: typeof AssinaturaRetornoRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
+  AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
+  ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -271,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assinatura/': {
+      id: '/assinatura/'
+      path: '/assinatura'
+      fullPath: '/assinatura/'
+      preLoaderRoute: typeof AssinaturaIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/': {
       id: '/app/'
       path: '/'
@@ -306,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assinatura/retorno': {
+      id: '/assinatura/retorno'
+      path: '/assinatura/retorno'
+      fullPath: '/assinatura/retorno'
+      preLoaderRoute: typeof AssinaturaRetornoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/pacientes/': {
       id: '/app/pacientes/'
       path: '/pacientes'
@@ -326,6 +380,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/pacientes/$id'
       preLoaderRoute: typeof AppPacientesIdRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/api/public/payments/webhook': {
+      id: '/api/public/payments/webhook'
+      path: '/api/public/payments/webhook'
+      fullPath: '/api/public/payments/webhook'
+      preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -354,11 +415,14 @@ const rootRouteChildren: RootRouteChildren = {
   EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
+  AssinaturaRetornoRoute: AssinaturaRetornoRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
+  AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
+  ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
