@@ -11,9 +11,11 @@
 
 import type { Doctor } from "./auth.server";
 
-const MEMED_API_BASE = "https://integrations.api.memed.com.br/v1";
+const MEMED_API_BASE =
+  process.env.MEMED_API_URL || "https://integrations.api.memed.com.br/v1";
 
 export const MEMED_SCRIPT_URL =
+  process.env.MEMED_SCRIPT_URL ||
   "https://integrations.memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js";
 
 export function isMemedConfigured(): boolean {
