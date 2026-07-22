@@ -52,7 +52,9 @@ export const prescribe = createServerFn({ method: "POST" })
     await addPrescription({ code, patient: data.patient, meds: data.meds });
     return {
       code,
-      url: `https://memed.com.br/r/${code}`,
+      // Verificação interna — página /receita/$code. O link antigo
+      // memed.com.br/r/{code} não existia de fato e caía em 404.
+      url: `/receita/${code}`,
       createdAt: new Date().toISOString(),
     };
   });

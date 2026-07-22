@@ -18,6 +18,7 @@ import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
@@ -72,6 +73,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
+  id: '/receita/$code',
+  path: '/receita/$code',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PacienteLoginRoute = PacienteLoginRouteImport.update({
   id: '/paciente/login',
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/receita/$code': typeof ReceitaCodeRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/receita/$code': typeof ReceitaCodeRoute
   '/app': typeof AppIndexRoute
   '/assinatura': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
+  '/receita/$code': typeof ReceitaCodeRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
+    | '/receita/$code'
     | '/app/'
     | '/assinatura/'
     | '/app/pacientes/$id'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
+    | '/receita/$code'
     | '/app'
     | '/assinatura'
     | '/app/pacientes/$id'
@@ -234,6 +245,7 @@ export interface FileRouteTypes {
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
+    | '/receita/$code'
     | '/app/'
     | '/assinatura/'
     | '/app/pacientes/$id'
@@ -255,6 +267,7 @@ export interface RootRouteChildren {
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
+  ReceitaCodeRoute: typeof ReceitaCodeRoute
   AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -324,6 +337,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/receita/$code': {
+      id: '/receita/$code'
+      path: '/receita/$code'
+      fullPath: '/receita/$code'
+      preLoaderRoute: typeof ReceitaCodeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/paciente/login': {
       id: '/paciente/login'
@@ -420,6 +440,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
+  ReceitaCodeRoute: ReceitaCodeRoute,
   AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,

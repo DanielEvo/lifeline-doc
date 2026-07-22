@@ -136,7 +136,11 @@ export async function prescribeEvolution(
     e.prescription = {
       code,
       meds,
-      url: `https://memed.com.br/r/${code}`,
+      // URL interna verificável — antes apontava para memed.com.br/r/{code},
+      // que retornava 404 pois o código é gerado localmente. Quando a Memed
+      // real emite um link próprio (via widget Sinapse), essa URL é
+      // sobrescrita no fluxo do embed.
+      url: `/receita/${code}`,
       createdAt: nowIso(),
     };
     e.updatedAt = nowIso();
