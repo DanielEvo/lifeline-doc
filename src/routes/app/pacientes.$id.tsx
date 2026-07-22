@@ -1844,12 +1844,16 @@ function EvolucaoCard({
             )}
           </ul>
           <a
-            href={e.prescription.url}
+            href={
+              e.prescription.url && !e.prescription.url.startsWith("https://memed.com.br/r/")
+                ? e.prescription.url
+                : `/receita/${e.prescription.code}`
+            }
             target="_blank"
             rel="noreferrer"
             className="mt-1 inline-block text-violet-700 underline-offset-2 hover:underline dark:text-violet-400"
           >
-            {e.prescription.url}
+            Ver receita /receita/{e.prescription.code}
           </a>
         </div>
       )}
