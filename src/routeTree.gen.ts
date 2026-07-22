@@ -16,11 +16,13 @@ import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
@@ -61,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssinaturaIndexRoute = AssinaturaIndexRouteImport.update({
+  id: '/assinatura/',
+  path: '/assinatura/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -84,6 +91,11 @@ const ConfirmarEmailTokenRoute = ConfirmarEmailTokenRouteImport.update({
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
+  id: '/assinatura/retorno',
+  path: '/assinatura/retorno',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
@@ -116,11 +128,13 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
+  '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
@@ -133,11 +147,13 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app': typeof AppIndexRoute
+  '/assinatura': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
@@ -152,11 +168,13 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/app/': typeof AppIndexRoute
+  '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
@@ -172,11 +190,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
+    | '/assinatura/'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
@@ -189,11 +209,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app'
+    | '/assinatura'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes'
@@ -207,11 +229,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
     | '/app/'
+    | '/assinatura/'
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
@@ -226,10 +250,12 @@ export interface RootRouteChildren {
   EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
+  AssinaturaRetornoRoute: typeof AssinaturaRetornoRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
+  AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
@@ -285,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assinatura/': {
+      id: '/assinatura/'
+      path: '/assinatura'
+      fullPath: '/assinatura/'
+      preLoaderRoute: typeof AssinaturaIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/': {
       id: '/app/'
       path: '/'
@@ -318,6 +351,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assinatura/retorno': {
+      id: '/assinatura/retorno'
+      path: '/assinatura/retorno'
+      fullPath: '/assinatura/retorno'
+      preLoaderRoute: typeof AssinaturaRetornoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/pacientes/': {
@@ -375,10 +415,12 @@ const rootRouteChildren: RootRouteChildren = {
   EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
+  AssinaturaRetornoRoute: AssinaturaRetornoRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
+  AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
