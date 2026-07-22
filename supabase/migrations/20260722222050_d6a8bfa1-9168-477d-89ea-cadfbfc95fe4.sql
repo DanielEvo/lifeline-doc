@@ -1,0 +1,1 @@
+revoke execute on function public.has_active_subscription(uuid, text) from anon;
