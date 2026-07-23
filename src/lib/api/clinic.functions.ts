@@ -25,7 +25,7 @@ import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
-import { getMemedPrescriberToken, isMemedConfigured } from "../memed.server";
+import { getMemedPrescriberToken, isMemedConfigured, MEMED_SCRIPT_URL } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
 import { createStripeCheckoutLink, isStripeConfigured } from "../payments.server";
 import {
@@ -414,6 +414,47 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       crmCidade: data.crmCidade,
     });
     return updated ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
+  });
+
+// Config para o componente client MemedPrescriptionWidget montar o embed
+// real — token, scriptUrl e os dados de paciente/consultório já no formato
+// exigido por setPaciente/setWorkplace. getMemedStatus continua sendo o
+// endpoint "leve" só de status; este devolve o payload completo do widget.
+export const getMemedWidgetConfig = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, patientId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await getPatient(doctor.id, data.patientId);
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+    if (!isMemedConfigured()) return { ok: false as const, error: "not_configured" as const };
+    const result = await getMemedPrescriberToken(doctor);
+    if (!result.ok) return { ok: false as const, error: result.error, detail: result.detail };
+    return {
+      ok: true as const,
+      token: result.token,
+      scriptUrl: MEMED_SCRIPT_URL,
+      patient: {
+        idExterno: patient.id,
+        nome: patient.nome,
+        sexo:
+          patient.sexo === "feminino"
+            ? ("Feminino" as const)
+            : patient.sexo === "masculino"
+              ? ("Masculino" as const)
+              : undefined,
+        ...(patient.cpf ? { cpf: patient.cpf.replace(/\D/g, "") } : { withoutCpf: true as const }),
+        data_nascimento: patient.nascimento
+          ? patient.nascimento.split("-").reverse().join("/")
+          : undefined,
+        telefone: patient.telefone ?? undefined,
+        email: patient.email ?? undefined,
+      },
+      workplace: {
+        city: doctor.crmCidade ?? undefined,
+        state: doctor.crmUf ?? undefined,
+      },
+    };
   });
 
 export const sendWhatsAppNow = createServerFn({ method: "POST" })
