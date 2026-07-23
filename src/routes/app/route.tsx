@@ -7,6 +7,7 @@ import { Outlet, createFileRoute, Link, useNavigate } from "@tanstack/react-rout
 import {
   Activity,
   BookOpen,
+  FlaskConical,
   KanbanSquare,
   Loader2,
   LogOut,
@@ -151,6 +152,13 @@ function Shell({ clinic }: { clinic: Clinic }) {
             <LogOut className="h-4 w-4" />
             Sair
           </button>
+          <Link
+            to="/app/memed-simulacao"
+            className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] text-sidebar-foreground/40 transition hover:text-sidebar-foreground/70"
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Simulação Memed (QA)
+          </Link>
         </div>
       </aside>
 

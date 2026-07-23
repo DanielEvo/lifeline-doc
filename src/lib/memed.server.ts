@@ -69,3 +69,21 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
     return { ok: false, error: "memed_error", detail: String(e) };
   }
 }
+
+// Token para a rota de simulação (/app/memed-simulacao) — prescritor sintético
+// fixo, nunca associado a um médico real, só para exercitar o embed oficial
+// sem exigir CRM cadastrado. Nunca usado no fluxo de prescrição de verdade.
+export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const fakeDoctor = {
+    id: "sandbox-" + Date.now(),
+    nome: "Teste Simulação",
+    crm: "12345",
+    crmUf: "SP",
+    cpfMedico: "11144477735",
+    especialidade: "Clínica Geral",
+    crmCidade: "São Paulo",
+    email: "sandbox@lifeline.doc",
+  } as Doctor;
+  return getMemedPrescriberToken(fakeDoctor);
+}

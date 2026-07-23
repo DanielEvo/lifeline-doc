@@ -24,6 +24,7 @@ import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
+import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
@@ -104,6 +105,11 @@ const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
   path: '/assinatura/retorno',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppMemedSimulacaoRoute = AppMemedSimulacaoRouteImport.update({
+  id: '/memed-simulacao',
+  path: '/memed-simulacao',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
   path: '/pacientes/',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-email/$token'
@@ -380,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssinaturaRetornoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/memed-simulacao': {
+      id: '/app/memed-simulacao'
+      path: '/memed-simulacao'
+      fullPath: '/app/memed-simulacao'
+      preLoaderRoute: typeof AppMemedSimulacaoRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/pacientes/': {
       id: '/app/pacientes/'
       path: '/pacientes'
@@ -412,12 +431,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppMemedSimulacaoRoute: typeof AppMemedSimulacaoRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPacientesIdRoute: typeof AppPacientesIdRoute
   AppPacientesIndexRoute: typeof AppPacientesIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppMemedSimulacaoRoute: AppMemedSimulacaoRoute,
   AppIndexRoute: AppIndexRoute,
   AppPacientesIdRoute: AppPacientesIdRoute,
   AppPacientesIndexRoute: AppPacientesIndexRoute,
@@ -448,3 +469,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

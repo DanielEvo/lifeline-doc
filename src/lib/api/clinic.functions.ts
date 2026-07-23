@@ -25,7 +25,12 @@ import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
-import { getMemedPrescriberToken, isMemedConfigured, MEMED_SCRIPT_URL } from "../memed.server";
+import {
+  getMemedPrescriberToken,
+  getMemedSandboxToken,
+  isMemedConfigured,
+  MEMED_SCRIPT_URL,
+} from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
 import { createStripeCheckoutLink, isStripeConfigured } from "../payments.server";
 import {
@@ -486,6 +491,32 @@ export const confirmMemedPrescription = createServerFn({ method: "POST" })
     );
     if ("error" in result) return { ok: false as const, error: result.error };
     return { ok: true as const, evolution: result };
+  });
+
+// Config para /app/memed-simulacao — prescritor e paciente sintéticos, nunca
+// gravados em prontuário real. Exige sessão válida só para não deixar a rota
+// anônima; NÃO exige crm/especialidade/etc. do médico logado.
+export const getMemedSandboxConfig = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const result = await getMemedSandboxToken();
+    if (!result.ok) return { ok: false as const, error: result.error, detail: result.detail };
+    return {
+      ok: true as const,
+      token: result.token,
+      scriptUrl: MEMED_SCRIPT_URL,
+      patient: {
+        idExterno: "sandbox-patient",
+        nome: "Paciente Teste",
+        sexo: "Feminino" as const,
+        cpf: "11144477735",
+        data_nascimento: "01/01/1990",
+        telefone: "11999999999",
+        email: "paciente.teste@lifeline.doc",
+      },
+    };
   });
 
 export const sendWhatsAppNow = createServerFn({ method: "POST" })
