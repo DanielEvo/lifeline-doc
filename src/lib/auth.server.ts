@@ -22,6 +22,8 @@ export type Doctor = {
   crm: string | null;
   crmUf: string | null;
   cpfMedico: string | null;
+  especialidade: string | null;
+  crmCidade: string | null;
 };
 
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
@@ -59,6 +61,8 @@ export async function createDoctor(input: {
     crm: null,
     crmUf: null,
     cpfMedico: null,
+    especialidade: null,
+    crmCidade: null,
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
@@ -68,7 +72,13 @@ export async function createDoctor(input: {
 
 export async function updateDoctorMemedProfile(
   doctorId: string,
-  input: { crm: string; crmUf: string; cpfMedico: string },
+  input: {
+    crm: string;
+    crmUf: string;
+    cpfMedico: string;
+    especialidade: string;
+    crmCidade: string;
+  },
 ): Promise<Doctor | undefined> {
   let updated: Doctor | undefined;
   await mutateRows<Doctor>(DOCTORS, (rows) => {
@@ -77,6 +87,8 @@ export async function updateDoctorMemedProfile(
     d.crm = input.crm.trim();
     d.crmUf = input.crmUf.trim().toUpperCase();
     d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
+    d.especialidade = input.especialidade.trim();
+    d.crmCidade = input.crmCidade.trim();
     updated = { ...d };
   });
   return updated;

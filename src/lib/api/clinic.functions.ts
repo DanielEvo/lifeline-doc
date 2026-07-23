@@ -399,6 +399,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       crm: z.string().min(1).max(20),
       crmUf: z.string().length(2),
       cpfMedico: z.string().min(11).max(14),
+      especialidade: z.string().min(2).max(80),
+      crmCidade: z.string().min(2).max(80),
     }),
   )
   .handler(async ({ data }) => {
@@ -408,6 +410,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       crm: data.crm,
       crmUf: data.crmUf,
       cpfMedico: data.cpfMedico,
+      especialidade: data.especialidade,
+      crmCidade: data.crmCidade,
     });
     return updated ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
   });

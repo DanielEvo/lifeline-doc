@@ -1949,7 +1949,13 @@ function ReceitaDialog({
     enabled: open,
     staleTime: 60_000,
   });
-  const [crmForm, setCrmForm] = useState({ crm: "", crmUf: "", cpfMedico: "" });
+  const [crmForm, setCrmForm] = useState({
+    crm: "",
+    crmUf: "",
+    cpfMedico: "",
+    especialidade: "",
+    crmCidade: "",
+  });
   const saveMemed = useMutation({
     mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
     onSuccess: (r) => {
@@ -2002,10 +2008,31 @@ function ReceitaDialog({
                 placeholder="CPF"
                 className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
               />
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                value={crmForm.especialidade}
+                onChange={(e) => setCrmForm((f) => ({ ...f, especialidade: e.target.value }))}
+                placeholder="Especialidade"
+                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
+              <input
+                value={crmForm.crmCidade}
+                onChange={(e) => setCrmForm((f) => ({ ...f, crmCidade: e.target.value }))}
+                placeholder="Cidade do CRM"
+                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
               <Button
                 size="sm"
                 className="text-xs"
-                disabled={!crmForm.crm || !crmForm.crmUf || !crmForm.cpfMedico || saveMemed.isPending}
+                disabled={
+                  !crmForm.crm ||
+                  !crmForm.crmUf ||
+                  !crmForm.cpfMedico ||
+                  !crmForm.especialidade ||
+                  !crmForm.crmCidade ||
+                  saveMemed.isPending
+                }
                 onClick={() => saveMemed.mutate()}
               >
                 Salvar

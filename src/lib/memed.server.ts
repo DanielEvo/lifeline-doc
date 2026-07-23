@@ -28,7 +28,7 @@ export type MemedTokenResult =
 
 export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
-  if (!doctor.crm || !doctor.crmUf || !doctor.cpfMedico) {
+  if (!doctor.crm || !doctor.crmUf || !doctor.cpfMedico || !doctor.especialidade || !doctor.crmCidade) {
     return { ok: false, error: "missing_profile" };
   }
 
@@ -53,6 +53,8 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
             board: { board_code: "CRM", board_number: doctor.crm, board_state: doctor.crmUf },
             email: doctor.email,
             telefone: "",
+            especialidade: doctor.especialidade,
+            cidade: doctor.crmCidade,
           },
         },
       }),
