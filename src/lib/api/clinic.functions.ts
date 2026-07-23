@@ -32,6 +32,7 @@ import {
   createEvolution,
   listEvolutions,
   prescribeEvolution,
+  prescribeEvolutionMemed,
   sealEvolution,
   updateEvolution,
   updateEvolutionNote,
@@ -455,6 +456,36 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
         state: doctor.crmUf ?? undefined,
       },
     };
+  });
+
+// Grava no prontuário a referência da receita depois que a Memed assina
+// (evento prescricaoImpressa do widget) — sem gerar código local, ver
+// prescribeEvolutionMemed.
+export const confirmMemedPrescription = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      evolutionId: z.string().min(1),
+      patientId: z.string().min(1),
+      memedPrescricaoId: z.string().min(1),
+      medsResumo: z.array(z.string().max(200)).max(30),
+      pdfUrl: z.string().url().nullish(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await getPatient(doctor.id, data.patientId);
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+    const result = await prescribeEvolutionMemed(
+      doctor.id,
+      data.evolutionId,
+      data.memedPrescricaoId,
+      data.medsResumo,
+      data.pdfUrl ?? null,
+    );
+    if ("error" in result) return { ok: false as const, error: result.error };
+    return { ok: true as const, evolution: result };
   });
 
 export const sendWhatsAppNow = createServerFn({ method: "POST" })

@@ -70,8 +70,9 @@ import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/p
 import {
   archiveMyPatient,
   confirmExtractedMeasurements,
+  confirmMemedPrescription,
   extractExamDocument,
-  getMemedStatus,
+  getMemedWidgetConfig,
   getPatientRecord,
   getWorkspace,
   moveMyPatient,
@@ -89,6 +90,7 @@ import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
 import { SimilarCases } from "@/components/clinic/similar-cases";
+import { MemedPrescriptionWidget } from "@/components/clinic/memed-prescription-widget";
 import {
   ageFrom,
   ANAMNESE_TEMPLATE,
@@ -1940,15 +1942,37 @@ function ReceitaDialog({
     },
   });
 
-  // Status da integração real com a Memed — puramente informativo aqui: a
-  // receita continua sendo emitida pelo fluxo simulado abaixo até o embed
-  // do widget oficial (data-token) ser validado com credenciais reais.
-  const memedStatus = useQuery({
-    queryKey: ["memed-status"],
-    queryFn: () => getMemedStatus({ data: { token } }),
-    enabled: open,
+  // Config do widget real da Memed — quando ok:true, o dialog abre o embed
+  // oficial em vez do formulário de catálogo mock. `showWidget` trava o modo
+  // assim que decidido, para a query parar de re-disparar enquanto o widget
+  // já está montado; reseta quando o dialog fecha.
+  const [showWidget, setShowWidget] = useState(false);
+  const widgetConfig = useQuery({
+    queryKey: ["memed-widget-config", patientId],
+    queryFn: () => getMemedWidgetConfig({ data: { token, patientId } }),
+    enabled: open && !showWidget,
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    if (widgetConfig.data?.ok) setShowWidget(true);
+  }, [widgetConfig.data]);
+
+  useEffect(() => {
+    if (!open) setShowWidget(false);
+  }, [open]);
+
+  const memedErrorToastedRef = useRef(false);
+  useEffect(() => {
+    const isMemedError = widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error";
+    if (isMemedError && !memedErrorToastedRef.current) {
+      toast.error("Memed indisponível agora — use a receita local abaixo.");
+      memedErrorToastedRef.current = true;
+    } else if (!isMemedError) {
+      memedErrorToastedRef.current = false;
+    }
+  }, [widgetConfig.data]);
+
   const [crmForm, setCrmForm] = useState({
     crm: "",
     crmUf: "",
@@ -1961,9 +1985,61 @@ function ReceitaDialog({
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar o CRM.");
       toast.success("CRM salvo — gerando token Memed…");
-      memedStatus.refetch();
+      widgetConfig.refetch();
     },
   });
+
+  const confirmMemed = useMutation({
+    mutationFn: (vars: { memedPrescricaoId: string; medsResumo: string[]; pdfUrl: string | null }) =>
+      confirmMemedPrescription({ data: { token, evolutionId, patientId, ...vars } }),
+    onSuccess: (r) => {
+      if (!r.ok)
+        return toast.error("Receita assinada na Memed, mas não consegui salvar a referência no prontuário.");
+      toast.success("Receita Memed emitida e vinculada ao prontuário.");
+      onOpenChange(false);
+      onDone();
+    },
+  });
+
+  const handlePrescricaoImpressa = (raw: unknown) => {
+    const data = raw as {
+      prescricao?: { id?: string | number; url?: string };
+      medicamentos?: Array<{ nome?: string } | string>;
+    };
+    const memedPrescricaoId = data?.prescricao?.id != null ? String(data.prescricao.id) : null;
+    if (!memedPrescricaoId) {
+      toast.error("Memed não retornou o id da prescrição — não consegui salvar no prontuário.");
+      return;
+    }
+    const medsResumo = Array.isArray(data.medicamentos)
+      ? data.medicamentos
+          .map((m) => (typeof m === "string" ? m : (m?.nome ?? "")))
+          .filter((n): n is string => n.length > 0)
+      : [];
+    confirmMemed.mutate({ memedPrescricaoId, medsResumo, pdfUrl: data?.prescricao?.url || null });
+  };
+
+  if (showWidget && widgetConfig.data?.ok) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Receita digital</DialogTitle>
+            <DialogDescription>
+              Prescreva pelo módulo oficial da Memed — a assinatura digital sai direto daqui.
+            </DialogDescription>
+          </DialogHeader>
+          <MemedPrescriptionWidget
+            token={widgetConfig.data.token}
+            scriptUrl={widgetConfig.data.scriptUrl}
+            patient={widgetConfig.data.patient}
+            workplace={widgetConfig.data.workplace}
+            onPrescricaoImpressa={handlePrescricaoImpressa}
+          />
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1975,7 +2051,7 @@ function ReceitaDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {memedStatus.data?.ok && memedStatus.data.state === "not_configured" && (
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "not_configured" && (
           <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
             Prescrição digital via Memed (integração real) não configurada — defina{" "}
             <code className="rounded bg-muted px-1">MEMED_API_KEY</code> e{" "}
@@ -1983,7 +2059,7 @@ function ReceitaDialog({
             receita abaixo é registrada localmente, com código verificável próprio.
           </p>
         )}
-        {memedStatus.data?.ok && memedStatus.data.state === "missing_profile" && (
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "missing_profile" && (
           <div className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
             <p className="text-[11px] text-amber-800 dark:text-amber-300">
               Memed configurada — falta seu CRM para emitir prescrição digital real.
@@ -2040,10 +2116,9 @@ function ReceitaDialog({
             </div>
           </div>
         )}
-        {memedStatus.data?.ok && memedStatus.data.state === "ready" && (
-          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
-            ✓ Token Memed emitido para seu CRM. O embed do widget oficial ainda usa o fluxo abaixo
-            enquanto validamos o contrato de eventos com credenciais reais — ver PRD.
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+            Não consegui conectar ao módulo da Memed agora — use a receita local abaixo.
           </p>
         )}
 
@@ -2179,7 +2254,9 @@ function ReceitaDialog({
             className="brand-gradient text-primary-foreground"
           >
             {gerar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Gerar receita
+            {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error"
+              ? "Gerar receita local (sem Memed)"
+              : "Gerar receita"}
           </Button>
         </DialogFooter>
       </DialogContent>

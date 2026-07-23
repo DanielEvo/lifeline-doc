@@ -155,3 +155,29 @@ export async function prescribeEvolution(
   });
   return updated;
 }
+
+// Grava a referência da receita depois que o widget real da Memed assina
+// (evento prescricaoImpressa) — sem gerar código local, usa o id/pdf que a
+// Memed devolveu. Paralela a prescribeEvolution (fallback mock).
+export async function prescribeEvolutionMemed(
+  doctorId: string,
+  id: string,
+  memedPrescricaoId: string,
+  medsResumo: string[],
+  pdfUrl: string | null,
+): Promise<Evolution | { error: "not_found" }> {
+  let updated: Evolution | null = null;
+  await mutateRows<Evolution>(FILE, (rows) => {
+    const e = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!e) return;
+    e.prescription = {
+      code: memedPrescricaoId,
+      meds: medsResumo.map((name) => ({ name, dosage: "", duration: "" })),
+      url: pdfUrl ?? `/receita/${memedPrescricaoId}`,
+      createdAt: nowIso(),
+    };
+    e.updatedAt = nowIso();
+    updated = { ...e };
+  });
+  return updated ?? { error: "not_found" };
+}
