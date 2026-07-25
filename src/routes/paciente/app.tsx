@@ -12,14 +12,18 @@ import {
   Circle,
   ClipboardList,
   Clock,
+  Droplet,
   FileText,
   FileUp,
   FlaskConical,
-  HeartPulse,
+  Footprints,
+  Heart,
   Home,
   Loader2,
   LogOut,
+  Moon,
   MoreVertical,
+  Pencil,
   Pill,
   Plus,
   RotateCcw,
@@ -65,6 +69,7 @@ import {
   undoMyLog,
   updateMyMedicationStatus,
 } from "@/lib/api/patient-medications.functions";
+import { getMyTodayMetrics, setMyMetric } from "@/lib/api/patient-metrics.functions";
 import { BIOMARKER_CATALOG } from "@/lib/clinic-types";
 import {
   clearPatientSession,
@@ -260,6 +265,7 @@ function PatientAppPage() {
                     pendingCount={state.pending.length}
                     profile={state.profile}
                     onGoTo={setTab}
+                    token={session.token}
                   />
                 )}
                 {tab === "history" && <HistoryTab events={timelineEvents} />}
@@ -368,17 +374,105 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 // Tabs
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Métricas de autocuidado — dado 100% autodeclarado (patient-metrics.
+// functions). Sem cruzamento com adesão de remédios nesta rodada; métrica
+// sem registro no dia nunca aparece com valor inventado (null é honesto).
+// ---------------------------------------------------------------------------
+
+type MetricKind = "passos" | "hidratacao" | "sono" | "fc";
+
+const METRIC_KINDS: MetricKind[] = ["passos", "hidratacao", "sono", "fc"];
+
+const METRIC_CONFIG: Record<
+  MetricKind,
+  {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    target: number | null;
+    tone: string;
+    display: (v: number) => string;
+  }
+> = {
+  passos: {
+    label: "Passos",
+    icon: Footprints,
+    target: 8000,
+    tone: "text-emerald-600",
+    display: (v) => v.toLocaleString("pt-BR"),
+  },
+  hidratacao: {
+    label: "Hidratação",
+    icon: Droplet,
+    target: 2,
+    tone: "text-cyan-600",
+    display: (v) => `${v.toLocaleString("pt-BR")}L`,
+  },
+  sono: {
+    label: "Sono",
+    icon: Moon,
+    target: 7,
+    tone: "text-indigo-600",
+    display: (v) => `${Math.floor(v)}h${String(Math.round((v % 1) * 60)).padStart(2, "0")}`,
+  },
+  fc: {
+    label: "Freq. cardíaca",
+    icon: Heart,
+    target: null,
+    tone: "text-rose-600",
+    display: (v) => `${v} bpm`,
+  },
+};
+
+type MetricsState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; date: string; metrics: { kind: MetricKind; value: number | null }[] };
+
 function HomeTab({
   firstName,
   pendingCount,
   profile,
   onGoTo,
+  token,
 }: {
   firstName: string;
   pendingCount: number;
   profile: Profile;
   onGoTo: (t: Tab) => void;
+  token: string;
 }) {
+  const [metricsState, setMetricsState] = useState<MetricsState>({ status: "loading" });
+
+  const loadMetrics = async () => {
+    try {
+      const r = await getMyTodayMetrics({ data: { token } });
+      if (!r.ok) {
+        setMetricsState({ status: "error" });
+        return;
+      }
+      setMetricsState({ status: "ready", date: r.date, metrics: r.metrics });
+    } catch {
+      setMetricsState({ status: "error" });
+    }
+  };
+
+  useEffect(() => {
+    loadMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const saveMetric = async (kind: MetricKind, value: number) => {
+    if (metricsState.status !== "ready") return;
+    const r = await setMyMetric({ data: { token, date: metricsState.date, kind, value } });
+    if (!r.ok) {
+      toast.error("Não consegui salvar sua métrica.");
+      return;
+    }
+    toast.success("Métrica atualizada.");
+    await loadMetrics();
+  };
+
   const profileFilled =
     !!profile.birthDate &&
     !!profile.sexo &&
@@ -396,6 +490,30 @@ function HomeTab({
           Seu histórico começa por aqui — envie seus exames e mantenha seu perfil atualizado.
         </p>
       </div>
+
+      {metricsState.status === "error" ? (
+        <div className="rounded-2xl border border-border bg-card p-4 text-center text-[11px] text-muted-foreground">
+          Não consegui carregar suas métricas agora.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {METRIC_KINDS.map((kind) => {
+            const value =
+              metricsState.status === "ready"
+                ? (metricsState.metrics.find((m) => m.kind === kind)?.value ?? null)
+                : null;
+            return (
+              <MetricCard
+                key={kind}
+                kind={kind}
+                value={value}
+                loading={metricsState.status === "loading"}
+                onSave={(v) => saveMetric(kind, v)}
+              />
+            );
+          })}
+        </div>
+      )}
 
       <button
         onClick={() => onGoTo("exams")}
@@ -432,13 +550,112 @@ function HomeTab({
           </p>
         </div>
       </button>
+    </div>
+  );
+}
 
-      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center">
-        <HeartPulse className="mx-auto h-6 w-6 text-primary/70" />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Consultas oficiais aparecem quando um médico vincular seu prontuário.
-        </p>
+function MetricCard({
+  kind,
+  value,
+  loading,
+  onSave,
+}: {
+  kind: MetricKind;
+  value: number | null;
+  loading: boolean;
+  onSave: (v: number) => void | Promise<void>;
+}) {
+  const config = METRIC_CONFIG[kind];
+  const Icon = config.icon;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value !== null ? String(value) : "");
+  const [saving, setSaving] = useState(false);
+
+  const startEditing = () => {
+    setDraft(value !== null ? String(value) : "");
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const v = parseFloat(draft.replace(",", "."));
+    if (Number.isNaN(v) || v <= 0) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(v);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const pct = config.target && value !== null ? Math.min(100, (value / config.target) * 100) : 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-2.5">
+      <div className="flex items-center justify-between">
+        <Icon className={`h-3.5 w-3.5 ${config.tone}`} />
+        {!loading && (
+          <button
+            onClick={() => (editing ? setEditing(false) : startEditing())}
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted"
+            aria-label="Editar"
+            disabled={saving}
+          >
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+        )}
       </div>
+      <div className="mt-1 text-[10px] text-muted-foreground">{config.label}</div>
+
+      {loading ? (
+        <div className="mt-1.5 h-3.5 w-12 animate-pulse rounded bg-muted" />
+      ) : editing ? (
+        <div className="mt-1 flex items-center gap-1">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            autoFocus
+            inputMode="decimal"
+            className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5 text-[11px]"
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            OK
+          </button>
+        </div>
+      ) : value === null ? (
+        <button
+          onClick={startEditing}
+          className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
+        >
+          Toque para registrar
+        </button>
+      ) : (
+        <div className="text-[12px] font-bold leading-tight">
+          {config.display(value)}
+          {config.target && (
+            <span className="ml-1 text-[9px] font-normal text-muted-foreground">
+              / {config.display(config.target)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {config.target && value !== null && !editing && !loading && (
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full rounded-full ${config.tone.replace("text-", "bg-")}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
