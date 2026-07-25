@@ -238,7 +238,7 @@ function PatientAppPage() {
           <PhoneStatusBar />
           <PhoneHeader firstName={firstName} />
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-4">
+          <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-4">
             {state.status === "loading" && (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
