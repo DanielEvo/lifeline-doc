@@ -9,7 +9,9 @@ import {
   Activity,
   CalendarDays,
   CheckCircle2,
+  Circle,
   ClipboardList,
+  Clock,
   FileText,
   FileUp,
   FlaskConical,
@@ -17,7 +19,10 @@ import {
   Home,
   Loader2,
   LogOut,
+  MoreVertical,
   Pill,
+  Plus,
+  RotateCcw,
   Save,
   ShieldCheck,
   User as UserIcon,
@@ -51,6 +56,15 @@ import {
   logoutPatient,
   updatePatientProfile,
 } from "@/lib/api/patient-auth.functions";
+import {
+  addMyMedication,
+  getMyTodayMeds,
+  listMyMedications,
+  logMyDose,
+  skipMyDose,
+  undoMyLog,
+  updateMyMedicationStatus,
+} from "@/lib/api/patient-medications.functions";
 import { BIOMARKER_CATALOG } from "@/lib/clinic-types";
 import {
   clearPatientSession,
@@ -255,7 +269,7 @@ function PatientAppPage() {
                     onOpenUpload={() => setUploadOpen(true)}
                   />
                 )}
-                {tab === "meds" && <EmptyMeds />}
+                {tab === "meds" && <MedsTab token={session.token} />}
                 {tab === "profile" && (
                   <ProfileTab
                     token={session.token}
@@ -507,19 +521,496 @@ function ExamsTab({
   );
 }
 
-function EmptyMeds() {
+// ---------------------------------------------------------------------------
+// Remédios — dado 100% real (patient-medications.functions). Origem "self":
+// o próprio paciente cadastra; vínculo com prescrição médica é um gancho
+// futuro (BKL-37), não implementado aqui.
+// ---------------------------------------------------------------------------
+
+type TodayMedItem = {
+  medicationId: string;
+  nome: string;
+  dose: string;
+  nota: string | null;
+  scheduledTime: string;
+  takenAt: string | null;
+  skipped: boolean;
+};
+
+type MedicationRow = {
+  id: string;
+  nome: string;
+  dose: string;
+  horarios: string[];
+  nota: string | null;
+  status: "ativo" | "interrompido";
+};
+
+type MedsState =
+  | { status: "loading" }
+  | { status: "error" }
+  | {
+      status: "ready";
+      date: string;
+      items: TodayMedItem[];
+      adherencePct: number;
+      medications: MedicationRow[];
+    };
+
+function MedsTab({ token }: { token: string }) {
+  const [state, setState] = useState<MedsState>({ status: "loading" });
+  const [addOpen, setAddOpen] = useState(false);
+  const [showInterrompidos, setShowInterrompidos] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const [today, meds] = await Promise.all([
+        getMyTodayMeds({ data: { token } }),
+        listMyMedications({ data: { token } }),
+      ]);
+      if (!today.ok || !meds.ok) {
+        setState({ status: "error" });
+        return;
+      }
+      setState({
+        status: "ready",
+        date: today.date,
+        items: today.items,
+        adherencePct: today.adherencePct,
+        medications: meds.medications as MedicationRow[],
+      });
+    } catch {
+      setState({ status: "error" });
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  if (state.status === "loading") {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
+        Carregando…
+      </div>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
+        Não consegui carregar seus remédios agora.
+      </div>
+    );
+  }
+
+  const { date, items, adherencePct, medications } = state;
+  const interrompidos = medications.filter((m) => m.status === "interrompido");
+
+  const runAction = async (key: string, fn: () => Promise<void>) => {
+    setBusyKey(key);
+    try {
+      await fn();
+      await load();
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleTomar = (item: TodayMedItem) =>
+    runAction(`${item.medicationId}-${item.scheduledTime}`, async () => {
+      const r = await logMyDose({
+        data: { token, medicationId: item.medicationId, scheduledFor: date, scheduledTime: item.scheduledTime },
+      });
+      if (!r.ok) {
+        toast.error("Não consegui registrar a dose.");
+        return;
+      }
+      toast.success(`${item.nome} registrado ✓`);
+    });
+
+  const handlePular = (item: TodayMedItem) =>
+    runAction(`${item.medicationId}-${item.scheduledTime}`, async () => {
+      const r = await skipMyDose({
+        data: { token, medicationId: item.medicationId, scheduledFor: date, scheduledTime: item.scheduledTime },
+      });
+      if (!r.ok) {
+        toast.error("Não consegui registrar a dose pulada.");
+        return;
+      }
+      toast("Dose marcada como pulada.");
+    });
+
+  const handleUndo = (item: TodayMedItem) =>
+    runAction(`${item.medicationId}-${item.scheduledTime}`, async () => {
+      await undoMyLog({
+        data: { token, medicationId: item.medicationId, scheduledFor: date, scheduledTime: item.scheduledTime },
+      });
+      toast("Ação desfeita.");
+    });
+
+  const handleInterromper = (med: MedicationRow) =>
+    runAction(med.id, async () => {
+      const r = await updateMyMedicationStatus({ data: { token, medicationId: med.id, status: "interrompido" } });
+      if (!r.ok) {
+        toast.error("Não consegui interromper o tratamento.");
+        return;
+      }
+      toast(`Tratamento com ${med.nome} interrompido.`);
+    });
+
+  const handleRetomar = (med: MedicationRow) =>
+    runAction(med.id, async () => {
+      const r = await updateMyMedicationStatus({ data: { token, medicationId: med.id, status: "ativo" } });
+      if (!r.ok) {
+        toast.error("Não consegui retomar o tratamento.");
+        return;
+      }
+      toast.success(`Tratamento com ${med.nome} retomado.`);
+    });
+
+  if (medications.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Pill className="h-7 w-7" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Nenhum remédio cadastrado</p>
+          <p className="mx-auto mt-1 max-w-[240px] text-[11px] text-muted-foreground">
+            Cadastre seus remédios para acompanhar horários e adesão.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => setAddOpen(true)}
+          className="brand-gradient text-primary-foreground"
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Adicionar remédio
+        </Button>
+        <AddMedicationDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          token={token}
+          onSaved={load}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <Pill className="h-7 w-7" />
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight">Meus remédios</h3>
+          <p className="text-[11px] text-muted-foreground">
+            {new Date(date).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setAddOpen(true)} className="brand-gradient shrink-0 text-primary-foreground">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Adicionar
+        </Button>
       </div>
-      <div>
-        <p className="text-sm font-semibold">Nenhum medicamento prescrito</p>
-        <p className="mx-auto mt-1 max-w-[240px] text-[11px] text-muted-foreground">
-          Suas prescrições aparecem aqui quando um médico vincular seu histórico.
-        </p>
-      </div>
+
+      {items.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-3">
+          <div className="flex items-center gap-3">
+            <div className="relative h-14 w-14">
+              <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(adherencePct / 100) * 94.25} 94.25`}
+                  className="text-primary transition-all duration-500"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
+                {adherencePct}%
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="text-[10px] text-muted-foreground">Adesão de hoje</div>
+              <div className="text-sm font-semibold">
+                {items.filter((i) => i.takenAt !== null).length} de {items.length} tomados
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center text-[11px] text-muted-foreground">
+          Nenhum remédio ativo hoje.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => {
+            const key = `${item.medicationId}-${item.scheduledTime}`;
+            const busy = busyKey === key;
+            const done = item.takenAt !== null || item.skipped;
+            const med = medications.find((m) => m.id === item.medicationId);
+            return (
+              <div
+                key={key}
+                className={`rounded-xl border p-2.5 transition ${
+                  item.takenAt !== null
+                    ? "border-emerald-200 bg-emerald-50/60"
+                    : item.skipped
+                      ? "border-amber-200 bg-amber-50/60"
+                      : "border-border bg-card"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex w-11 shrink-0 flex-col items-center">
+                    <div className="flex items-center gap-0.5 text-[11px] font-bold tabular-nums">
+                      <Clock className="h-2.5 w-2.5 text-muted-foreground" />
+                      {item.scheduledTime}
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate text-[11px] font-semibold ${item.takenAt !== null ? "line-through opacity-60" : ""}`}>
+                      {item.nome}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">{item.dose}</div>
+                    {item.nota && <div className="mt-0.5 text-[9px] italic text-muted-foreground">{item.nota}</div>}
+                    {item.skipped && <div className="mt-0.5 text-[9px] font-medium text-amber-700">Pulado</div>}
+                  </div>
+                  {!done ? (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        onClick={() => handlePular(item)}
+                        disabled={busy}
+                        className="rounded-full border border-border bg-background px-2 py-1 text-[9px] font-semibold text-muted-foreground transition hover:bg-muted disabled:opacity-50"
+                      >
+                        Pular
+                      </button>
+                      <button
+                        onClick={() => handleTomar(item)}
+                        disabled={busy}
+                        aria-label="Marcar tomado"
+                        className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background transition hover:border-emerald-400 disabled:opacity-50"
+                      >
+                        {busy ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-transparent" />
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleUndo(item)}
+                      disabled={busy}
+                      className="shrink-0 text-[9px] font-medium text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      {item.takenAt !== null ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      ) : (
+                        "Desfazer"
+                      )}
+                    </button>
+                  )}
+                </div>
+                {med && (
+                  <button
+                    onClick={() => handleInterromper(med)}
+                    disabled={busyKey === med.id}
+                    className="mt-2 flex items-center gap-1 text-[9px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    <MoreVertical className="h-3 w-3" />
+                    Interromper tratamento
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {interrompidos.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowInterrompidos((v) => !v)}
+            className="text-[10px] font-medium text-primary hover:underline"
+          >
+            {showInterrompidos ? "Ocultar" : "Ver"} tratamentos interrompidos ({interrompidos.length})
+          </button>
+          {showInterrompidos && (
+            <ul className="mt-2 space-y-1.5">
+              {interrompidos.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium text-muted-foreground">{m.nome}</p>
+                    <p className="text-[10px] text-muted-foreground/80">{m.dose}</p>
+                  </div>
+                  <button
+                    onClick={() => handleRetomar(m)}
+                    disabled={busyKey === m.id}
+                    className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-[9px] font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    Retomar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <AddMedicationDialog open={addOpen} onOpenChange={setAddOpen} token={token} onSaved={load} />
     </div>
+  );
+}
+
+function AddMedicationDialog({
+  open,
+  onOpenChange,
+  token,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  token: string;
+  onSaved: () => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [dose, setDose] = useState("");
+  const [nota, setNota] = useState("");
+  const [horarios, setHorarios] = useState<string[]>([]);
+  const [horarioInput, setHorarioInput] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setNome("");
+    setDose("");
+    setNota("");
+    setHorarios([]);
+    setHorarioInput("");
+  };
+
+  const addHorario = () => {
+    if (!horarioInput || horarios.includes(horarioInput)) return;
+    setHorarios((prev) => [...prev, horarioInput].sort());
+    setHorarioInput("");
+  };
+
+  const removeHorario = (h: string) => setHorarios((prev) => prev.filter((x) => x !== h));
+
+  const canSubmit = nome.trim().length > 0 && dose.trim().length > 0 && horarios.length > 0;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    try {
+      const r = await addMyMedication({
+        data: { token, nome: nome.trim(), dose: dose.trim(), horarios, nota: nota.trim() || undefined },
+      });
+      if (!r.ok) {
+        toast.error("Não consegui adicionar o remédio.");
+        return;
+      }
+      toast.success(`${nome.trim()} adicionado.`);
+      onOpenChange(false);
+      reset();
+      onSaved();
+    } catch {
+      toast.error("Não consegui adicionar o remédio.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pill className="h-4 w-4 text-primary" /> Adicionar remédio
+          </DialogTitle>
+          <DialogDescription>
+            Cadastre nome, dose e horários — você poderá marcar cada dose como tomada ou pulada.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2.5">
+          <Field label="Nome">
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Sulfato Ferroso" />
+          </Field>
+          <Field label="Dose">
+            <Input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="Ex.: 40 mg · 1 cp" />
+          </Field>
+          <Field label="Horários">
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="time"
+                value={horarioInput}
+                onChange={(e) => setHorarioInput(e.target.value)}
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={addHorario}>
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {horarios.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {horarios.map((h) => (
+                  <span
+                    key={h}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums"
+                  >
+                    {h}
+                    <button onClick={() => removeHorario(h)} aria-label={`Remover ${h}`}>
+                      <X className="h-2.5 w-2.5 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </Field>
+          <Field label="Nota (opcional)">
+            <Textarea
+              rows={2}
+              placeholder="Ex.: em jejum, com suco de laranja"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+            />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={!canSubmit || saving}
+            className="brand-gradient text-primary-foreground"
+          >
+            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
+            Adicionar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
