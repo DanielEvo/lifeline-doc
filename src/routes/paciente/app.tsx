@@ -218,7 +218,7 @@ function PatientAppPage() {
 
       <main className="mx-auto grid max-w-5xl justify-items-center gap-8 px-4 py-10 md:grid-cols-[1fr_380px_1fr]">
         {/* painel lateral esquerdo — só em md+ */}
-        <aside className="hidden md:flex md:flex-col md:justify-center">
+        <aside className="hidden w-full md:flex md:flex-col md:justify-center">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Meu histórico</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">
             {firstName ? `Olá, ${firstName}` : "Olá"}
