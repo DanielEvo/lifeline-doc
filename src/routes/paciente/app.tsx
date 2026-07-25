@@ -216,9 +216,9 @@ function PatientAppPage() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 md:grid-cols-[1fr_auto_1fr]">
+      <main className="mx-auto grid max-w-5xl justify-items-center gap-8 px-4 py-10 md:grid-cols-[1fr_380px_1fr]">
         {/* painel lateral esquerdo — só em md+ */}
-        <aside className="hidden md:flex md:flex-col md:justify-center">
+        <aside className="hidden w-full md:flex md:flex-col md:justify-center">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Meu histórico</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">
             {firstName ? `Olá, ${firstName}` : "Olá"}
@@ -238,7 +238,7 @@ function PatientAppPage() {
           <PhoneStatusBar />
           <PhoneHeader firstName={firstName} />
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-4">
+          <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-4">
             {state.status === "loading" && (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
@@ -307,7 +307,7 @@ function PatientAppPage() {
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex h-[720px] w-full max-w-[400px] flex-col overflow-hidden rounded-[2.5rem] border-[10px] border-foreground/90 bg-card shadow-2xl shadow-primary/10">
+    <div className="mx-auto flex h-[720px] w-[380px] max-w-full shrink-0 flex-col overflow-hidden rounded-[2.5rem] border-[10px] border-foreground/90 bg-card shadow-2xl shadow-primary/10">
       {children}
     </div>
   );
