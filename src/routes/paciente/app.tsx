@@ -307,7 +307,7 @@ function PatientAppPage() {
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex h-[720px] w-full max-w-[400px] flex-col overflow-hidden rounded-[2.5rem] border-[10px] border-foreground/90 bg-card shadow-2xl shadow-primary/10">
+    <div className="mx-auto flex h-[480px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2.5rem] border-[10px] border-foreground/90 bg-card shadow-2xl shadow-primary/10">
       {children}
     </div>
   );
