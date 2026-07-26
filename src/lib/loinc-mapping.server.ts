@@ -64,7 +64,19 @@ export async function resolveLoincCode(rawName: string): Promise<LoincMatch | nu
   // 2) fuzzy via pg_trgm — usa a extensão já confirmada instalada no
   // projeto (schema `extensions`). Ordena por similaridade decrescente,
   // pega o melhor candidato acima do threshold.
-  const { data: fuzzyRows, error: fuzzyError } = await supabaseAdmin.rpc("loinc_fuzzy_match", {
+  type FuzzyRow = {
+    loinc_code: string;
+    component_pt: string;
+    short_name: string | null;
+    similarity: number;
+  };
+
+  const { data: fuzzyData, error: fuzzyError } = await (
+    supabaseAdmin.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: FuzzyRow[] | null; error: { message: string } | null }>
+  )("loinc_fuzzy_match", {
     search_term: normalized,
     min_similarity: FUZZY_THRESHOLD,
   });
@@ -73,9 +85,11 @@ export async function resolveLoincCode(rawName: string): Promise<LoincMatch | nu
     console.error(`[loinc-mapping] Erro no match fuzzy: ${fuzzyError.message}`);
     return null;
   }
-  if (!fuzzyRows || fuzzyRows.length === 0) return null;
+  const fuzzyRows = fuzzyData ?? [];
+  if (fuzzyRows.length === 0) return null;
 
   const best = fuzzyRows[0];
+
   return {
     loincCode: best.loinc_code,
     componentPt: best.component_pt,
