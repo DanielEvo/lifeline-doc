@@ -41,6 +41,105 @@ export type Database = {
         }
         Relationships: []
       }
+      measurements: {
+        Row: {
+          created_at: string
+          date: string
+          doctor_id: string
+          id: string
+          label: string
+          loinc_code: string | null
+          loinc_confidence: string
+          motivo: string | null
+          name: string
+          patient_id: string
+          ref_max: number
+          ref_min: number
+          unit: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          doctor_id: string
+          id?: string
+          label: string
+          loinc_code?: string | null
+          loinc_confidence?: string
+          motivo?: string | null
+          name: string
+          patient_id: string
+          ref_max: number
+          ref_min: number
+          unit: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          doctor_id?: string
+          id?: string
+          label?: string
+          loinc_code?: string | null
+          loinc_confidence?: string
+          motivo?: string | null
+          name?: string
+          patient_id?: string
+          ref_max?: number
+          ref_min?: number
+          unit?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      patient_pending_measurements: {
+        Row: {
+          collection_date: string | null
+          confirmed_by_doctor: boolean
+          created_at: string
+          global_id: string
+          id: string
+          loinc_code: string | null
+          loinc_confidence: string
+          matched_name: string | null
+          raw_name: string
+          ref_max: number | null
+          ref_min: number | null
+          unit: string
+          value: number
+        }
+        Insert: {
+          collection_date?: string | null
+          confirmed_by_doctor?: boolean
+          created_at?: string
+          global_id: string
+          id?: string
+          loinc_code?: string | null
+          loinc_confidence?: string
+          matched_name?: string | null
+          raw_name: string
+          ref_max?: number | null
+          ref_min?: number | null
+          unit: string
+          value: number
+        }
+        Update: {
+          collection_date?: string | null
+          confirmed_by_doctor?: boolean
+          created_at?: string
+          global_id?: string
+          id?: string
+          loinc_code?: string | null
+          loinc_confidence?: string
+          matched_name?: string | null
+          raw_name?: string
+          ref_max?: number | null
+          ref_min?: number | null
+          unit?: string
+          value?: number
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           cancel_at_period_end: boolean | null
