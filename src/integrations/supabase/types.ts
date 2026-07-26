@@ -224,15 +224,6 @@ export type Database = {
         Args: { check_env?: string; user_uuid: string }
         Returns: boolean
       }
-      loinc_fuzzy_match: {
-        Args: { min_similarity: number; search_term: string }
-        Returns: {
-          component_pt: string
-          loinc_code: string
-          short_name: string | null
-          similarity: number
-        }[]
-      }
     }
     Enums: {
       [_ in never]: never
