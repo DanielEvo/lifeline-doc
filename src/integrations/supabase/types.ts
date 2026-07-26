@@ -41,6 +41,33 @@ export type Database = {
         }
         Relationships: []
       }
+      loinc_pt_br: {
+        Row: {
+          class: string
+          component_pt: string
+          loinc_code: string
+          scale_typ: string | null
+          short_name: string | null
+          system: string | null
+        }
+        Insert: {
+          class: string
+          component_pt: string
+          loinc_code: string
+          scale_typ?: string | null
+          short_name?: string | null
+          system?: string | null
+        }
+        Update: {
+          class?: string
+          component_pt?: string
+          loinc_code?: string
+          scale_typ?: string | null
+          short_name?: string | null
+          system?: string | null
+        }
+        Relationships: []
+      }
       measurements: {
         Row: {
           created_at: string
@@ -197,6 +224,8 @@ export type Database = {
         Args: { check_env?: string; user_uuid: string }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
