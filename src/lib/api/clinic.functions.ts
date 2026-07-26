@@ -14,13 +14,31 @@ import {
   bumpExams,
   createPatient,
   findPatientByCode,
+  findPatientByGlobalId,
   getPatient,
   importSamples,
+  linkPatientToGlobalId,
   listPatients,
   movePatient,
   setArchived,
   updatePatient,
 } from "../patients.server";
+import {
+  findRegistryByCpf,
+  findRegistryByEmail,
+  findRegistryByGlobalId,
+  findRegistryByPublicCode,
+  findRegistryByRg,
+  mergeAutodeclarado,
+  searchRegistryByName,
+  type PatientRegistry,
+} from "../patients-registry.server";
+import {
+  consumeToken,
+  createAccessRequest,
+  findValidPresentialToken,
+  hasActiveGrant,
+} from "../patient-access.server";
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
@@ -45,7 +63,14 @@ import {
 import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
 import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
-import { BIOMARKER_CATALOG, resolveBiomarkerName, todayIso } from "../clinic-types";
+import {
+  ageFrom,
+  BIOMARKER_CATALOG,
+  resolveBiomarkerName,
+  todayIso,
+  type Evolution,
+  type Patient,
+} from "../clinic-types";
 
 const token = z.string().min(1).max(80);
 const COLUMN = z.string().min(1).max(32);
@@ -65,6 +90,138 @@ const CLINICAL_FIELDS = {
 };
 
 const UNAUTH = { ok: false as const, error: "unauthorized" as const };
+
+// ---------------------------------------------------------------------------
+// BKL-37 — busca global + vínculo médico↔paciente
+//
+// Vínculo (linkMyPatientToGlobalId) e ACESSO aos dados (hasProfileAccess) são
+// decisões independentes: vincular é sempre permitido (é só apontar o
+// prontuário local pra identidade global); o acesso ao que o paciente
+// autodeclarou é que fica condicionado — token presencial, aprovação de
+// solicitação, ou o médico já ser dono do registry/já ter evolução com esse
+// paciente. Um paciente pode ficar "vinculado, sem acesso" por tempo
+// indeterminado (ex.: paciente sem celular).
+// ---------------------------------------------------------------------------
+
+/** "Mariana Silva" → "Mariana S." — nunca expõe o sobrenome completo na busca. */
+function nomeParcial(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1][0]?.toUpperCase() ?? ""}.`;
+}
+
+async function hasProfileAccess(
+  doctorId: string,
+  patient: Patient,
+  registry: PatientRegistry,
+  evolutions: Evolution[],
+): Promise<boolean> {
+  if (registry.createdBy.type === "doctor" && registry.createdBy.id === doctorId) return true;
+  if (evolutions.length > 0) return true;
+  if (await hasActiveGrant(registry.globalId, doctorId, "perfil")) return true;
+  return false;
+}
+
+type VinculoStatus = "sem_vinculo" | "sem_acesso" | "com_acesso";
+
+async function toSearchResult(doctorId: string, r: PatientRegistry) {
+  const localMatch = await findPatientByGlobalId(doctorId, r.globalId);
+  let vinculoStatus: VinculoStatus = "sem_vinculo";
+  if (localMatch) {
+    const evolutions = await listEvolutions(doctorId, localMatch.id);
+    const access = await hasProfileAccess(doctorId, localMatch, r, evolutions);
+    vinculoStatus = access ? "com_acesso" : "sem_acesso";
+  }
+  return {
+    globalId: r.globalId,
+    nomeParcial: nomeParcial(r.fullName),
+    idade: ageFrom(r.birthDate ?? null),
+    // Distingue um registry de conta real do paciente (já usa o app) de um
+    // shell criado por outro médico via pré-cadastro.
+    jaTemPerfil: r.createdBy.type === "patient",
+    vinculoStatus,
+  };
+}
+
+const CPF_RE = /^\d{11}$/;
+const RG_RE = /^\d{5,12}$/;
+const LIFELINE_ID_RE = /^[A-Z]{3}\d{6}$/;
+
+// Campo único com autodetecção de formato — nome, CPF, RG, e-mail ou
+// LifeLine ID, nessa ordem de prioridade quando o texto bate mais de um.
+export const searchPatientGlobal = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, query: z.string().min(2).max(160) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+
+    const raw = data.query.trim();
+    const digitsOnly = /^\d+$/.test(raw);
+    const codeNormalized = raw.replace(/[\s-]/g, "").toUpperCase();
+
+    let registries: PatientRegistry[] = [];
+    if (raw.includes("@")) {
+      const r = await findRegistryByEmail(raw);
+      registries = r ? [r] : [];
+    } else if (digitsOnly && CPF_RE.test(raw)) {
+      const r = await findRegistryByCpf(raw);
+      registries = r ? [r] : [];
+    } else if (LIFELINE_ID_RE.test(codeNormalized)) {
+      const r = await findRegistryByPublicCode(codeNormalized);
+      registries = r ? [r] : [];
+    } else if (digitsOnly && RG_RE.test(raw)) {
+      const r = await findRegistryByRg(raw);
+      registries = r ? [r] : [];
+    } else {
+      registries = await searchRegistryByName(raw, 10);
+    }
+
+    const results = await Promise.all(registries.map((r) => toSearchResult(doctor.id, r)));
+    return { ok: true as const, results };
+  });
+
+export const requestPatientAccess = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({ token, globalId: z.string().min(1), purpose: z.enum(["perfil"]) }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const registry = await findRegistryByGlobalId(data.globalId);
+    if (!registry) return { ok: false as const, error: "not_found" as const };
+    const request = await createAccessRequest(data.globalId, doctor.id, doctor.nome, data.purpose);
+    return { ok: true as const, request };
+  });
+
+// Consome um token presencial (canal separado do vínculo em si) — sobe o
+// paciente já vinculado de "sem_acesso" pra "com_acesso".
+export const consumePresentialAccessToken = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, globalId: z.string().min(1), accessCode: z.string().min(1).max(10) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const tok = await findValidPresentialToken(data.globalId, "perfil", data.accessCode);
+    if (!tok) return { ok: false as const, error: "invalid_or_expired_token" as const };
+    await consumeToken(tok.id, doctor.id);
+    return { ok: true as const };
+  });
+
+// Vincular é sempre permitido — sem token, sem checagem de elegibilidade. É
+// só apontar o prontuário local pra identidade global; o ACESSO aos dados
+// autodeclarados é decidido depois, por hasProfileAccess.
+export const linkMyPatientToGlobalId = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, patientId: z.string().min(1), globalId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await getPatient(doctor.id, data.patientId);
+    if (!patient) return { ok: false as const, error: "not_found" as const };
+    const registry = await findRegistryByGlobalId(data.globalId);
+    if (!registry) return { ok: false as const, error: "not_found" as const };
+    const linked = await linkPatientToGlobalId(doctor.id, data.patientId, data.globalId);
+    if (!linked) return { ok: false as const, error: "already_linked_or_not_found" as const };
+    return { ok: true as const, patient: linked };
+  });
 
 export const lookupPatientByCode = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token, code: z.string().min(1).max(20) }))
@@ -128,6 +285,22 @@ export const submitPreCadastro = createServerFn({ method: "POST" })
     return { ok: true as const, patient };
   });
 
+// BKL-37 — sobrepõe tipoSanguineo/alergias/pesoKg/alturaCm com o que o
+// paciente autodeclarou no app, SE o médico tiver acesso liberado ao perfil
+// (hasProfileAccess) — vínculo sozinho não basta.
+async function withVinculo(doctorId: string, patients: Patient[]) {
+  return Promise.all(
+    patients.map(async (p) => {
+      if (!p.globalId) return mergeAutodeclarado(p, undefined, false);
+      const registry = await findRegistryByGlobalId(p.globalId);
+      if (!registry) return mergeAutodeclarado(p, undefined, false);
+      const evolutions = await listEvolutions(doctorId, p.id);
+      const access = await hasProfileAccess(doctorId, p, registry, evolutions);
+      return mergeAutodeclarado(p, registry, access);
+    }),
+  );
+}
+
 export const getWorkspace = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token }))
   .handler(async ({ data }) => {
@@ -142,7 +315,7 @@ export const getWorkspace = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       doctor: { nome: doctor.nome, email: doctor.email, avatarUrl: doctor.avatarUrl },
-      patients,
+      patients: await withVinculo(doctor.id, patients),
       columns,
       appointments,
       charges,
@@ -162,6 +335,10 @@ export const createMyPatient = createServerFn({ method: "POST" })
       convenio: z.string().max(60).nullish(),
       queixa: z.string().max(300).optional().default(""),
       column: COLUMN.optional(),
+      // BKL-37 — presente quando o médico já resolveu o vínculo global (busca
+      // + token/elegibilidade) ANTES de criar o paciente localmente; ver
+      // linkMyPatientToGlobalId sem patientId.
+      globalId: z.string().min(1).optional(),
       ...CLINICAL_FIELDS,
     }),
   )
@@ -555,11 +732,12 @@ export const getPatientRecord = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await getPatient(doctor.id, data.id);
     if (!patient) return { ok: false as const, error: "not_found" as const };
-    const [evolutions, measurements] = await Promise.all([
+    const [evolutions, measurements, [merged]] = await Promise.all([
       listEvolutions(doctor.id, data.id),
       listMeasurements(doctor.id, data.id),
+      withVinculo(doctor.id, [patient]),
     ]);
-    return { ok: true as const, patient, evolutions, measurements };
+    return { ok: true as const, patient: merged, evolutions, measurements };
   });
 
 // Registrar resultado de exame (biomarcador). A faixa de referência vem do

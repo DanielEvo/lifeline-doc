@@ -14,7 +14,14 @@ import {
 } from "../patient-metrics.server";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const METRIC_KINDS = ["passos", "hidratacao", "sono", "fc"] as const;
+const METRIC_KINDS = ["passos", "hidratacao", "sono", "fc", "peso", "altura"] as const;
+
+// Mesmos limites de CLINICAL_FIELDS (peso 0-500, altura 0-280) em clinic.functions.ts
+// — evita que o autodeclarado do paciente aceite algo que o lado médico rejeitaria.
+const METRIC_LIMITS: Partial<Record<(typeof METRIC_KINDS)[number], { min: number; max: number }>> = {
+  peso: { min: 0, max: 500 },
+  altura: { min: 0, max: 280 },
+};
 
 export const getMyTodayMetrics = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
@@ -32,12 +39,20 @@ export const getMyTodayMetrics = createServerFn({ method: "POST" })
 
 export const setMyMetric = createServerFn({ method: "POST" })
   .inputValidator(
-    z.object({
-      token: z.string().min(1),
-      date: z.string().regex(DATE_RE),
-      kind: z.enum(METRIC_KINDS),
-      value: z.number().positive(),
-    }),
+    z
+      .object({
+        token: z.string().min(1),
+        date: z.string().regex(DATE_RE),
+        kind: z.enum(METRIC_KINDS),
+        value: z.number().positive(),
+      })
+      .refine(
+        (v) => {
+          const limit = METRIC_LIMITS[v.kind];
+          return !limit || (v.value >= limit.min && v.value <= limit.max);
+        },
+        { message: "Valor fora do limite aceito para esta métrica", path: ["value"] },
+      ),
   )
   .handler(async ({ data }) => {
     const patient = await requirePatient(data.token);

@@ -18,6 +18,7 @@ import {
   FileUp,
   Loader2,
   Search,
+  ShieldCheck,
   UserCheck,
   X,
 } from "lucide-react";
@@ -42,7 +43,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { lookupPatientByCode } from "@/lib/api/clinic.functions";
+import {
+  consumePresentialAccessToken,
+  linkMyPatientToGlobalId,
+  lookupPatientByCode,
+  requestPatientAccess,
+  searchPatientGlobal,
+} from "@/lib/api/clinic.functions";
 import { useClinic } from "@/lib/clinic-context";
 import {
   ageFrom,
@@ -51,6 +58,8 @@ import {
   ETILISMO_LABEL,
   TABAGISMO_LABEL,
   TIPOS_SANGUINEOS,
+  waLink,
+  WA_TEMPLATES,
   type BoardColumn,
   type Patient,
 } from "@/lib/clinic-types";
@@ -84,7 +93,12 @@ const schema = z.object({
 
 export type PatientFormValues = z.infer<typeof schema>;
 
-export type PatientIntake = { foundPatient: Patient | null; fileNames: string[] };
+export type PatientIntake = {
+  foundPatient: Patient | null;
+  fileNames: string[];
+  /** BKL-37 — identidade global já resolvida no dialog antes da criação. */
+  globalId?: string | null;
+};
 
 const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
 
@@ -100,7 +114,7 @@ export function PatientFormDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  patient?: Patient | null; // presente = edição
+  patient?: (Patient & { vinculo?: VinculoStatus }) | null; // presente = edição
   columns: BoardColumn[];
   // No modo criação, o 2º argumento carrega busca-por-ID + exames anexados.
   onSubmit: (values: PatientFormValues, intake?: PatientIntake) => Promise<void> | void;
@@ -134,7 +148,7 @@ export function PatientFormDialog({
   });
 
   // ----- Estado do intake (só relevante no modo criação) -----
-  const { token } = useClinic();
+  const { token, nome: doctorNome } = useClinic();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [idInput, setIdInput] = useState("");
   const [lookupDone, setLookupDone] = useState(false);
@@ -142,12 +156,24 @@ export function PatientFormDialog({
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
 
+  // ----- Estado do vínculo global (BKL-37) — override local pra refletir na
+  // hora o que acabou de mudar nesta sessão do dialog, sem esperar um refetch.
+  const [linkOverride, setLinkOverride] = useState<{ globalId: string; vinculo: VinculoStatus } | null>(
+    null,
+  );
+  const globalId = linkOverride?.globalId ?? patient?.globalId ?? null;
+  const vinculo = linkOverride?.vinculo ?? patient?.vinculo ?? "sem_vinculo";
+  // tipoSanguineo/alergias/peso/altura são atualizados pelo próprio paciente
+  // no app quando o acesso está liberado; o médico só lê.
+  const autodeclarado = isEdit && vinculo === "com_acesso";
+
   const resetIntake = () => {
     setIdInput("");
     setLookupDone(false);
     setFoundPatient(null);
     setFiles([]);
     setDragging(false);
+    setLinkOverride(null);
   };
 
   useEffect(() => {
@@ -213,12 +239,13 @@ export function PatientFormDialog({
   const err = form.formState.errors;
 
   // Submissão: edição e cadastro-novo passam pela validação zod; paciente
-  // encontrado por ID dispensa o formulário (só anexa exames).
+  // encontrado por ID dispensa o formulário (só anexa exames). O vínculo
+  // global (BKL-37) é uma ação à parte, só disponível no modo edição — ver
+  // GlobalLinkSearch/AccessActions abaixo.
   const submitNew = form.handleSubmit((v) =>
     onSubmit(v, isEdit ? undefined : { foundPatient: null, fileNames: doneNames }),
   );
-  const submitFound = () =>
-    onSubmit(form.getValues(), { foundPatient, fileNames: doneNames });
+  const submitFound = () => onSubmit(form.getValues(), { foundPatient, fileNames: doneNames });
 
   const showForm = isEdit || !foundPatient; // esconde campos quando achou por ID
   const submitLabel = isEdit
@@ -251,6 +278,36 @@ export function PatientFormDialog({
               {patient.sexo && ` · ${patient.sexo}`}
               {patient.cpf && ` · CPF ${patient.cpf}`}
               {patient.patientCode && ` · Código ${patient.patientCode}`}
+            </div>
+
+            {/* Vínculo com a identidade global do paciente (BKL-37) — vincular
+                é sempre permitido; o ACESSO aos dados autodeclarados é uma
+                etapa à parte (token presencial ou solicitação aprovada). */}
+            <div className="mt-2">
+              {globalId ? (
+                vinculo === "com_acesso" ? (
+                  <p className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="h-3 w-3" /> ✓ Vinculado — acesso liberado
+                  </p>
+                ) : (
+                  <div>
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      Vinculado — sem acesso aos dados do paciente
+                    </p>
+                    <AccessActions
+                      token={token}
+                      globalId={globalId}
+                      onGranted={() => setLinkOverride({ globalId, vinculo: "com_acesso" })}
+                    />
+                  </div>
+                )
+              ) : (
+                <GlobalLinkSearch
+                  token={token}
+                  patientId={patient.id}
+                  onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
+                />
+              )}
             </div>
           </div>
         )}
@@ -419,9 +476,31 @@ export function PatientFormDialog({
               </Label>
             </div>
 
+            {autodeclarado && (
+              <div className="col-span-2 -mt-1 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Tipo sanguíneo, alergias, peso e altura são atualizados pelo paciente no app.
+                </p>
+                {patient?.telefone && (
+                  <a
+                    href={waLink(
+                      patient.telefone,
+                      WA_TEMPLATES.pedirAtualizacaoCadastro(patient.nome, doctorNome),
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Pedir atualização
+                  </a>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1">
               <Label className="text-xs">Tipo sanguíneo</Label>
               <Select
+                disabled={autodeclarado}
                 value={form.watch("tipoSanguineo") || ""}
                 onValueChange={(v) => form.setValue("tipoSanguineo", v)}
               >
@@ -437,11 +516,11 @@ export function PatientFormDialog({
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label htmlFor="pf-peso" className="text-xs">Peso (kg)</Label>
-                <Input id="pf-peso" inputMode="decimal" {...form.register("pesoKg")} placeholder="70" />
+                <Input id="pf-peso" disabled={autodeclarado} inputMode="decimal" {...form.register("pesoKg")} placeholder="70" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="pf-altura" className="text-xs">Altura (cm)</Label>
-                <Input id="pf-altura" inputMode="decimal" {...form.register("alturaCm")} placeholder="170" />
+                <Input id="pf-altura" disabled={autodeclarado} inputMode="decimal" {...form.register("alturaCm")} placeholder="170" />
               </div>
             </div>
 
@@ -506,7 +585,7 @@ export function PatientFormDialog({
 
             <div className="col-span-2 space-y-1">
               <Label htmlFor="pf-alergias" className="text-xs">Alergias</Label>
-              <Input id="pf-alergias" {...form.register("alergias")} placeholder="Ex.: dipirona, látex" maxLength={300} />
+              <Input id="pf-alergias" disabled={autodeclarado} {...form.register("alergias")} placeholder="Ex.: dipirona, látex" maxLength={300} />
             </div>
 
             <div className="col-span-2 space-y-1">
@@ -634,5 +713,255 @@ export function PatientFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Vínculo com a identidade LifeLine do paciente (BKL-37) — só existe no modo
+// edição (precisa de um patientId real). Vincular é sempre permitido, sem
+// token; o ACESSO aos dados autodeclarados é decidido à parte (AccessActions).
+// ---------------------------------------------------------------------------
+
+type VinculoStatus = "sem_vinculo" | "sem_acesso" | "com_acesso";
+
+type GlobalSearchResult = {
+  globalId: string;
+  nomeParcial: string;
+  idade: number | null;
+  jaTemPerfil: boolean;
+  vinculoStatus: VinculoStatus;
+};
+
+/** Ações pra sair de "sem_acesso" pra "com_acesso": token presencial ou
+ *  solicitação remota. Reaproveitado tanto num resultado de busca recém-
+ *  vinculado quanto num paciente que já estava vinculado de antes. */
+function AccessActions({
+  token,
+  globalId,
+  onGranted,
+}: {
+  token: string;
+  globalId: string;
+  onGranted: () => void;
+}) {
+  const [mode, setMode] = useState<"idle" | "code" | "requested">("idle");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const requestAccess = async () => {
+    setBusy(true);
+    try {
+      const r = await requestPatientAccess({ data: { token, globalId, purpose: "perfil" } });
+      if (!r.ok) {
+        toast.error("Não consegui enviar a solicitação.");
+        return;
+      }
+      setMode("requested");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitCode = async () => {
+    setBusy(true);
+    try {
+      const r = await consumePresentialAccessToken({
+        data: { token, globalId, accessCode: code.trim() },
+      });
+      if (!r.ok) {
+        toast.error("Código inválido ou expirado.");
+        return;
+      }
+      toast.success("Acesso liberado.");
+      onGranted();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (mode === "requested") {
+    return (
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        Solicitação enviada — aguardando aprovação do paciente.
+      </p>
+    );
+  }
+
+  if (mode === "code") {
+    return (
+      <div className="mt-1.5 flex gap-1.5">
+        <Input
+          placeholder="Código de 6 dígitos"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          className="h-8 text-xs"
+        />
+        <Button type="button" size="sm" disabled={busy || !code.trim()} onClick={submitCode}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "OK"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 flex gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={() => setMode("code")}
+        className="flex-1"
+      >
+        Tenho um código
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={requestAccess}
+        className="flex-1"
+      >
+        {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+        Solicitar acesso
+      </Button>
+    </div>
+  );
+}
+
+function GlobalLinkSearch({
+  token,
+  patientId,
+  onLinked,
+}: {
+  token: string;
+  patientId: string;
+  onLinked: (globalId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GlobalSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [statusOverride, setStatusOverride] = useState<Record<string, VinculoStatus>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const search = async () => {
+    if (query.trim().length < 2) return;
+    setSearching(true);
+    setStatusOverride({});
+    try {
+      const r = await searchPatientGlobal({ data: { token, query: query.trim() } });
+      if (!r.ok) {
+        toast.error("Não consegui buscar agora.");
+        return;
+      }
+      setResults(r.results);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const vincular = async (globalId: string) => {
+    setBusyId(globalId);
+    try {
+      const r = await linkMyPatientToGlobalId({ data: { token, patientId, globalId } });
+      if (!r.ok) {
+        toast.error("Não consegui vincular.");
+        return;
+      }
+      setStatusOverride((s) => ({ ...s, [globalId]: "sem_acesso" }));
+      onLinked(globalId);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-3">
+      <Label className="text-xs font-medium">Buscar identidade LifeLine</Label>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        Nome, CPF, e-mail, RG ou LifeLine ID.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <Input
+          placeholder="Buscar por nome, CPF, e-mail, RG ou LifeLine ID"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              search();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={query.trim().length < 2 || searching}
+          onClick={search}
+        >
+          {searching ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Search className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
+
+      {results && (
+        <ul className="mt-2 space-y-1.5">
+          {results.length === 0 && (
+            <li className="text-[11px] text-muted-foreground">Nenhum resultado.</li>
+          )}
+          {results.map((r) => {
+            const status = statusOverride[r.globalId] ?? r.vinculoStatus;
+            const busy = busyId === r.globalId;
+            return (
+              <li key={r.globalId} className="rounded-lg border border-border bg-card p-2.5 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-medium">{r.nomeParcial}</span>
+                    {r.idade !== null && (
+                      <span className="text-muted-foreground"> · {r.idade} anos</span>
+                    )}
+                  </div>
+                  {status === "com_acesso" && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      ✓ Acesso liberado
+                    </span>
+                  )}
+                  {status === "sem_acesso" && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                      Sem acesso
+                    </span>
+                  )}
+                </div>
+
+                {status === "sem_vinculo" && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => vincular(r.globalId)}
+                    className="mt-1.5 w-full brand-gradient text-primary-foreground"
+                  >
+                    {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    Vincular
+                  </Button>
+                )}
+                {status === "sem_acesso" && (
+                  <AccessActions
+                    token={token}
+                    globalId={r.globalId}
+                    onGranted={() => setStatusOverride((s) => ({ ...s, [r.globalId]: "com_acesso" }))}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

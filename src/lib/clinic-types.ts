@@ -29,6 +29,10 @@ export type Patient = {
   doctorId: string;
   /** Código único dentro do namespace do médico. Formato: "LFL-XXXX" (base-36 maiúsculo). */
   patientCode: string;
+  /** Vínculo com a identidade global do paciente (BKL-37) — null até o médico
+   *  vincular via LifeLine ID ou busca. Uma vez setado, nunca é trocado
+   *  (linkPatientToGlobalId só grava se ainda for null). */
+  globalId: string | null;
   nome: string;
   nascimento: string | null; // ISO date (yyyy-mm-dd)
   sexo: "feminino" | "masculino" | "outro" | null;
@@ -368,4 +372,6 @@ export const WA_TEMPLATES = {
     `Olá, ${paciente.split(" ")[0]}! Aqui é do consultório — ${medico}.`,
   confirmarEmail: (paciente: string, link: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Pedi para atualizar seu e-mail no cadastro do consultório. Só confirme se foi você mesmo quem pediu: ${link} — ${medico}`,
+  pedirAtualizacaoCadastro: (paciente: string, medico: string) =>
+    `Olá, ${paciente.split(" ")[0]}! Tipo sanguíneo, alergias, peso e altura no seu cadastro agora são atualizados por você direto no app LifeLine — se algo mudou, é só editar por lá. — ${medico}`,
 };

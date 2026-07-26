@@ -4,10 +4,12 @@
 // nowIso de "./db.server".
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
+import { updateRegistryProfile } from "./patients-registry.server";
 
-// Só estas 4 no MVP — SEM cruzamento com adesão de remédios (decisão de
-// escopo desta rodada). Cada métrica é 100% autodeclarada.
-export type MetricKind = "passos" | "hidratacao" | "sono" | "fc";
+// "peso"/"altura" (BKL-37) espelham patients_registry.patientProfile — é a
+// MESMA fonte que o cadastro do médico lê via mergeAutodeclarado, então
+// setMetric grava nos dois lugares para não divergir histórico × valor atual.
+export type MetricKind = "passos" | "hidratacao" | "sono" | "fc" | "peso" | "altura";
 
 export type PatientMetricEntry = {
   id: string;
@@ -48,6 +50,8 @@ export async function setMetric(
     result = created;
     return rows;
   });
+  if (kind === "peso") await updateRegistryProfile(globalId, { pesoKg: value });
+  if (kind === "altura") await updateRegistryProfile(globalId, { alturaCm: value });
   return result;
 }
 

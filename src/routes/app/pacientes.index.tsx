@@ -543,7 +543,12 @@ function PainelPacientes() {
         onOpenChange={setNovoOpen}
         columns={columns}
         onSubmit={(values, intake) =>
-          criar.mutate({ values, foundPatient: intake?.foundPatient ?? null, fileNames: intake?.fileNames ?? [] })
+          criar.mutate({
+            values,
+            foundPatient: intake?.foundPatient ?? null,
+            fileNames: intake?.fileNames ?? [],
+            globalId: intake?.globalId ?? null,
+          })
         }
         saving={criar.isPending}
       />

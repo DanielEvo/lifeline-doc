@@ -14,6 +14,9 @@ export type PatientIntakePayload = {
   foundPatient: Patient | null;
   /** Nomes dos arquivos já "lidos" pelo OCR simulado. */
   fileNames: string[];
+  /** BKL-37 — identidade global já resolvida (busca + token/elegibilidade)
+   *  antes da criação; o paciente nasce já vinculado. */
+  globalId?: string | null;
 };
 
 type IntakeResult =
@@ -22,7 +25,7 @@ type IntakeResult =
 
 export async function runPatientIntake(
   token: string,
-  { values, foundPatient, fileNames }: PatientIntakePayload,
+  { values, foundPatient, fileNames, globalId }: PatientIntakePayload,
 ): Promise<IntakeResult> {
   // Caminho 1 — paciente encontrado pelo ID: apenas anexa exames. A coluna
   // (status no painel) NÃO muda, por decisão do patch.
@@ -57,6 +60,7 @@ export async function runPatientIntake(
       medicacaoContinua: values.medicacaoContinua || null,
       pesoKg: values.pesoKg ? Number(values.pesoKg) : null,
       alturaCm: values.alturaCm ? Number(values.alturaCm) : null,
+      globalId: globalId ?? undefined,
     },
   });
   if (!created.ok) return { ok: false, error: created.error, mode: "novo" };

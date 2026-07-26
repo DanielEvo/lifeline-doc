@@ -34,6 +34,7 @@ export type PatientInput = {
   cpf?: string | null;
   telefone?: string | null;
   email?: string | null;
+  globalId?: string | null;
   convenio?: string | null;
   queixa?: string;
   column?: ClinicColumn;
@@ -74,6 +75,35 @@ export async function findPatientByCode(
   return rows.find((p) => p.doctorId === doctorId && p.patientCode === normalised);
 }
 
+export async function findPatientByGlobalId(
+  doctorId: string,
+  globalId: string,
+): Promise<Patient | undefined> {
+  const rows = await readRows<Patient>(FILE);
+  return rows.find((p) => p.doctorId === doctorId && p.globalId === globalId);
+}
+
+/** Vincula um prontuário à identidade global do paciente (BKL-37) — anti-relink:
+ *  só grava se ainda for null, nunca troca um vínculo já feito. */
+export async function linkPatientToGlobalId(
+  doctorId: string,
+  patientId: string,
+  globalId: string,
+): Promise<Patient | undefined> {
+  let updated: Patient | undefined;
+  await mutateRows<Patient>(FILE, (rows) => {
+    const p = rows.find((r) => r.id === patientId && r.doctorId === doctorId);
+    // Registros criados antes deste campo existir (amostras/seed) têm
+    // globalId AUSENTE (undefined), não null — `!== null` estrito deixaria
+    // passar batido. `if (p.globalId)` cobre null e undefined igual.
+    if (!p || p.globalId) return;
+    p.globalId = globalId;
+    p.updatedAt = nowIso();
+    updated = { ...p };
+  });
+  return updated;
+}
+
 export async function createPatient(doctorId: string, input: PatientInput): Promise<Patient> {
   const rows = await readRows<Patient>(FILE);
   let patientCode = "";
@@ -91,6 +121,7 @@ export async function createPatient(doctorId: string, input: PatientInput): Prom
     id: newId(),
     doctorId,
     patientCode,
+    globalId: input.globalId ?? null,
     nome: input.nome.trim(),
     nascimento: input.nascimento || null,
     sexo: input.sexo ?? null,

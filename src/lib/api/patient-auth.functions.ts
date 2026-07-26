@@ -154,12 +154,15 @@ export const getPatientTimeline = createServerFn({ method: "POST" })
       ok: true as const,
       linked: false as const,
       profile: {
+        publicCode: registry?.publicCode ?? null,
         birthDate: registry?.birthDate ?? null,
         sexo: registry?.sexo ?? null,
         telefone: registry?.telefone ?? null,
         cpf: registry?.cpf ?? null,
         tipoSanguineo: registry?.patientProfile?.tipoSanguineo ?? null,
         alergias: registry?.patientProfile?.alergias ?? null,
+        pesoKg: registry?.patientProfile?.pesoKg ?? null,
+        alturaCm: registry?.patientProfile?.alturaCm ?? null,
       },
       pendingMeasurements: pendingMeasurements.map((m) => ({
         id: m.id,
@@ -187,6 +190,8 @@ export const updatePatientProfile = createServerFn({ method: "POST" })
       cpf: z.string().max(20).optional(),
       tipoSanguineo: z.string().max(6).optional(),
       alergias: z.string().max(500).optional(),
+      pesoKg: z.number().min(0).max(500).optional(),
+      alturaCm: z.number().min(0).max(280).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -199,6 +204,8 @@ export const updatePatientProfile = createServerFn({ method: "POST" })
       cpf: data.cpf,
       tipoSanguineo: data.tipoSanguineo,
       alergias: data.alergias,
+      pesoKg: data.pesoKg,
+      alturaCm: data.alturaCm,
     });
     return { ok: true as const };
   });

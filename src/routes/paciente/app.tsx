@@ -8,6 +8,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
   CalendarDays,
+  Check,
   CheckCircle2,
   Circle,
   ClipboardList,
@@ -19,6 +20,7 @@ import {
   Footprints,
   Heart,
   Home,
+  KeyRound,
   Loader2,
   LogOut,
   Moon,
@@ -70,6 +72,11 @@ import {
   updateMyMedicationStatus,
 } from "@/lib/api/patient-medications.functions";
 import { getMyTodayMetrics, setMyMetric } from "@/lib/api/patient-metrics.functions";
+import {
+  generateMyPresentialToken,
+  listMyAccessRequests,
+  respondMyAccessRequest,
+} from "@/lib/api/patient-access.functions";
 import { BIOMARKER_CATALOG } from "@/lib/clinic-types";
 import {
   clearPatientSession,
@@ -100,12 +107,15 @@ type PendingItem = {
 };
 
 type Profile = {
+  publicCode: string | null;
   birthDate: string | null;
   sexo: "F" | "M" | "outro" | null;
   telefone: string | null;
   cpf: string | null;
   tipoSanguineo: string | null;
   alergias: string | null;
+  pesoKg: number | null;
+  alturaCm: number | null;
 };
 
 type TimelineData =
@@ -451,7 +461,13 @@ function HomeTab({
         setMetricsState({ status: "error" });
         return;
       }
-      setMetricsState({ status: "ready", date: r.date, metrics: r.metrics });
+      // getMyTodayMetrics também devolve peso/altura (BKL-37) — esses vivem
+      // no Perfil (espelham patients_registry), não no grid da Início.
+      const metrics = r.metrics.filter(
+        (m): m is { kind: MetricKind; value: number | null } =>
+          (METRIC_KINDS as readonly string[]).includes(m.kind),
+      );
+      setMetricsState({ status: "ready", date: r.date, metrics });
     } catch {
       setMetricsState({ status: "error" });
     }
@@ -1249,6 +1265,8 @@ function ProfileTab({
     cpf: profile.cpf ?? "",
     tipoSanguineo: profile.tipoSanguineo ?? "",
     alergias: profile.alergias ?? "",
+    pesoKg: profile.pesoKg != null ? String(profile.pesoKg) : "",
+    alturaCm: profile.alturaCm != null ? String(profile.alturaCm) : "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -1258,11 +1276,15 @@ function ProfileTab({
     form.telefone !== (profile.telefone ?? "") ||
     form.cpf !== (profile.cpf ?? "") ||
     form.tipoSanguineo !== (profile.tipoSanguineo ?? "") ||
-    form.alergias !== (profile.alergias ?? "");
+    form.alergias !== (profile.alergias ?? "") ||
+    form.pesoKg !== (profile.pesoKg != null ? String(profile.pesoKg) : "") ||
+    form.alturaCm !== (profile.alturaCm != null ? String(profile.alturaCm) : "");
 
   const submit = async () => {
     setSaving(true);
     try {
+      const pesoKg = parseFloat(form.pesoKg.replace(",", "."));
+      const alturaCm = parseFloat(form.alturaCm.replace(",", "."));
       const r = await updatePatientProfile({
         data: {
           token,
@@ -1272,6 +1294,8 @@ function ProfileTab({
           cpf: form.cpf || undefined,
           tipoSanguineo: form.tipoSanguineo || undefined,
           alergias: form.alergias || undefined,
+          pesoKg: form.pesoKg && !Number.isNaN(pesoKg) ? pesoKg : undefined,
+          alturaCm: form.alturaCm && !Number.isNaN(alturaCm) ? alturaCm : undefined,
         },
       });
       if (!r.ok) {
@@ -1295,6 +1319,10 @@ function ProfileTab({
           Dados autodeclarados — visíveis para você e para o médico que autorizar.
         </p>
       </div>
+
+      <AccessRequestsSection token={token} />
+
+      <LifeLineIdCard publicCode={profile.publicCode} token={token} />
 
       <div className="space-y-2.5 rounded-2xl border border-border bg-card p-3">
         <Field label="Data de nascimento">
@@ -1344,6 +1372,24 @@ function ProfileTab({
             </SelectContent>
           </Select>
         </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Peso (kg)">
+            <Input
+              inputMode="decimal"
+              placeholder="70"
+              value={form.pesoKg}
+              onChange={(e) => setForm({ ...form, pesoKg: e.target.value })}
+            />
+          </Field>
+          <Field label="Altura (cm)">
+            <Input
+              inputMode="decimal"
+              placeholder="170"
+              value={form.alturaCm}
+              onChange={(e) => setForm({ ...form, alturaCm: e.target.value })}
+            />
+          </Field>
+        </div>
         <Field
           label="CPF (opcional)"
           hint="Usado no futuro para conectar a médicos que você já visitou — nunca automático."
@@ -1386,6 +1432,157 @@ function ProfileTab({
         <LogOut className="mr-1.5 h-3.5 w-3.5" />
         Sair da conta
       </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LifeLine ID + código de acesso presencial (BKL-37)
+// ---------------------------------------------------------------------------
+
+function formatPublicCode(code: string): string {
+  return `${code.slice(0, 3)}-${code.slice(3, 6)}-${code.slice(6, 9)}`;
+}
+
+function LifeLineIdCard({ publicCode, token }: { publicCode: string | null; token: string }) {
+  const [issued, setIssued] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [remainingMs, setRemainingMs] = useState(0);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!issued) return;
+    const tick = () => setRemainingMs(Math.max(0, Date.parse(issued.expiresAt) - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [issued]);
+
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      const r = await generateMyPresentialToken({ data: { token, purpose: "perfil" } });
+      if (!r.ok) {
+        toast.error("Não consegui gerar o código.");
+        return;
+      }
+      setIssued({ code: r.code, expiresAt: r.expiresAt });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const expired = issued !== null && remainingMs <= 0;
+  const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
+  const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-card p-3">
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <ShieldCheck className="h-3 w-3 text-primary" /> Seu LifeLine ID
+      </div>
+      <div className="mt-1 font-mono text-base font-bold tracking-wider">
+        {publicCode ? formatPublicCode(publicCode) : "—"}
+      </div>
+
+      {issued && !expired ? (
+        <div className="mt-3 flex items-center justify-between rounded-lg bg-card p-2.5 ring-1 ring-border">
+          <span className="font-mono text-lg font-bold tracking-widest">{issued.code}</span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+            <Clock className="h-2.5 w-2.5" /> Expira em {mm}:{ss}
+          </span>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={generating}
+          onClick={generate}
+          className="mt-2 w-full"
+        >
+          {generating ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Gerar código para consulta presencial
+        </Button>
+      )}
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        Informe este código de 6 dígitos ao médico durante a consulta — vale por 10 minutos.
+      </p>
+    </div>
+  );
+}
+
+type AccessRequestItem = {
+  id: string;
+  doctorNome: string;
+  purpose: "perfil" | "historico";
+  createdAt: string;
+};
+
+function AccessRequestsSection({ token }: { token: string }) {
+  const [requests, setRequests] = useState<AccessRequestItem[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = async () => {
+    const r = await listMyAccessRequests({ data: { token } });
+    if (r.ok) setRequests(r.requests);
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const respond = async (id: string, approve: boolean) => {
+    setBusyId(id);
+    try {
+      const r = await respondMyAccessRequest({ data: { token, requestId: id, approve } });
+      if (!r.ok) {
+        toast.error("Não consegui responder à solicitação.");
+        return;
+      }
+      toast.success(approve ? "Acesso aprovado." : "Solicitação negada.");
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (requests.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <div className="text-xs font-semibold">Solicitações de acesso</div>
+      <ul className="mt-2 space-y-1.5">
+        {requests.map((r) => (
+          <li key={r.id} className="rounded-xl border border-border bg-muted/30 p-2.5">
+            <p className="text-[11px]">
+              <span className="font-medium">{r.doctorNome}</span> pediu acesso ao seu perfil
+            </p>
+            <div className="mt-1.5 flex gap-1.5">
+              <Button
+                size="sm"
+                disabled={busyId === r.id}
+                onClick={() => respond(r.id, true)}
+                className="flex-1 brand-gradient text-primary-foreground"
+              >
+                <Check className="mr-1 h-3.5 w-3.5" /> Aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busyId === r.id}
+                onClick={() => respond(r.id, false)}
+                className="flex-1"
+              >
+                <X className="mr-1 h-3.5 w-3.5" /> Negar
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
