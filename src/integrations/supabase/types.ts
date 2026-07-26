@@ -41,6 +41,33 @@ export type Database = {
         }
         Relationships: []
       }
+      loinc_pt_br: {
+        Row: {
+          class: string
+          component_pt: string
+          loinc_code: string
+          scale_typ: string | null
+          short_name: string | null
+          system: string | null
+        }
+        Insert: {
+          class: string
+          component_pt: string
+          loinc_code: string
+          scale_typ?: string | null
+          short_name?: string | null
+          system?: string | null
+        }
+        Update: {
+          class?: string
+          component_pt?: string
+          loinc_code?: string
+          scale_typ?: string | null
+          short_name?: string | null
+          system?: string | null
+        }
+        Relationships: []
+      }
       measurements: {
         Row: {
           created_at: string
