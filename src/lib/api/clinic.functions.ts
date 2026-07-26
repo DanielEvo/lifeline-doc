@@ -63,6 +63,7 @@ import {
 import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
 import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
+import { resolveLoincCode } from "../loinc-mapping.server";
 import {
   ageFrom,
   BIOMARKER_CATALOG,
@@ -1035,17 +1036,45 @@ export const extractExamDocument = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     try {
       const result = await extractBiomarkersFromDocument(data.fileBase64, data.mimeType);
-      const items = result.biomarkers.map((b) => {
-        const match = resolveBiomarkerName(b.rawName);
-        return {
-          rawName: b.rawName,
-          value: b.value,
-          unit: match?.unit ?? b.unit,
-          refMin: match?.min ?? null,
-          refMax: match?.max ?? null,
-          matchedName: match?.name ?? null,
-        };
-      });
+      const items = await Promise.all(
+        result.biomarkers.map(async (b) => {
+          const match = resolveBiomarkerName(b.rawName);
+          if (match) {
+            // catálogo local já bateu — comportamento inalterado, mantém
+            // faixa de referência calibrada do catálogo
+            return {
+              rawName: b.rawName,
+              value: b.value,
+              unit: match.unit ?? b.unit,
+              refMin: match.min,
+              refMax: match.max,
+              matchedName: match.name,
+              loincCode: match.loincCode ?? null,
+              loincConfidence: match.loincCode ? ("exact" as const) : ("unmapped" as const),
+            };
+          }
+
+          // catálogo não bateu — tenta LOINC como rede de segurança antes
+          // de cair pra "não reconhecido" (intervenção manual)
+          const loincMatch = await resolveLoincCode(b.rawName);
+          return {
+            rawName: b.rawName,
+            value: b.value,
+            unit: b.unit,
+            refMin: null,
+            refMax: null,
+            // matchedName fica null propositalmente — sem faixa de
+            // referência calibrada, o médico ainda precisa confirmar
+            // manualmente o nome antes de virar biomarcador oficial, mas a
+            // UI pode mostrar o nome LOINC sugerido (loincSuggestion) como
+            // dica em vez de só "não reconhecido"
+            matchedName: null,
+            loincCode: loincMatch?.loincCode ?? null,
+            loincConfidence: loincMatch ? loincMatch.confidence : ("unmapped" as const),
+            loincSuggestion: loincMatch?.componentPt ?? null,
+          };
+        }),
+      );
       return { ok: true as const, collectionDate: result.collectionDate, items };
     } catch (e) {
       return { ok: false as const, error: "extraction_failed" as const, detail: String(e) };
