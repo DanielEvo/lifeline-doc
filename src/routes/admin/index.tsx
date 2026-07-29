@@ -2,13 +2,16 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  HeartPulse,
   Inbox,
   KeyRound,
   Loader2,
   Lock,
+  LogIn,
   MessageCircle,
   Pill,
   RefreshCw,
+  Stethoscope,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,10 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { adminChangeCredentials, adminGetMe, adminLogout } from "@/lib/api/admin-auth.functions";
+import { googleLogin } from "@/lib/api/auth.functions";
 import { getFeedback } from "@/lib/api/feedback.functions";
 import { getLeads } from "@/lib/api/leads.functions";
 import { getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import { patientGoogleLogin } from "@/lib/api/patient-auth.functions";
 import { clearAdminSession, getAdminSession } from "@/lib/admin-session";
+import { setSession } from "@/lib/session";
+import { setPatientSession } from "@/lib/patient-session";
 import type {
   ConsultationEntry,
   FeedbackEntry,
@@ -143,6 +150,8 @@ function Admin() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-8 px-5 py-8">
+        <QuickAccessSection />
+
         <CredentialsSection token={token} onChanged={sair} />
 
         {/* Feedback summary */}
@@ -277,6 +286,74 @@ function Admin() {
         </section>
       </main>
     </div>
+  );
+}
+
+function QuickAccessSection() {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState<"medico" | "paciente" | null>(null);
+
+  const entrarComoMedico = async () => {
+    if (busy) return;
+    setBusy("medico");
+    try {
+      const r = await googleLogin({ data: {} });
+      if (r.ok) {
+        setSession({ token: r.token, nome: r.doctor.nome, email: r.doctor.email });
+        navigate({ to: "/app" });
+      } else {
+        toast.error(r.error);
+      }
+    } catch {
+      toast.error("Não consegui entrar como médico agora.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const entrarComoPaciente = async () => {
+    if (busy) return;
+    setBusy("paciente");
+    try {
+      const r = await patientGoogleLogin({ data: {} });
+      if (r.ok) {
+        setPatientSession({ token: r.token, nome: r.patient.nome, email: r.patient.email });
+        navigate({ to: "/paciente/app" });
+      } else {
+        toast.error(r.error);
+      }
+    } catch {
+      toast.error("Não consegui entrar como paciente agora.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-2">
+        <LogIn className="h-4 w-4 text-primary" />
+        <h2 className="text-base font-semibold">Acessar como</h2>
+      </div>
+      <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-card p-4">
+        <Button variant="outline" size="sm" disabled={busy !== null} onClick={entrarComoMedico}>
+          {busy === "medico" ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Stethoscope className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Entrar como médico (teste)
+        </Button>
+        <Button variant="outline" size="sm" disabled={busy !== null} onClick={entrarComoPaciente}>
+          {busy === "paciente" ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <HeartPulse className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Entrar como paciente (teste)
+        </Button>
+      </div>
+    </section>
   );
 }
 
