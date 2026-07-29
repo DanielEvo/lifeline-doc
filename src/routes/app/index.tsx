@@ -34,6 +34,7 @@ import {
   ageFrom,
   formatHourBR,
   initialsOf,
+  isConsultaAppointment,
   isSameLocalDay,
   todayIso,
   type Appointment,
@@ -125,6 +126,7 @@ function PainelDoDia() {
   const apptHoje = useMemo(() => {
     const map = new Map<string, Appointment>();
     for (const a of data?.appointments ?? []) {
+      if (!isConsultaAppointment(a)) continue;
       if (!isSameLocalDay(a.dateTime, hoje)) continue;
       if (a.status === "realizada") continue;
       if (!map.has(a.patientId)) map.set(a.patientId, a);

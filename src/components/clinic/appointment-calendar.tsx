@@ -12,7 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Lock,
   Settings2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,7 +41,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { scheduleAppointment, rescheduleAppointment } from "@/lib/api/clinic.functions";
+import { Switch } from "@/components/ui/switch";
+import { deleteMyAppointment, scheduleAppointment, rescheduleAppointment } from "@/lib/api/clinic.functions";
 import {
   formatHourBR,
   initialsOf,
@@ -119,23 +122,75 @@ export function AppointmentCalendar({
     return d;
   });
   const [settings, setSettings] = useState<CalendarSettings>(() => loadSettings(token));
-  const [pending, setPending] = useState<{ patient: Patient; dateTime: string } | null>(null);
+  const [pending, setPending] = useState<{ patient: Patient | null; dateTime: string } | null>(null);
   const [note, setNote] = useState("");
+  const [isBloqueio, setIsBloqueio] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [repetir, setRepetir] = useState(false);
+  const [vezes, setVezes] = useState(4);
 
   useEffect(() => saveSettings(token, settings), [token, settings]);
 
   const byId = useMemo(() => new Map(patients.map((p) => [p.id, p])), [patients]);
 
+  const resetDialogFields = () => {
+    setNote("");
+    setIsBloqueio(false);
+    setMotivo("");
+    setSelectedPatientId("");
+    setRepetir(false);
+    setVezes(4);
+  };
+
+  const closeDialog = () => {
+    setPending(null);
+    resetDialogFields();
+  };
+
   const agendar = useMutation({
-    mutationFn: (v: { patientId: string; dateTime: string; note: string | null }) =>
-      scheduleAppointment({ data: { token, ...v } }),
+    mutationFn: (v: {
+      patientId: string | null;
+      dateTime: string;
+      note: string | null;
+      kind: "consulta" | "bloqueio";
+      label: string | null;
+      recurrenceWeeks: number;
+    }) =>
+      scheduleAppointment({
+        data: {
+          token,
+          patientId: v.patientId ?? undefined,
+          dateTime: v.dateTime,
+          note: v.note,
+          kind: v.kind,
+          label: v.label,
+          recurrenceWeeks: v.recurrenceWeeks,
+        },
+      }),
+    onSuccess: (r, v) => {
+      if (!r.ok) return toast.error(v.kind === "bloqueio" ? "Não consegui bloquear o horário." : "Não consegui agendar.");
+      if (v.kind === "bloqueio") {
+        toast.success("Horário bloqueado.");
+      } else {
+        const nome = (pending?.patient?.nome ?? byId.get(v.patientId ?? "")?.nome ?? "Paciente").split(" ")[0];
+        const criados = "appointments" in r ? r.appointments?.length ?? 1 : 1;
+        toast.success(
+          criados > 1
+            ? `${nome} agendado(a) ${criados}x, toda semana a partir de ${new Date(v.dateTime).toLocaleDateString("pt-BR")}.`
+            : `${nome} agendado(a) para ${new Date(v.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+        );
+      }
+      closeDialog();
+      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+  });
+
+  const excluirBloqueio = useMutation({
+    mutationFn: (id: string) => deleteMyAppointment({ data: { token, id } }),
     onSuccess: (r) => {
-      if (!r.ok) return toast.error("Não consegui agendar.");
-      toast.success(
-        `${pending?.patient.nome.split(" ")[0]} agendado(a) para ${new Date(pending!.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
-      );
-      setPending(null);
-      setNote("");
+      if (!r.ok) return toast.error("Não consegui remover o bloqueio.");
+      toast.success("Bloqueio removido.");
       qc.invalidateQueries({ queryKey: ["workspace"] });
     },
   });
@@ -179,8 +234,40 @@ export function AppointmentCalendar({
   const openConfirm = (patientId: string, dateTime: string) => {
     const p = byId.get(patientId);
     if (!p) return;
+    resetDialogFields();
     setPending({ patient: p, dateTime });
-    setNote("");
+  };
+
+  const openEmptySlot = (dateTime: string) => {
+    resetDialogFields();
+    setPending({ patient: null, dateTime });
+  };
+
+  const chosenPatientId = pending?.patient?.id ?? selectedPatientId;
+  const canConfirm = isBloqueio || !!chosenPatientId;
+
+  const confirmar = () => {
+    if (!pending) return;
+    if (isBloqueio) {
+      agendar.mutate({
+        patientId: null,
+        dateTime: pending.dateTime,
+        note: null,
+        kind: "bloqueio",
+        label: motivo.trim() || null,
+        recurrenceWeeks: 0,
+      });
+      return;
+    }
+    if (!chosenPatientId) return;
+    agendar.mutate({
+      patientId: chosenPatientId,
+      dateTime: pending.dateTime,
+      note: note.trim() || null,
+      kind: "consulta",
+      label: null,
+      recurrenceWeeks: repetir ? vezes : 0,
+    });
   };
 
   return (
@@ -233,6 +320,8 @@ export function AppointmentCalendar({
             onDropPatient={openConfirm}
             onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
+            onSlotClick={openEmptySlot}
+            onDeleteBloqueio={(id) => excluirBloqueio.mutate(id)}
           />
         )}
         {view === "semana" && (
@@ -244,6 +333,8 @@ export function AppointmentCalendar({
             onDropPatient={openConfirm}
             onMoveAppointment={(id, dateTime) => remarcar.mutate({ id, dateTime })}
             onOpenPatient={onOpenPatient}
+            onSlotClick={openEmptySlot}
+            onDeleteBloqueio={(id) => excluirBloqueio.mutate(id)}
           />
         )}
         {view === "mes" && (
@@ -262,12 +353,11 @@ export function AppointmentCalendar({
 
 
       {/* Confirmação */}
-      <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+      <Dialog open={!!pending} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Confirmar agendamento</DialogTitle>
+            <DialogTitle>{isBloqueio ? "Bloquear horário" : "Confirmar agendamento"}</DialogTitle>
             <DialogDescription>
-              {pending?.patient.nome} ·{" "}
               {pending &&
                 new Date(pending.dateTime).toLocaleString("pt-BR", {
                   weekday: "short",
@@ -278,32 +368,85 @@ export function AppointmentCalendar({
                 })}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1">
-            <Label htmlFor="ap-nota" className="text-xs">Observação (opcional)</Label>
-            <Input
-              id="ap-nota"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Retorno, avaliação de exames…"
-              maxLength={200}
-            />
+
+          <div className="space-y-3">
+            {!isBloqueio &&
+              (pending?.patient ? (
+                <div className="text-sm font-medium">{pending.patient.nome}</div>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-xs">Paciente</Label>
+                  <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Selecionar paciente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patients.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+
+            <label className="flex items-center justify-between gap-2 text-xs">
+              <span>Bloquear horário (sem paciente)</span>
+              <Switch checked={isBloqueio} onCheckedChange={setIsBloqueio} />
+            </label>
+
+            {isBloqueio ? (
+              <div className="space-y-1">
+                <Label htmlFor="ap-motivo" className="text-xs">Motivo</Label>
+                <Input
+                  id="ap-motivo"
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Almoço, bloqueio administrativo…"
+                  maxLength={80}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label htmlFor="ap-nota" className="text-xs">Observação (opcional)</Label>
+                  <Input
+                    id="ap-nota"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Retorno, avaliação de exames…"
+                    maxLength={200}
+                  />
+                </div>
+                <label className="flex items-center justify-between gap-2 text-xs">
+                  <span>Repetir semanalmente</span>
+                  <Switch checked={repetir} onCheckedChange={setRepetir} />
+                </label>
+                {repetir && (
+                  <div className="space-y-1">
+                    <Label htmlFor="ap-vezes" className="text-xs">Quantas vezes</Label>
+                    <Input
+                      id="ap-vezes"
+                      type="number"
+                      min={1}
+                      max={11}
+                      value={vezes}
+                      onChange={(e) => setVezes(Math.max(1, Math.min(11, Number(e.target.value) || 1)))}
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button
-              disabled={agendar.isPending}
-              onClick={() =>
-                pending &&
-                agendar.mutate({
-                  patientId: pending.patient.id,
-                  dateTime: pending.dateTime,
-                  note: note.trim() || null,
-                })
-              }
+              disabled={agendar.isPending || !canConfirm}
+              onClick={confirmar}
               className="brand-gradient text-primary-foreground"
             >
               {agendar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-              Confirmar
+              {isBloqueio ? "Bloquear" : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -390,6 +533,8 @@ function TimeGrid({
   onDropPatient,
   onMoveAppointment,
   onOpenPatient,
+  onSlotClick,
+  onDeleteBloqueio,
 }: {
   days: Date[];
   settings: CalendarSettings;
@@ -398,6 +543,8 @@ function TimeGrid({
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onOpenPatient?: (p: Patient) => void;
+  onSlotClick: (dateTime: string) => void;
+  onDeleteBloqueio: (id: string) => void;
 }) {
   const { slotMinutes, startHour, endHour } = settings;
   const slotsPerHour = 60 / slotMinutes;
@@ -467,6 +614,8 @@ function TimeGrid({
                   onDropPatient={onDropPatient}
                   onMoveAppointment={onMoveAppointment}
                   onOpenPatient={onOpenPatient}
+                  onSlotClick={onSlotClick}
+                  onDeleteBloqueio={onDeleteBloqueio}
                 />
               );
             })}
@@ -484,6 +633,8 @@ function Slot({
   onDropPatient,
   onMoveAppointment,
   onOpenPatient,
+  onSlotClick,
+  onDeleteBloqueio,
 }: {
   slotDate: Date;
   appts: Appointment[];
@@ -491,11 +642,35 @@ function Slot({
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onOpenPatient?: (p: Patient) => void;
+  onSlotClick: (dateTime: string) => void;
+  onDeleteBloqueio: (id: string) => void;
 }) {
   const [hover, setHover] = useState(false);
+  const targetIso = toIsoLocal(slotDate);
+  const bloqueio = appts.find((a) => a.kind === "bloqueio");
+
+  // horário bloqueado: nem drop nem clique-pra-agendar funcionam aqui — só o X remove
+  if (bloqueio) {
+    return (
+      <div className="relative flex min-h-[36px] items-start gap-1 bg-slate-200 p-1 dark:bg-slate-800/70">
+        <Lock className="mt-0.5 h-2.5 w-2.5 shrink-0 text-slate-500 dark:text-slate-400" />
+        <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-slate-600 dark:text-slate-300">
+          {bloqueio.label || "Bloqueado"}
+        </span>
+        <button
+          type="button"
+          title="Remover bloqueio"
+          onClick={() => onDeleteBloqueio(bloqueio.id)}
+          className="shrink-0 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
   const full = appts.length >= MAX_PARALLEL;
   const warn = appts.length >= 2; // 2 já sinaliza; 3 é o limite
-  const targetIso = toIsoLocal(slotDate);
 
   return (
     <div
@@ -524,9 +699,12 @@ function Slot({
         const patientId = e.dataTransfer.getData(DRAG_KEY) || e.dataTransfer.getData("text/plain");
         if (patientId) onDropPatient(patientId, targetIso);
       }}
+      onClick={() => {
+        if (appts.length === 0) onSlotClick(targetIso);
+      }}
       className={`relative min-h-[36px] bg-card p-0.5 transition ${
-        hover ? "bg-primary/10 ring-1 ring-primary" : ""
-      } ${full ? "bg-red-50 dark:bg-red-950/40" : ""}`}
+        appts.length === 0 ? "cursor-pointer hover:bg-primary/5" : ""
+      } ${hover ? "bg-primary/10 ring-1 ring-primary" : ""} ${full ? "bg-red-50 dark:bg-red-950/40" : ""}`}
     >
       {appts.length >= MAX_PARALLEL && (
         <div className="absolute right-1 top-1 flex items-center gap-0.5 rounded-full bg-red-500/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
@@ -541,6 +719,7 @@ function Slot({
       )}
       <div className="flex flex-wrap gap-0.5">
         {appts.map((a) => {
+          if (!a.patientId) return null;
           const p = byId.get(a.patientId);
           if (!p) return null;
           return (
@@ -551,7 +730,10 @@ function Slot({
                 e.dataTransfer.setData(DRAG_APPT, a.id);
                 e.dataTransfer.effectAllowed = "move";
               }}
-              onClick={() => onOpenPatient?.(p)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenPatient?.(p);
+              }}
               title={`${p.nome} · ${formatHourBR(a.dateTime)}${a.note ? ` · ${a.note}` : ""} — arraste para remarcar`}
               className={`flex max-w-full cursor-grab items-center gap-1 truncate rounded-md bg-gradient-to-br ${p.tint} px-1.5 py-0.5 text-[10px] font-medium text-white shadow active:cursor-grabbing ${
                 warn ? "ring-1 ring-amber-400" : ""

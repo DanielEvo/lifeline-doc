@@ -41,7 +41,14 @@ import {
 } from "../patient-access.server";
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
-import { createAppointment, listAppointments, setAppointmentStatus, updateAppointmentDateTime } from "../agenda.server";
+import {
+  createAppointment,
+  createRecurringAppointments,
+  deleteAppointment,
+  listAppointments,
+  setAppointmentStatus,
+  updateAppointmentDateTime,
+} from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
 import {
   getMemedPrescriberToken,
@@ -442,22 +449,58 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       token,
-      patientId: z.string().min(1),
+      patientId: z.string().min(1).optional(),
       dateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida"),
       note: z.string().max(200).nullish(),
+      kind: z.enum(["consulta", "bloqueio"]).optional().default("consulta"),
+      label: z.string().max(80).nullish(),
+      recurrenceWeeks: z.number().int().min(0).max(11).optional().default(0),
     }),
   )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
+
+    if (data.kind === "bloqueio") {
+      if (data.patientId) return { ok: false as const, error: "patient_not_allowed" as const };
+      const appointment = await createAppointment(doctor.id, {
+        dateTime: new Date(data.dateTime).toISOString(),
+        note: data.note,
+        kind: "bloqueio",
+        label: data.label,
+      });
+      return { ok: true as const, appointment };
+    }
+
+    if (!data.patientId) return { ok: false as const, error: "patient_required" as const };
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
+    const dateTimeIso = new Date(data.dateTime).toISOString();
+
+    if (data.recurrenceWeeks > 0) {
+      const appointments = await createRecurringAppointments(
+        doctor.id,
+        { patientId: data.patientId, dateTime: dateTimeIso, note: data.note },
+        data.recurrenceWeeks,
+      );
+      return { ok: true as const, appointment: appointments[0], appointments };
+    }
+
     const appointment = await createAppointment(doctor.id, {
       patientId: data.patientId,
-      dateTime: new Date(data.dateTime).toISOString(),
+      dateTime: dateTimeIso,
       note: data.note,
     });
     return { ok: true as const, appointment };
+  });
+
+export const deleteMyAppointment = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const ok = await deleteAppointment(doctor.id, data.id);
+    return ok ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
   });
 
 export const setMyAppointmentStatus = createServerFn({ method: "POST" })

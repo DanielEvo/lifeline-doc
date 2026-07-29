@@ -68,6 +68,7 @@ import {
   formatDateBR,
   formatHourBR,
   initialsOf,
+  isConsultaAppointment,
   isOverdue,
   isSameLocalDay,
   periodOf,
@@ -233,14 +234,17 @@ function PainelPacientes() {
 
   const hoje = todayIso();
   const consultasHoje = useMemo(
-    () => appointments.filter((a) => isSameLocalDay(a.dateTime, hoje)),
+    () => appointments.filter(isConsultaAppointment).filter((a) => isSameLocalDay(a.dateTime, hoje)),
     [appointments, hoje],
   );
 
   // faltas a reengajar: a ÚLTIMA consulta do paciente foi "faltou"
   const faltas = useMemo(() => {
-    const last = new Map<string, Appointment>();
-    for (const a of appointments) last.set(a.patientId, a); // já vem ordenado por data
+    const last = new Map<string, Appointment & { patientId: string }>();
+    for (const a of appointments) {
+      if (!isConsultaAppointment(a)) continue;
+      last.set(a.patientId, a); // já vem ordenado por data
+    }
     return [...last.values()].filter((a) => a.status === "faltou");
   }, [appointments]);
 
@@ -522,7 +526,8 @@ function PainelPacientes() {
                 ? listaFaltas.map((a) => a.patientId)
                 : listaCobrancas.map((c) => c.patientId),
         );
-        const apptsVisiveis = appointments.filter((a) => idsVisiveis.has(a.patientId));
+        // bloqueios não pertencem a paciente nenhum — sempre visíveis, independente do filtro de view
+        const apptsVisiveis = appointments.filter((a) => !isConsultaAppointment(a) || idsVisiveis.has(a.patientId));
         return (
           <AppointmentCalendar
             token={token}
@@ -749,7 +754,7 @@ function VistaHoje({
   onStatus,
   onAgendar,
 }: {
-  lista: Appointment[];
+  lista: (Appointment & { patientId: string })[];
   byId: Map<string, Patient>;
   medico: string;
   onAbrir: (p: Patient) => void;
@@ -830,7 +835,7 @@ function VistaFaltas({
   onAbrir,
   onAgendar,
 }: {
-  lista: Appointment[];
+  lista: (Appointment & { patientId: string })[];
   byId: Map<string, Patient>;
   medico: string;
   onAbrir: (p: Patient) => void;

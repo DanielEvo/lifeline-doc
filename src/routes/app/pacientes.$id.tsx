@@ -102,6 +102,7 @@ import {
   formatDateTimeBR,
   formatHourBR,
   initialsOf,
+  isConsultaAppointment,
   MED_CATALOG,
   TABAGISMO_LABEL,
   WA_TEMPLATES,
@@ -381,7 +382,9 @@ function Prontuario() {
 
       <MiniAgenda
         appointments={
-          wsq.data?.ok ? wsq.data.appointments.filter((a) => a.patientId === id) : []
+          wsq.data?.ok
+            ? wsq.data.appointments.filter((a) => isConsultaAppointment(a) && a.patientId === id)
+            : []
         }
         token={token}
         onAgendar={() => setAgendarOpen(true)}

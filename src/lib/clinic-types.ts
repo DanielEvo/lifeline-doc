@@ -111,13 +111,23 @@ export type AppointmentStatus = "agendada" | "confirmada" | "realizada" | "falto
 export type Appointment = {
   id: string;
   doctorId: string;
-  patientId: string;
+  // null só quando kind === "bloqueio" (horário travado, sem paciente).
+  patientId: string | null;
   dateTime: string; // ISO
   status: AppointmentStatus;
   note: string | null;
+  kind: "consulta" | "bloqueio"; // ausente em dados antigos = "consulta"
+  label: string | null; // motivo do bloqueio (ex.: "Almoço")
+  recurrenceId: string | null; // agrupa consultas geradas na mesma série semanal
   createdAt: string;
   updatedAt: string;
 };
+
+/** Narrowing helper — todo consumidor que assume patientId presente deve
+ *  filtrar por isso antes de usar (ex.: listas de "hoje"/"faltas" por paciente). */
+export function isConsultaAppointment(a: Appointment): a is Appointment & { patientId: string } {
+  return a.kind !== "bloqueio";
+}
 
 export type Charge = {
   id: string;
