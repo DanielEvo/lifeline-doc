@@ -17,6 +17,8 @@ export async function listEvolutions(doctorId: string, patientId: string): Promi
   const rows = await readRows<Evolution>(FILE);
   return rows
     .filter((e) => e.doctorId === doctorId && e.patientId === patientId)
+    // registros antigos não têm servicosAplicados — normaliza sem migrar o arquivo
+    .map((e) => ({ ...e, servicosAplicados: e.servicosAplicados ?? [] }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -25,6 +27,7 @@ export async function createEvolution(
   patientId: string,
   evolucao: string,
   planoTerapeutico: string,
+  servicosAplicados?: Evolution["servicosAplicados"],
 ): Promise<Evolution> {
   const now = nowIso();
   const entry: Evolution = {
@@ -36,6 +39,7 @@ export async function createEvolution(
     soap: deriveSoap(evolucao),
     sealed: null,
     prescription: null,
+    servicosAplicados: servicosAplicados ?? [],
     createdAt: now,
     updatedAt: now,
   };
@@ -51,6 +55,8 @@ export async function updateEvolution(
   evolucao: string,
   /** Ausente = não mexe no plano já salvo (ex.: só reeditando o texto da evolução). */
   planoTerapeutico?: string,
+  /** Ausente = não mexe nos serviços já salvos (mesma regra do planoTerapeutico). */
+  servicosAplicados?: Evolution["servicosAplicados"],
 ): Promise<Evolution | { error: "sealed" | "not_found" }> {
   let result: Evolution | { error: "sealed" | "not_found" } = { error: "not_found" };
   await mutateRows<Evolution>(FILE, (rows) => {
@@ -62,6 +68,7 @@ export async function updateEvolution(
     }
     e.evolucao = evolucao.trim();
     if (planoTerapeutico !== undefined) e.planoTerapeutico = planoTerapeutico.trim();
+    if (servicosAplicados !== undefined) e.servicosAplicados = servicosAplicados;
     // notaPrivada não é derivada do texto — preserva o que o médico já anotou
     const derived = deriveSoap(evolucao);
     e.soap = { ...derived, a: { ...derived.a, notaPrivada: e.soap.a.notaPrivada } };

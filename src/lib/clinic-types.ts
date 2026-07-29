@@ -129,6 +129,20 @@ export function isConsultaAppointment(a: Appointment): a is Appointment & { pati
   return a.kind !== "bloqueio";
 }
 
+// Catálogo de produtos/serviços do consultório — alimenta os chips de
+// "serviços aplicados" na Evolução (ver Evolution.servicosAplicados).
+export type Service = {
+  id: string;
+  doctorId: string;
+  nome: string;
+  descricao: string | null;
+  preco: number;
+  duracaoMin: number | null;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Charge = {
   id: string;
   doctorId: string;
@@ -288,6 +302,9 @@ export type Evolution = {
   soap: Soap;
   sealed: { protocol: string; signature: string; sealedAt: string } | null;
   prescription: { code: string; meds: PrescriptionMed[]; url: string; createdAt: string } | null;
+  // Snapshot de nome/preço no momento do registro — se o serviço mudar ou for
+  // desativado depois, a evolução já salva não muda (mesma lógica do selo).
+  servicosAplicados: { serviceId: string; nome: string; preco: number }[];
   createdAt: string;
   updatedAt: string;
 };

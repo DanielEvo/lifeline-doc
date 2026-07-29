@@ -26,6 +26,7 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
 import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
+import { Route as AppProdutosIndexRouteImport } from './routes/app/produtos.index'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
@@ -116,6 +117,11 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
   path: '/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppProdutosIndexRoute = AppProdutosIndexRouteImport.update({
+  id: '/produtos/',
+  path: '/produtos/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
   path: '/pacientes/',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
+  '/app/produtos/': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
+  '/app/produtos': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
+  '/app/produtos/': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
+    | '/app/produtos/'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes'
+    | '/app/produtos'
     | '/api/public/payments/webhook'
   id:
     | '__root__'
@@ -275,6 +286,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/app/pacientes/'
+    | '/app/produtos/'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -419,6 +431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/produtos/': {
+      id: '/app/produtos/'
+      path: '/produtos'
+      fullPath: '/app/produtos/'
+      preLoaderRoute: typeof AppProdutosIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/pacientes/': {
       id: '/app/pacientes/'
       path: '/pacientes'
@@ -455,6 +474,7 @@ interface AppRouteRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppPacientesIdRoute: typeof AppPacientesIdRoute
   AppPacientesIndexRoute: typeof AppPacientesIndexRoute
+  AppProdutosIndexRoute: typeof AppProdutosIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
@@ -462,6 +482,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppPacientesIdRoute: AppPacientesIdRoute,
   AppPacientesIndexRoute: AppPacientesIndexRoute,
+  AppProdutosIndexRoute: AppProdutosIndexRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

@@ -86,6 +86,7 @@ import {
   updateMyPatient,
 } from "@/lib/api/clinic.functions";
 import { invalidateWorkspace, ScheduleDialog } from "@/components/clinic/action-dialogs";
+import { listMyServices } from "@/lib/api/services.functions";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
@@ -98,6 +99,7 @@ import {
   calcImc,
   DEFAULT_COLUMNS,
   ETILISMO_LABEL,
+  formatBRL,
   formatDateBR,
   formatDateTimeBR,
   formatHourBR,
@@ -1424,6 +1426,17 @@ function NovaEvolucao({
   const [historicoId, setHistoricoId] = useState<string | null>(null);
   const preview = useMemo(() => (texto.trim().length > 3 ? deriveSoap(texto) : null), [texto]);
 
+  // Produtos/serviços aplicados nesta evolução — snapshot de nome/preço vai
+  // junto no save (AGD-04); só os ativos entram na seleção.
+  const svc = useQuery({
+    queryKey: ["services"],
+    queryFn: () => listMyServices({ data: { token } }),
+  });
+  const activeServices = svc.data?.ok ? svc.data.services.filter((s) => s.ativo) : [];
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const toggleService = (id: string) =>
+    setSelectedServiceIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
   // Sincroniza com o clique na linha do tempo: quando o pai muda
   // `activeHistoricoId`, entramos em modo Histórico com aquela consulta.
   useEffect(() => {
@@ -1437,12 +1450,17 @@ function NovaEvolucao({
   }, [activeHistoricoId]);
 
   const salvar = useMutation({
-    mutationFn: () =>
-      saveEvolution({ data: { token, patientId, evolucao: texto } }),
+    mutationFn: () => {
+      const servicosAplicados = activeServices
+        .filter((s) => selectedServiceIds.includes(s.id))
+        .map((s) => ({ serviceId: s.id, nome: s.nome, preco: s.preco }));
+      return saveEvolution({ data: { token, patientId, evolucao: texto, servicosAplicados } });
+    },
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar a evolução.");
       toast.success("Evolução registrada.");
       setTexto("");
+      setSelectedServiceIds([]);
       onSaved();
     },
   });
@@ -1562,6 +1580,34 @@ function NovaEvolucao({
               <SoapReadOnly soap={preview} />
             </div>
           )}
+
+          {activeServices.length > 0 && (
+            <div className="mt-2.5">
+              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Produtos/serviços aplicados
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {activeServices.map((s) => {
+                  const selected = selectedServiceIds.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggleService(s.id)}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 transition ${
+                        selected
+                          ? "bg-primary/10 text-primary ring-primary/40"
+                          : "bg-muted text-muted-foreground ring-border hover:text-foreground"
+                      }`}
+                    >
+                      {s.nome} · {formatBRL(s.preco)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mt-2 flex justify-end">
             <Button
               size="sm"
@@ -1822,6 +1868,19 @@ function EvolucaoCard({
           <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
             {e.planoTerapeutico}
           </p>
+        </div>
+      )}
+
+      {e.servicosAplicados.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {e.servicosAplicados.map((s) => (
+            <span
+              key={s.serviceId}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/30"
+            >
+              {s.nome} · {formatBRL(s.preco)}
+            </span>
+          ))}
         </div>
       )}
 

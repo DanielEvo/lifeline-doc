@@ -828,6 +828,16 @@ export const saveEvolution = createServerFn({ method: "POST" })
       evolucao: z.string().min(3).max(8000),
       // ausente = não mexe no plano já salvo (edição só do texto da evolução)
       planoTerapeutico: z.string().max(4000).optional(),
+      servicosAplicados: z
+        .array(
+          z.object({
+            serviceId: z.string().min(1),
+            nome: z.string().max(80),
+            preco: z.number(),
+          }),
+        )
+        .max(10)
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -836,11 +846,23 @@ export const saveEvolution = createServerFn({ method: "POST" })
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
     if (data.evolutionId) {
-      const r = await updateEvolution(doctor.id, data.evolutionId, data.evolucao, data.planoTerapeutico);
+      const r = await updateEvolution(
+        doctor.id,
+        data.evolutionId,
+        data.evolucao,
+        data.planoTerapeutico,
+        data.servicosAplicados,
+      );
       if ("error" in r) return { ok: false as const, error: r.error };
       return { ok: true as const, evolution: r };
     }
-    const evolution = await createEvolution(doctor.id, data.patientId, data.evolucao, data.planoTerapeutico ?? "");
+    const evolution = await createEvolution(
+      doctor.id,
+      data.patientId,
+      data.evolucao,
+      data.planoTerapeutico ?? "",
+      data.servicosAplicados,
+    );
     return { ok: true as const, evolution };
   });
 
