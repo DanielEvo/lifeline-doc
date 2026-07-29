@@ -13,12 +13,11 @@ import { Route as SobreRouteImport } from './routes/sobre'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as DemoRouteImport } from './routes/demo'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
-import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
@@ -26,6 +25,7 @@ import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-emai
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
 import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
+import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
@@ -51,11 +51,6 @@ const DemoRoute = DemoRouteImport.update({
   path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/app',
   path: '/app',
@@ -75,6 +70,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
   id: '/receita/$code',
@@ -101,11 +101,6 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminLoginRoute = AdminLoginRouteImport.update({
-  id: '/admin/login',
-  path: '/admin/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
   id: '/assinatura/retorno',
   path: '/assinatura/retorno',
@@ -115,6 +110,11 @@ const AppMemedSimulacaoRoute = AppMemedSimulacaoRouteImport.update({
   id: '/memed-simulacao',
   path: '/memed-simulacao',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   id: '/pacientes/',
@@ -141,7 +141,6 @@ const ApiPublicPaymentsWebhookRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteRouteWithChildren
-  '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
@@ -154,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -163,7 +163,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
@@ -176,6 +175,7 @@ export interface FileRoutesByTo {
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/admin': typeof AdminIndexRoute
   '/app': typeof AppIndexRoute
   '/assinatura': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -187,7 +187,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteRouteWithChildren
-  '/admin': typeof AdminRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
@@ -200,6 +199,7 @@ export interface FileRoutesById {
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
   '/app/pacientes/$id': typeof AppPacientesIdRoute
@@ -212,7 +212,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
-    | '/admin'
     | '/demo'
     | '/entrar'
     | '/login'
@@ -225,6 +224,7 @@ export interface FileRouteTypes {
     | '/paciente/app'
     | '/paciente/login'
     | '/receita/$code'
+    | '/admin/'
     | '/app/'
     | '/assinatura/'
     | '/app/pacientes/$id'
@@ -234,7 +234,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/demo'
     | '/entrar'
     | '/login'
@@ -247,6 +246,7 @@ export interface FileRouteTypes {
     | '/paciente/app'
     | '/paciente/login'
     | '/receita/$code'
+    | '/admin'
     | '/app'
     | '/assinatura'
     | '/app/pacientes/$id'
@@ -257,7 +257,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
-    | '/admin'
     | '/demo'
     | '/entrar'
     | '/login'
@@ -270,6 +269,7 @@ export interface FileRouteTypes {
     | '/paciente/app'
     | '/paciente/login'
     | '/receita/$code'
+    | '/admin/'
     | '/app/'
     | '/assinatura/'
     | '/app/pacientes/$id'
@@ -281,7 +281,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRouteRoute: typeof AppRouteRouteWithChildren
-  AdminRoute: typeof AdminRoute
   DemoRoute: typeof DemoRoute
   EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
@@ -293,6 +292,7 @@ export interface RootRouteChildren {
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
   ReceitaCodeRoute: typeof ReceitaCodeRoute
+  AdminIndexRoute: typeof AdminIndexRoute
   AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -328,13 +328,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -362,6 +355,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/receita/$code': {
       id: '/receita/$code'
@@ -398,13 +398,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/login': {
-      id: '/admin/login'
-      path: '/admin/login'
-      fullPath: '/admin/login'
-      preLoaderRoute: typeof AdminLoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/assinatura/retorno': {
       id: '/assinatura/retorno'
       path: '/assinatura/retorno'
@@ -418,6 +411,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/memed-simulacao'
       preLoaderRoute: typeof AppMemedSimulacaoRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/pacientes/': {
       id: '/app/pacientes/'
@@ -471,7 +471,6 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRouteRoute: AppRouteRouteWithChildren,
-  AdminRoute: AdminRoute,
   DemoRoute: DemoRoute,
   EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
@@ -483,6 +482,7 @@ const rootRouteChildren: RootRouteChildren = {
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
   ReceitaCodeRoute: ReceitaCodeRoute,
+  AdminIndexRoute: AdminIndexRoute,
   AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
@@ -490,3 +490,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

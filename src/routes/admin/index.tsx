@@ -28,7 +28,7 @@ import type {
   PrescriptionEntry,
 } from "@/lib/store.server";
 
-export const Route = createFileRoute("/admin")({
+export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "LifeLine · Painel de testes" }] }),
   component: Admin,
 });
