@@ -2,7 +2,7 @@
 // por médico. Cards vêm do servidor, arrastar persiste, clicar abre o
 // prontuário. Mesma query do painel de pacientes → sempre em sincronia.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { BoardDialog } from "@/components/clinic/board-dialog";
 import { PageHeader } from "@/components/clinic/page-header";
+import { AppointmentCalendar, DRAG_PATIENT_KEY } from "@/components/clinic/appointment-calendar";
 import {
   getWorkspace,
   importSamplePatients,
@@ -225,7 +226,11 @@ function PainelDoDia() {
                       p={p}
                       appt={apptHoje.get(p.id)}
                       onClick={() => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
-                      onDragStart={() => setDraggingId(p.id)}
+                      onDragStart={(e) => {
+                        setDraggingId(p.id);
+                        e.dataTransfer.setData(DRAG_PATIENT_KEY, p.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
                       onDragEnd={() => setDraggingId(null)}
                       dragging={draggingId === p.id}
                     />
@@ -241,6 +246,13 @@ function PainelDoDia() {
           })}
         </div>
       )}
+
+      <AppointmentCalendar
+        token={token}
+        patients={patients}
+        appointments={data?.appointments ?? []}
+        onOpenPatient={(p) => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
+      />
 
       <PatientFormDialog
         open={novoOpen}
@@ -305,7 +317,7 @@ export function PatientKanbanCard({
   p: Patient;
   appt?: Appointment;
   onClick: () => void;
-  onDragStart: () => void;
+  onDragStart: (e: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
   dragging: boolean;
 }) {

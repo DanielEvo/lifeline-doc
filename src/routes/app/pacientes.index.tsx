@@ -523,12 +523,10 @@ function PainelPacientes() {
                 : listaCobrancas.map((c) => c.patientId),
         );
         const apptsVisiveis = appointments.filter((a) => idsVisiveis.has(a.patientId));
-        const idsComAgenda = new Set(apptsVisiveis.map((a) => a.patientId));
-        const pacientesVisiveis = ativos.filter((p) => idsComAgenda.has(p.id));
         return (
           <AppointmentCalendar
             token={token}
-            patients={pacientesVisiveis}
+            patients={ativos}
             appointments={apptsVisiveis}
             onOpenPatient={abrir}
           />

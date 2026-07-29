@@ -57,7 +57,8 @@ type CalendarSettings = {
 
 const DEFAULTS: CalendarSettings = { slotMinutes: 30, startHour: 8, endHour: 19 };
 const MAX_PARALLEL = 3;
-const DRAG_KEY = "application/x-patient-id";
+export const DRAG_PATIENT_KEY = "application/x-patient-id";
+const DRAG_KEY = DRAG_PATIENT_KEY;
 const DRAG_APPT = "application/x-appointment-id";
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
