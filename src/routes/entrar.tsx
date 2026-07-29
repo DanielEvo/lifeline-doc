@@ -97,6 +97,12 @@ function EntrarPage() {
               <ArrowLeft className="h-3 w-3" />
               Voltar ao site
             </Link>
+            <Link
+              to="/admin/login"
+              className="text-[10px] text-muted-foreground/60 transition hover:text-muted-foreground"
+            >
+              Entrar como Adm
+            </Link>
             <Link to="/demo" className="transition hover:text-foreground">
               Ver a demo sem cadastro →
             </Link>

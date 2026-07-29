@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { requireAdminSession } from "../admin-auth.server";
 import { makePrescriptionCode, makeProtocol, makeSignature } from "../domain.server";
 import {
   addConsultation,
@@ -59,10 +60,18 @@ export const prescribe = createServerFn({ method: "POST" })
     };
   });
 
-export const getConsultations = createServerFn({ method: "GET" }).handler(async () =>
-  listConsultations(),
-);
+export const getConsultations = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdminSession(data.token)))
+      return { ok: false as const, error: "unauthorized" as const };
+    return { ok: true as const, ...(await listConsultations()) };
+  });
 
-export const getPrescriptions = createServerFn({ method: "GET" }).handler(async () =>
-  listPrescriptions(),
-);
+export const getPrescriptions = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdminSession(data.token)))
+      return { ok: false as const, error: "unauthorized" as const };
+    return { ok: true as const, ...(await listPrescriptions()) };
+  });

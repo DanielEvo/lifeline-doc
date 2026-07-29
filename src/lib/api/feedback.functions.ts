@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { requireAdminSession } from "../admin-auth.server";
 import { addFeedback, listFeedback } from "../store.server";
 
 export const submitFeedback = createServerFn({ method: "POST" })
@@ -13,6 +14,10 @@ export const submitFeedback = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => addFeedback(data));
 
-export const getFeedback = createServerFn({ method: "GET" }).handler(async () =>
-  listFeedback(),
-);
+export const getFeedback = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdminSession(data.token)))
+      return { ok: false as const, error: "unauthorized" as const };
+    return { ok: true as const, ...(await listFeedback()) };
+  });

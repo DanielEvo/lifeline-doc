@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import { requireAdminSession } from "../admin-auth.server";
 import { addLead, listLeads } from "../store.server";
 
 export const submitLead = createServerFn({ method: "POST" })
@@ -39,6 +40,10 @@ export const submitLead = createServerFn({ method: "POST" })
     return addLead(data);
   });
 
-export const getLeads = createServerFn({ method: "GET" }).handler(async () =>
-  listLeads(),
-);
+export const getLeads = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdminSession(data.token)))
+      return { ok: false as const, error: "unauthorized" as const };
+    return { ok: true as const, ...(await listLeads()) };
+  });

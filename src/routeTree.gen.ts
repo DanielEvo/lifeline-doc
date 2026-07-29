@@ -15,6 +15,7 @@ import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteRouteImport } from './routes/app/route'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
@@ -100,6 +101,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
   id: '/assinatura/retorno',
   path: '/assinatura/retorno',
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -184,6 +192,7 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
+  '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -208,6 +217,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/admin/login'
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/admin/login'
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/login'
     | '/sobre'
+    | '/admin/login'
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   EntrarRoute: typeof EntrarRoute
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   AssinaturaRetornoRoute: typeof AssinaturaRetornoRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
@@ -385,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assinatura/retorno': {
       id: '/assinatura/retorno'
       path: '/assinatura/retorno'
@@ -456,6 +476,7 @@ const rootRouteChildren: RootRouteChildren = {
   EntrarRoute: EntrarRoute,
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
+  AdminLoginRoute: AdminLoginRoute,
   AssinaturaRetornoRoute: AssinaturaRetornoRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,

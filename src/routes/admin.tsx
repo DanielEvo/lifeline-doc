@@ -1,10 +1,26 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Inbox, Lock, MessageCircle, Pill, RefreshCw, Users } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  Inbox,
+  KeyRound,
+  Loader2,
+  Lock,
+  MessageCircle,
+  Pill,
+  RefreshCw,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { adminChangeCredentials, adminGetMe, adminLogout } from "@/lib/api/admin-auth.functions";
 import { getFeedback } from "@/lib/api/feedback.functions";
 import { getLeads } from "@/lib/api/leads.functions";
 import { getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import { clearAdminSession, getAdminSession } from "@/lib/admin-session";
 import type {
   ConsultationEntry,
   FeedbackEntry,
@@ -12,17 +28,7 @@ import type {
   PrescriptionEntry,
 } from "@/lib/store.server";
 
-
 export const Route = createFileRoute("/admin")({
-  loader: async () => {
-    const [fb, leads, consults, rx] = await Promise.all([
-      getFeedback(),
-      getLeads(),
-      getConsultations(),
-      getPrescriptions(),
-    ]);
-    return { fb, leads, consults, rx };
-  },
   head: () => ({ meta: [{ title: "LifeLine · Painel de testes" }] }),
   component: Admin,
 });
@@ -33,9 +39,84 @@ const RATING_EMOJI: Record<string, string> = {
   confuso: "😕",
 };
 
+type PanelData = {
+  fb: { rows: FeedbackEntry[]; total: number; counts: Record<string, number> };
+  leads: { rows: LeadEntry[]; total: number };
+  consults: { rows: ConsultationEntry[]; total: number };
+  rx: { rows: PrescriptionEntry[]; total: number };
+};
+
 function Admin() {
-  const { fb, leads, consults, rx } = Route.useLoaderData();
-  const router = Route.useNavigate();
+  const navigate = useNavigate();
+  const [token, setToken] = useState<string | null>(null);
+  const [data, setData] = useState<PanelData | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Guarda: sem sessão local → login; com sessão → valida token no servidor.
+  useEffect(() => {
+    const s = getAdminSession();
+    if (!s) {
+      navigate({ to: "/admin/login" });
+      return;
+    }
+    adminGetMe({ data: { token: s.token } })
+      .then((r) => {
+        if (!r.ok) {
+          clearAdminSession();
+          toast.error("Sessão expirada. Entre novamente.");
+          navigate({ to: "/admin/login" });
+          return;
+        }
+        setToken(s.token);
+      })
+      .catch(() => setToken(s.token)); // offline — segue com a sessão local
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    Promise.all([
+      getFeedback({ data: { token } }),
+      getLeads({ data: { token } }),
+      getConsultations({ data: { token } }),
+      getPrescriptions({ data: { token } }),
+    ])
+      .then(([fb, leads, consults, rx]) => {
+        if (cancelled) return;
+        if (!fb.ok || !leads.ok || !consults.ok || !rx.ok) {
+          clearAdminSession();
+          toast.error("Sessão expirada. Entre novamente.");
+          navigate({ to: "/admin/login" });
+          return;
+        }
+        setData({ fb, leads, consults, rx });
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Não consegui carregar os dados agora.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refreshKey, navigate]);
+
+  const sair = async () => {
+    if (token) adminLogout({ data: { token } }).catch(() => {});
+    clearAdminSession();
+    navigate({ to: "/admin/login" });
+  };
+
+  if (!token || !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Carregando painel…
+        </div>
+      </div>
+    );
+  }
+
+  const { fb, leads, consults, rx } = data;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -50,15 +131,20 @@ function Admin() {
             variant="outline"
             size="sm"
             className="ml-auto"
-            onClick={() => router({ to: "/admin" })}
+            onClick={() => setRefreshKey((k) => k + 1)}
           >
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Atualizar
+          </Button>
+          <Button variant="ghost" size="sm" onClick={sair}>
+            Sair
           </Button>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl space-y-8 px-5 py-8">
+        <CredentialsSection token={token} onChanged={sair} />
+
         {/* Feedback summary */}
         <section>
           <div className="mb-3 flex items-center gap-2">
@@ -141,7 +227,10 @@ function Admin() {
           <div className="space-y-2">
             {rx.rows.length === 0 && <EmptyState label="Nenhuma receita gerada ainda." />}
             {rx.rows.map((p: PrescriptionEntry) => (
-              <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm">
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm"
+              >
                 <span className="font-semibold">{p.patient}</span>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                   {p.code}
@@ -188,6 +277,114 @@ function Admin() {
         </section>
       </main>
     </div>
+  );
+}
+
+function CredentialsSection({ token, onChanged }: { token: string; onChanged: () => void }) {
+  const [novoLogin, setNovoLogin] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!novoLogin || !novaSenha || !confirmar || !senhaAtual) {
+      toast.error("Preencha todos os campos.");
+      return;
+    }
+    if (novaSenha.length < 6) {
+      toast.error("A nova senha precisa de pelo menos 6 caracteres.");
+      return;
+    }
+    if (novaSenha !== confirmar) {
+      toast.error("As senhas não coincidem.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await adminChangeCredentials({
+        data: { token, novoLogin, novaSenha, senhaAtual },
+      });
+      if (r.ok) {
+        toast.success("Credenciais atualizadas. Entre novamente.");
+        onChanged();
+      } else {
+        toast.error(r.error);
+      }
+    } catch {
+      toast.error("Não consegui salvar agora. Tente novamente.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-2">
+        <KeyRound className="h-4 w-4 text-primary" />
+        <h2 className="text-base font-semibold">Trocar credenciais</h2>
+      </div>
+      <form
+        onSubmit={submit}
+        className="grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2"
+      >
+        <div className="space-y-1">
+          <Label htmlFor="novoLogin" className="text-xs">
+            Novo login
+          </Label>
+          <Input
+            id="novoLogin"
+            value={novoLogin}
+            onChange={(e) => setNovoLogin(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="senhaAtual" className="text-xs">
+            Senha atual
+          </Label>
+          <Input
+            id="senhaAtual"
+            type="password"
+            value={senhaAtual}
+            onChange={(e) => setSenhaAtual(e.target.value)}
+            maxLength={120}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="novaSenha" className="text-xs">
+            Nova senha
+          </Label>
+          <Input
+            id="novaSenha"
+            type="password"
+            value={novaSenha}
+            onChange={(e) => setNovaSenha(e.target.value)}
+            maxLength={120}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="confirmar" className="text-xs">
+            Confirmar nova senha
+          </Label>
+          <Input
+            id="confirmar"
+            type="password"
+            value={confirmar}
+            onChange={(e) => setConfirmar(e.target.value)}
+            maxLength={120}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Button type="submit" disabled={busy} size="sm">
+            {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            Salvar novas credenciais
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
 
