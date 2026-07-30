@@ -28,7 +28,10 @@ export const Route = createFileRoute("/app")({
   head: () => ({
     meta: [
       { title: "LifeLine · Consultório" },
-      { name: "description", content: "Plataforma do médico LifeLine: painel do dia, pacientes e prontuário." },
+      {
+        name: "description",
+        content: "Plataforma do médico LifeLine: painel do dia, pacientes e prontuário.",
+      },
     ],
   }),
   component: AppLayout,
@@ -179,7 +182,9 @@ function Shell({ clinic }: { clinic: Clinic }) {
                 aria-label={n.label}
                 activeOptions={{ exact: n.exact }}
                 className="rounded-md px-2 py-1 text-muted-foreground"
-                activeProps={{ className: "rounded-md bg-primary px-2 py-1 text-primary-foreground" }}
+                activeProps={{
+                  className: "rounded-md bg-primary px-2 py-1 text-primary-foreground",
+                }}
               >
                 <n.icon className="h-4 w-4" />
               </Link>
@@ -191,7 +196,11 @@ function Shell({ clinic }: { clinic: Clinic }) {
             >
               <BookOpen className="h-4 w-4" />
             </button>
-            <button onClick={sair} aria-label="Sair" className="rounded-md px-2 py-1 text-muted-foreground">
+            <button
+              onClick={sair}
+              aria-label="Sair"
+              className="rounded-md px-2 py-1 text-muted-foreground"
+            >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
@@ -210,7 +219,7 @@ function Shell({ clinic }: { clinic: Clinic }) {
           <BookOpen className="h-4 w-4" />
         </button>
         <Outlet />
-        <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} />
+        <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} token={clinic.token} />
       </main>
     </div>
   );

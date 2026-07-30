@@ -53,6 +53,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "fast-xml-parser": "^4.5.3",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "pdf-lib": "^1.17.1",

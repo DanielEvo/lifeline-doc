@@ -1,5 +1,27 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { askKnowledgeAssistant } from "@/lib/knowledge-chat.functions";
+import {
+  listMyCriterios,
+  saveMyCriterio,
+  setMyCriterioKind,
+  deleteMyCriterio,
+} from "@/lib/api/criterios.functions";
+import {
+  listMyDocs,
+  getMyDocUploadUrl,
+  registerMyDoc,
+  getMyDocOpenUrl,
+  deleteMyDoc,
+} from "@/lib/api/docs.functions";
+import {
+  searchMyPublications,
+  addMyPublication,
+  discardMyPublication,
+} from "@/lib/api/publications.functions";
+import { supabase } from "@/integrations/supabase/client";
+import type { Criterio, CriterioKind } from "@/lib/criterios.server";
+import type { Doc } from "@/lib/docs.server";
+import type { Publication } from "@/lib/publications.server";
 import { toast } from "sonner";
 import {
   BookOpen,
@@ -9,38 +31,25 @@ import {
   Paperclip,
   Sparkles,
   FileText,
-  UserCog,
-  FlaskConical,
+  ListChecks,
   Upload,
   Plus,
-  Globe,
   Filter,
   Trash2,
-  Heart,
-  Ban,
+  Download,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Protocolos (seed)
+// Protocolos (seed) — fora do escopo desta rodada, continua estático.
 // ---------------------------------------------------------------------------
 
 type Protocol = {
@@ -106,124 +115,17 @@ Deficiência: 50.000 UI/sem × 8–12 sem. Manutenção 1.000–2.000 UI/dia.`,
 ];
 
 // ---------------------------------------------------------------------------
-// Perfil médico (seed)
-// ---------------------------------------------------------------------------
-
-type ProfileSection = {
-  id: string;
-  icon: typeof UserCog;
-  title: string;
-  placeholder: string;
-  value: string;
-};
-
-const PROFILE_SEED: ProfileSection[] = [
-  {
-    id: "sobre",
-    icon: UserCog,
-    title: "Perfil e formação",
-    placeholder: "Ex: Clínico geral, 12 anos de prática, foco em medicina preventiva…",
-    value:
-      "Clínica geral com 12 anos de experiência. Foco em prevenção cardiovascular, medicina do estilo de vida e cuidado longitudinal de crônicos.",
-  },
-  {
-    id: "estilo",
-    icon: Sparkles,
-    title: "Forma de trabalho",
-    placeholder: "Como você conduz consultas, tempo médio, forma de comunicação…",
-    value:
-      "Consultas de 50 min. Prefiro decisão compartilhada, explicação em linguagem simples, prescrição sempre com racional escrito para o paciente.",
-  },
-  {
-    id: "gosto",
-    icon: Heart,
-    title: "Coisas que gosto",
-    placeholder: "Referências, condutas, autores, ferramentas que valoriza…",
-    value:
-      "Medicina baseada em evidências (Cochrane, UpToDate). Escala de risco global antes de estatina. Metas individualizadas em idosos.",
-  },
-  {
-    id: "nao-gosto",
-    icon: Ban,
-    title: "Coisas que evito",
-    placeholder: "Condutas, medicações, abordagens que prefere não usar…",
-    value:
-      "Polifarmácia sem revisão. Benzodiazepínico como primeira linha para insônia. Suplementos sem evidência.",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Conhecimento específico (seed)
-// ---------------------------------------------------------------------------
-
-type Doc = { id: string; name: string; kind: "pdf" | "book" | "paper"; size: string; date: string };
-
-const DOCS_SEED: Doc[] = [
-  { id: "1", name: "Harrison — Cap. Endocrinologia (2024).pdf", kind: "book", size: "18,2 MB", date: "há 2 semanas" },
-  { id: "2", name: "Diretriz SBC 2024 — dislipidemia.pdf", kind: "paper", size: "3,1 MB", date: "há 1 mês" },
-  { id: "3", name: "Meus resumos — DM2 fluxograma.pdf", kind: "pdf", size: "420 KB", date: "há 3 dias" },
-  { id: "4", name: "NEJM — SGLT2 in HFpEF (2023).pdf", kind: "paper", size: "1,8 MB", date: "há 4 meses" },
-];
-
-// ---------------------------------------------------------------------------
-// Science (seed)
-// ---------------------------------------------------------------------------
-
-type Source = { id: string; url: string; label: string; active: boolean };
-type Study = {
-  id: string;
-  title: string;
-  journal: string;
-  date: string;
-  tags: string[];
-  summary: string;
-};
-
-const SOURCES_SEED: Source[] = [
-  { id: "s1", url: "pubmed.ncbi.nlm.nih.gov", label: "PubMed", active: true },
-  { id: "s2", url: "nejm.org", label: "NEJM", active: true },
-  { id: "s3", url: "thelancet.com", label: "The Lancet", active: true },
-  { id: "s4", url: "jamanetwork.com", label: "JAMA", active: false },
-];
-
-const STUDIES_SEED: Study[] = [
-  {
-    id: "st1",
-    title: "Semaglutida 2,4 mg reduz eventos CV em obesos sem DM",
-    journal: "NEJM",
-    date: "há 3 dias",
-    tags: ["obesidade", "cardiovascular", "GLP-1"],
-    summary: "SELECT trial de 17.604 pacientes: redução de 20% em MACE em 3,3 anos.",
-  },
-  {
-    id: "st2",
-    title: "Rastreio de câncer colorretal aos 45 anos: custo-efetividade",
-    journal: "The Lancet",
-    date: "há 1 semana",
-    tags: ["prevenção", "oncologia"],
-    summary: "Meta-análise sugere ganho líquido de QALY com antecipação da idade de rastreio.",
-  },
-  {
-    id: "st3",
-    title: "Metformina e longevidade — revisão sistemática 2026",
-    journal: "PubMed",
-    date: "há 2 semanas",
-    tags: ["diabetes", "envelhecimento", "metformina"],
-    summary: "Sinais consistentes de redução de mortalidade all-cause em coortes de DM2.",
-  },
-];
-
-// ---------------------------------------------------------------------------
 
 type ChatMsg = { id: string; from: "user" | "ai"; text: string };
-type TabId = "chat" | "protocolos" | "perfil" | "conhecimento" | "science";
+type TabId = "chat" | "criterios" | "protocolos" | "documentos";
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  token: string;
 };
 
-export function KnowledgeDrawer({ open, onOpenChange }: Props) {
+export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
   const [tab, setTab] = useState<TabId>("chat");
 
   // chat
@@ -232,10 +134,9 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
     {
       id: "welcome",
       from: "ai",
-      text: "Olá! Sou seu assistente clínico. Posso consultar seus protocolos, seu perfil, sua biblioteca e artigos recentes. O que precisa hoje?",
+      text: "Olá! Sou seu assistente clínico. Posso consultar seus critérios, protocolos e documentos. O que precisa hoje?",
     },
   ]);
-
   const [sending, setSending] = useState(false);
 
   const sendChat = async () => {
@@ -255,8 +156,9 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
           role: (m.from === "user" ? "user" : "assistant") as "user" | "assistant",
           content: m.text,
         }));
-      const { reply } = await askKnowledgeAssistant({ data: { messages: payload } });
-      setMessages((m) => m.map((x) => (x.id === placeholderId ? { ...x, text: reply } : x)));
+      const result = await askKnowledgeAssistant({ data: { token, messages: payload } });
+      if (!result.ok) throw new Error("Sessão expirada. Recarregue a página.");
+      setMessages((m) => m.map((x) => (x.id === placeholderId ? { ...x, text: result.reply } : x)));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao consultar assistente.";
       setMessages((m) => m.filter((x) => x.id !== placeholderId));
@@ -280,32 +182,177 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
       })
     : PROTOCOLS;
 
-  // perfil
-  const [profile, setProfile] = useState<ProfileSection[]>(PROFILE_SEED);
+  // meus critérios
+  const [criterios, setCriterios] = useState<Criterio[]>([]);
+  const [criteriosLoaded, setCriteriosLoaded] = useState(false);
+  const [newCriterioText, setNewCriterioText] = useState("");
+  const [savingCriterio, setSavingCriterio] = useState(false);
 
-  // conhecimento
-  const [docs] = useState<Doc[]>(DOCS_SEED);
+  // documentos
+  const [docs, setDocs] = useState<Doc[]>([]);
+  const [docsLoaded, setDocsLoaded] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // science
-  const [sources, setSources] = useState<Source[]>(SOURCES_SEED);
-  const [newSource, setNewSource] = useState("");
-  const [scienceFilter, setScienceFilter] = useState("");
+  // publicações (busca sob demanda dentro de Documentos)
+  const [topicsInput, setTopicsInput] = useState("");
+  const [searchingPubs, setSearchingPubs] = useState(false);
+  const [pubResults, setPubResults] = useState<Publication[]>([]);
+  const [pubActionId, setPubActionId] = useState<string | null>(null);
 
-  const addSource = () => {
-    const v = newSource.trim();
-    if (!v) return;
-    setSources((s) => [
-      ...s,
-      { id: crypto.randomUUID(), url: v, label: v.replace(/^https?:\/\//, "").split("/")[0], active: true },
-    ]);
-    setNewSource("");
+  useEffect(() => {
+    if (!open) return;
+    if (!criteriosLoaded) {
+      listMyCriterios({ data: { token } })
+        .then((res) => {
+          if (res.ok) {
+            setCriterios(res.criterios);
+            setCriteriosLoaded(true);
+          }
+        })
+        .catch(() => {});
+    }
+    if (!docsLoaded) {
+      listMyDocs({ data: { token } })
+        .then((res) => {
+          if (res.ok) {
+            setDocs(res.docs);
+            setDocsLoaded(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [open, token, criteriosLoaded, docsLoaded]);
+
+  const addCriterio = async () => {
+    const text = newCriterioText.trim();
+    if (!text || savingCriterio) return;
+    setSavingCriterio(true);
+    try {
+      const res = await saveMyCriterio({ data: { token, rawText: text } });
+      if (!res.ok) throw new Error("Não foi possível salvar o critério.");
+      setCriterios((cs) => [res.criterio, ...cs]);
+      setNewCriterioText("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar critério.");
+    } finally {
+      setSavingCriterio(false);
+    }
   };
 
-  const studiesFiltered = scienceFilter.trim()
-    ? STUDIES_SEED.filter((s) =>
-        (s.title + s.summary + s.tags.join(" ")).toLowerCase().includes(scienceFilter.toLowerCase()),
-      )
-    : STUDIES_SEED;
+  const toggleCriterioBadge = async (criterio: Criterio) => {
+    const nextKind: CriterioKind = criterio.kind === "metrica" ? "estilo" : "metrica";
+    try {
+      const res = await setMyCriterioKind({ data: { token, id: criterio.id, kind: nextKind } });
+      if (!res.ok) throw new Error("Não foi possível atualizar.");
+      setCriterios((cs) => cs.map((c) => (c.id === criterio.id ? res.criterio : c)));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar critério.");
+    }
+  };
+
+  const removeCriterio = async (id: string) => {
+    try {
+      const res = await deleteMyCriterio({ data: { token, id } });
+      if (!res.ok) throw new Error("Não foi possível remover.");
+      setCriterios((cs) => cs.filter((c) => c.id !== id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover critério.");
+    }
+  };
+
+  const handleFileSelected = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const target = await getMyDocUploadUrl({ data: { token, fileName: file.name } });
+      if (!target.ok) throw new Error("Não foi possível preparar o upload.");
+      const { error: uploadError } = await supabase.storage
+        .from("doctor-docs")
+        .uploadToSignedUrl(target.path, target.uploadToken, file);
+      if (uploadError) throw new Error(uploadError.message);
+      const format = file.name.toLowerCase().endsWith(".pdf") ? ("pdf" as const) : null;
+      const reg = await registerMyDoc({
+        data: { token, name: file.name, format, storagePath: target.path, sizeBytes: file.size },
+      });
+      if (!reg.ok) throw new Error("Não foi possível registrar o documento.");
+      setDocs((d) => [reg.doc, ...d]);
+      toast.success("Documento enviado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar documento.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openDoc = async (docId: string) => {
+    try {
+      const res = await getMyDocOpenUrl({ data: { token, docId } });
+      if (!res.ok) throw new Error("Documento não encontrado.");
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao abrir documento.");
+    }
+  };
+
+  const removeDoc = async (docId: string) => {
+    try {
+      const res = await deleteMyDoc({ data: { token, docId } });
+      if (!res.ok) throw new Error("Não foi possível remover.");
+      setDocs((d) => d.filter((x) => x.id !== docId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover documento.");
+    }
+  };
+
+  const searchPublications = async () => {
+    const topics = topicsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (topics.length === 0 || searchingPubs) return;
+    setSearchingPubs(true);
+    try {
+      const res = await searchMyPublications({ data: { token, topics } });
+      if (!res.ok) throw new Error("Não foi possível buscar publicações.");
+      setPubResults(res.publications);
+      if (res.publications.length === 0)
+        toast.info("Nenhuma publicação nova encontrada para esses temas.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao buscar publicações.");
+    } finally {
+      setSearchingPubs(false);
+    }
+  };
+
+  const addPublication = async (id: string) => {
+    setPubActionId(id);
+    try {
+      const res = await addMyPublication({ data: { token, id } });
+      if (!res.ok) throw new Error("Não foi possível adicionar.");
+      setPubResults((r) => r.filter((p) => p.id !== id));
+      const docsRes = await listMyDocs({ data: { token } });
+      if (docsRes.ok) setDocs(docsRes.docs);
+      toast.success("Adicionada aos Documentos.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao adicionar publicação.");
+    } finally {
+      setPubActionId(null);
+    }
+  };
+
+  const discardPublication = async (id: string) => {
+    setPubActionId(id);
+    try {
+      const res = await discardMyPublication({ data: { token, id } });
+      if (!res.ok) throw new Error("Não foi possível descartar.");
+      setPubResults((r) => r.filter((p) => p.id !== id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao descartar publicação.");
+    } finally {
+      setPubActionId(null);
+    }
+  };
 
   return (
     <>
@@ -329,19 +376,25 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
             </SheetTitle>
           </SheetHeader>
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)} className="flex flex-1 flex-col overflow-hidden">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as TabId)}
+            className="flex flex-1 flex-col overflow-hidden"
+          >
             <div className="border-b border-border px-2 pt-2">
-              <TabsList className="grid h-auto w-full grid-cols-5 bg-muted/50 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-4 bg-muted/50 p-1">
                 <TabTrigger value="chat" icon={Sparkles} label="Chat" />
+                <TabTrigger value="criterios" icon={ListChecks} label="Meus Critérios" />
                 <TabTrigger value="protocolos" icon={BookOpen} label="Protocolos" />
-                <TabTrigger value="perfil" icon={UserCog} label="Perfil" />
-                <TabTrigger value="conhecimento" icon={FileText} label="Docs" />
-                <TabTrigger value="science" icon={FlaskConical} label="Science" />
+                <TabTrigger value="documentos" icon={FileText} label="Documentos" />
               </TabsList>
             </div>
 
             {/* ---------- CHAT ---------- */}
-            <TabsContent value="chat" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
+            <TabsContent
+              value="chat"
+              className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            >
               <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {messages.map((m) => (
                   <div
@@ -372,7 +425,7 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
 
               <div className="border-t border-border bg-background/60 p-3">
                 <div className="mb-2 flex flex-wrap gap-1.5">
-                  {["Protocolos", "Meus docs", "Science"].map((chip) => (
+                  {["Meus Critérios", "Protocolos", "Documentos"].map((chip) => (
                     <Badge key={chip} variant="secondary" className="cursor-pointer text-[10px]">
                       <Filter className="mr-1 h-2.5 w-2.5" />
                       {chip}
@@ -411,8 +464,85 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
               </div>
             </TabsContent>
 
+            {/* ---------- MEUS CRITÉRIOS ---------- */}
+            <TabsContent
+              value="criterios"
+              className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            >
+              <div className="border-b border-border px-4 pt-3 pb-3">
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Escreva uma regra, um valor ou uma preferência de trabalho — a IA classifica
+                  sozinha e sempre respeita isso nas respostas.
+                </p>
+                <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2 focus-within:border-primary/40">
+                  <Textarea
+                    value={newCriterioText}
+                    onChange={(e) => setNewCriterioText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        addCriterio();
+                      }
+                    }}
+                    placeholder="Ex: Nunca uso benzodiazepínico como 1ª linha para insônia."
+                    className="min-h-[36px] flex-1 resize-none border-0 bg-transparent p-1 text-sm shadow-none focus-visible:ring-0"
+                    rows={1}
+                  />
+                  <Button
+                    size="icon"
+                    className="h-8 w-8 shrink-0 rounded-xl"
+                    onClick={addCriterio}
+                    disabled={!newCriterioText.trim() || savingCriterio}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                {criterios.length === 0 ? (
+                  <p className="mt-6 text-center text-sm text-muted-foreground">
+                    Nenhum critério cadastrado ainda.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {criterios.map((c) => (
+                      <li
+                        key={c.id}
+                        className="rounded-xl border border-border bg-card px-3 py-2.5"
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium">{c.label}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">{c.rawText}</div>
+                          </div>
+                          <button
+                            className="mt-0.5 text-muted-foreground hover:text-destructive"
+                            aria-label="Remover"
+                            onClick={() => removeCriterio(c.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <button onClick={() => toggleCriterioBadge(c)} className="mt-2">
+                          <Badge
+                            variant={c.kind === "metrica" ? "outline" : "secondary"}
+                            className="cursor-pointer text-[10px]"
+                          >
+                            {c.kind === "metrica" ? "Usado em análises" : "Aplicado sempre"}
+                          </Badge>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </TabsContent>
+
             {/* ---------- PROTOCOLOS ---------- */}
-            <TabsContent value="protocolos" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
+            <TabsContent
+              value="protocolos"
+              className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            >
               <div className="px-4 pt-3 pb-2">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -467,47 +597,38 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
               </div>
             </TabsContent>
 
-            {/* ---------- PERFIL ---------- */}
-            <TabsContent value="perfil" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
-              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-                <p className="text-xs text-muted-foreground">
-                  A IA usa isso para responder no seu estilo e evitar condutas que você não aprova.
-                </p>
-                {profile.map((sec) => (
-                  <div key={sec.id} className="rounded-xl border border-border bg-card p-3">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                      <sec.icon className="h-3.5 w-3.5 text-primary" />
-                      {sec.title}
-                    </div>
-                    <Textarea
-                      value={sec.value}
-                      onChange={(e) =>
-                        setProfile((p) =>
-                          p.map((s) => (s.id === sec.id ? { ...s, value: e.target.value } : s)),
-                        )
-                      }
-                      placeholder={sec.placeholder}
-                      className="min-h-[80px] resize-none text-sm"
-                    />
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* ---------- CONHECIMENTO ---------- */}
-            <TabsContent value="conhecimento" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
-              <div className="px-4 pt-3 pb-2">
-                <button className="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/30 py-6 text-center transition hover:border-primary/50 hover:bg-primary/5">
+            {/* ---------- DOCUMENTOS ---------- */}
+            <TabsContent
+              value="documentos"
+              className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            >
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleFileSelected(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/30 py-6 text-center transition hover:border-primary/50 hover:bg-primary/5 disabled:opacity-60"
+                >
                   <Upload className="h-5 w-5 text-primary" />
-                  <div className="text-sm font-medium">Carregar arquivo</div>
+                  <div className="text-sm font-medium">
+                    {uploading ? "Enviando…" : "Carregar arquivo"}
+                  </div>
                   <div className="text-[11px] text-muted-foreground">
                     PDFs, livros, papers, resumos — até 50 MB
                   </div>
                 </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                <div className="mb-2 mt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Sua biblioteca · {docs.length} arquivos
+
+                <div className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Sua biblioteca · {docs.length} {docs.length === 1 ? "item" : "itens"}
                 </div>
                 <ul className="space-y-1.5">
                   {docs.map((d) => (
@@ -520,101 +641,101 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{d.name}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {d.kind === "book" ? "Livro" : d.kind === "paper" ? "Artigo" : "PDF"} ·{" "}
-                          {d.size} · {d.date}
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Badge
+                            variant={d.origin === "publicacao" ? "outline" : "secondary"}
+                            className="text-[10px]"
+                          >
+                            {d.origin === "publicacao" ? "Publicação" : "Anexo"}
+                          </Badge>
+                          <span>{new Date(d.createdAt).toLocaleDateString("pt-BR")}</span>
                         </div>
                       </div>
                       <button
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label="Abrir"
+                        onClick={() => openDoc(d.id)}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
                         className="text-muted-foreground hover:text-destructive"
                         aria-label="Remover"
+                        onClick={() => removeDoc(d.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </li>
                   ))}
                 </ul>
-              </div>
-            </TabsContent>
 
-            {/* ---------- SCIENCE ---------- */}
-            <TabsContent value="science" className="mt-0 flex flex-1 flex-col overflow-hidden data-[state=inactive]:hidden">
-              <div className="space-y-3 border-b border-border px-4 py-3">
-                <div>
-                  <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Fontes monitoradas
+                {/* Publicações — descoberta sob demanda (PubMed/JAMA/NEJM) */}
+                <div className="mt-5 border-t border-border pt-4">
+                  <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Buscar publicações
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {sources.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() =>
-                          setSources((prev) =>
-                            prev.map((x) => (x.id === s.id ? { ...x, active: !x.active } : x)),
-                          )
-                        }
-                        className={cn(
-                          "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition",
-                          s.active
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border bg-muted/40 text-muted-foreground line-through",
-                        )}
-                      >
-                        <Globe className="h-2.5 w-2.5" />
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex gap-1.5">
+                  <div className="flex gap-1.5">
                     <Input
-                      value={newSource}
-                      onChange={(e) => setNewSource(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addSource()}
-                      placeholder="Adicionar site (ex: nature.com)"
+                      value={topicsInput}
+                      onChange={(e) => setTopicsInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && searchPublications()}
+                      placeholder="Temas, separados por vírgula (ex: diabetes, SGLT2)"
                       className="h-8 text-xs"
                     />
-                    <Button size="sm" variant="outline" className="h-8" onClick={addSource}>
-                      <Plus className="h-3.5 w-3.5" />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0"
+                      onClick={searchPublications}
+                      disabled={!topicsInput.trim() || searchingPubs}
+                    >
+                      {searchingPubs ? "Buscando…" : "Buscar agora"}
                     </Button>
                   </div>
+
+                  {pubResults.length > 0 && (
+                    <ul className="mt-3 space-y-2">
+                      {pubResults.map((p) => (
+                        <li key={p.id} className="rounded-xl border border-border bg-card p-3">
+                          <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                            <span className="font-medium text-primary">{p.journal}</span>
+                            {p.publishedAt && (
+                              <>
+                                <span>·</span>
+                                <span>{p.publishedAt}</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="text-sm font-medium leading-snug">{p.title}</div>
+                          {p.abstract && (
+                            <div className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
+                              {p.abstract}
+                            </div>
+                          )}
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={pubActionId === p.id}
+                              onClick={() => addPublication(p.id)}
+                            >
+                              Adicionar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              disabled={pubActionId === p.id}
+                              onClick={() => discardPublication(p.id)}
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <div className="relative">
-                  <Filter className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={scienceFilter}
-                    onChange={(e) => setScienceFilter(e.target.value)}
-                    placeholder="Filtrar por tema (ex: diabetes, cardiologia)…"
-                    className="h-8 pl-8 text-xs"
-                  />
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-3">
-                <ul className="space-y-2">
-                  {studiesFiltered.map((s) => (
-                    <li
-                      key={s.id}
-                      className="rounded-xl border border-border bg-card p-3 transition hover:border-primary/40"
-                    >
-                      <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                        <span className="font-medium text-primary">{s.journal}</span>
-                        <span>·</span>
-                        <span>{s.date}</span>
-                      </div>
-                      <div className="text-sm font-medium leading-snug">{s.title}</div>
-                      <div className="mt-1.5 text-xs text-muted-foreground">{s.summary}</div>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {s.tags.map((t) => (
-                          <span
-                            key={t}
-                            className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
               </div>
             </TabsContent>
           </Tabs>
@@ -622,7 +743,12 @@ export function KnowledgeDrawer({ open, onOpenChange }: Props) {
       </Sheet>
 
       {/* Modal com texto completo do protocolo */}
-      <Dialog open={!!active} onOpenChange={(v) => { if (!v) setActive(null); }}>
+      <Dialog
+        open={!!active}
+        onOpenChange={(v) => {
+          if (!v) setActive(null);
+        }}
+      >
         <DialogContent className="max-h-[80vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
