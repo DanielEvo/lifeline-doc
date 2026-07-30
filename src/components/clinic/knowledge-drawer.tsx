@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { askKnowledgeAssistant } from "@/lib/knowledge-chat.functions";
 import {
   listMyCriterios,
@@ -57,7 +58,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -138,8 +138,45 @@ type Props = {
   token: string;
 };
 
+const LARGURA_PADRAO = 380;
+const LARGURA_MIN = 300;
+const LARGURA_MAX = 900;
+const LARGURA_KEY = "lifeline:kb-largura";
+
 export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
   const [tab, setTab] = useState<TabId>("chat");
+
+  // largura ajustável do painel (persistida por médico/navegador)
+  const [largura, setLargura] = useState(LARGURA_PADRAO);
+  const [redimensionando, setRedimensionando] = useState(false);
+
+  useEffect(() => {
+    const salvo = Number(window.localStorage.getItem(LARGURA_KEY));
+    if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
+  }, []);
+
+  const iniciarResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setRedimensionando(true);
+    const mover = (ev: PointerEvent) => {
+      const nova = Math.min(LARGURA_MAX, Math.max(LARGURA_MIN, window.innerWidth - ev.clientX));
+      setLargura(nova);
+    };
+    const soltar = () => {
+      setRedimensionando(false);
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      document.body.style.userSelect = "";
+      setLargura((l) => {
+        window.localStorage.setItem(LARGURA_KEY, String(l));
+        return l;
+      });
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  };
+
 
   // chat
   const [chatInput, setChatInput] = useState("");
@@ -369,25 +406,61 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
-        <SheetContent
-          side="right"
-          overlayClassName="hidden"
-          className="flex w-[360px] flex-col gap-0 border-l border-border bg-background p-0 shadow-xl sm:max-w-none sm:w-[360px] inset-y-auto right-0 top-14 bottom-0 h-auto"
+      {/* Painel lateral sobreposto, altura total da tela e largura ajustável
+          pelo médico (arrastando a borda esquerda). Fica sempre montado — o
+          botão-livro embutido na própria borda abre/fecha, como a sidebar. */}
+      <aside
+        style={{ width: largura }}
+        className={cn(
+          "fixed inset-y-0 right-0 z-40 flex max-w-[95vw] flex-col gap-0 border-l border-border bg-background shadow-2xl transition-transform duration-300",
+          open ? "translate-x-0" : "translate-x-full",
+        )}
+        aria-hidden={!open}
+      >
+        {/* Alça de redimensionamento */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar assistente"
+          onPointerDown={iniciarResize}
+          onDoubleClick={() => setLargura(LARGURA_PADRAO)}
+          className={cn(
+            "absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-primary/40",
+            redimensionando && "bg-primary/60",
+          )}
+        />
+
+        {/* Botão-livro embutido na borda do bloco */}
+        <button
+          type="button"
+          onClick={() => onOpenChange(!open)}
+          aria-label={open ? "Fechar assistente de conhecimento" : "Base de conhecimento"}
+          title="Base de conhecimento"
+          className="absolute -left-9 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background text-muted-foreground shadow-md transition hover:text-foreground"
         >
-          <SheetHeader className="border-b border-border px-4 py-3">
-            <SheetTitle className="flex items-center gap-2 text-sm">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-gradient">
-                <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
-              </div>
-              <div className="flex flex-col">
-                <span>Assistente de conhecimento</span>
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  Seu mini-GPT clínico
-                </span>
-              </div>
-            </SheetTitle>
-          </SheetHeader>
+          <BookOpen className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-gradient">
+            <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate">Assistente de conhecimento</span>
+            <span className="text-[10px] font-normal text-muted-foreground">
+              Seu mini-GPT clínico
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            aria-label="Fechar"
+            className="text-muted-foreground transition hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
 
           <Tabs
             value={tab}
@@ -774,8 +847,8 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
               </div>
             </TabsContent>
           </Tabs>
-        </SheetContent>
-      </Sheet>
+      </aside>
+
 
       {/* Modal com texto completo do protocolo */}
       <Dialog
