@@ -284,23 +284,36 @@ export async function searchPublications(
   ]);
   const found = [...pubmed, ...rss];
 
-  const withDoi = found.filter((p) => p.doi);
-  const withoutDoi = found.filter((p) => !p.doi);
+  // Dedupe em código, não via ON CONFLICT: os índices únicos são parciais
+  // (WHERE doi IS NULL / IS NOT NULL) e o PostgREST não consegue casar uma
+  // cláusula ON CONFLICT com índice parcial — o upsert falhava inteiro e a
+  // busca voltava vazia.
+  const { data: existingRows, error: existingError } = await supabaseAdmin
+    .from("publications")
+    .select("doi, title, source")
+    .eq("doctor_id", doctorId);
+  if (existingError)
+    console.error("[publications] falha ao ler existentes:", existingError.message);
 
-  if (withDoi.length > 0) {
-    const { error } = await supabaseAdmin.from("publications").upsert(
-      withDoi.map((p) => ({ doctor_id: doctorId, ...toInsertRow(p) })),
-      { onConflict: "doctor_id,doi", ignoreDuplicates: true },
-    );
-    if (error) console.error("[publications] upsert (doi) falhou:", error.message);
+  const existingDois = new Set((existingRows ?? []).map((r) => r.doi).filter(Boolean));
+  const existingKeys = new Set((existingRows ?? []).map((r) => `${r.title}::${r.source}`));
+
+  const seen = new Set<string>();
+  const toInsert = found.filter((p) => {
+    const key = p.doi ? `doi:${p.doi}` : `t:${p.title}::${p.source}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (p.doi) return !existingDois.has(p.doi);
+    return !existingKeys.has(`${p.title}::${p.source}`);
+  });
+
+  if (toInsert.length > 0) {
+    const { error } = await supabaseAdmin
+      .from("publications")
+      .insert(toInsert.map((p) => ({ doctor_id: doctorId, ...toInsertRow(p) })));
+    if (error) console.error("[publications] insert falhou:", error.message);
   }
-  if (withoutDoi.length > 0) {
-    const { error } = await supabaseAdmin.from("publications").upsert(
-      withoutDoi.map((p) => ({ doctor_id: doctorId, ...toInsertRow(p) })),
-      { onConflict: "doctor_id,title,source", ignoreDuplicates: true },
-    );
-    if (error) console.error("[publications] upsert (sem doi) falhou:", error.message);
-  }
+
 
   return listPublications(doctorId, "novo");
 }
