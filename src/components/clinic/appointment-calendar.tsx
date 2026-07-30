@@ -29,11 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -77,8 +73,18 @@ const DRAG_APPT = "application/x-appointment-id";
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
 ];
 
 function toIsoLocal(date: Date): string {
@@ -88,6 +94,10 @@ function toIsoLocal(date: Date): string {
 function ymd(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+function fromYmd(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 function startOfWeek(d: Date): Date {
   const x = new Date(d);
@@ -120,7 +130,9 @@ function resolveApptColor(appt: Appointment, byId: Map<string, Patient>): string
  *  esmaecer eventos passados no canvas. */
 function isPastAppt(appt: Appointment): boolean {
   const start = new Date(appt.dateTime);
-  const endMs = appt.allDay ? start.setHours(23, 59, 59, 999) : start.getTime() + (appt.durationMin ?? 30) * 60000;
+  const endMs = appt.allDay
+    ? start.setHours(23, 59, 59, 999)
+    : start.getTime() + (appt.durationMin ?? 30) * 60000;
   return endMs < Date.now();
 }
 
@@ -130,7 +142,13 @@ function isPastAppt(appt: Appointment): boolean {
 // dentro de cada cluster, atribui coluna por first-fit guloso. Sem teto —
 // colunas só estreitam conforme mais eventos se acumulam, igual Google Agenda.
 
-type Layouted = { appt: Appointment; col: number; totalCols: number; startMin: number; durationMin: number };
+type Layouted = {
+  appt: Appointment;
+  col: number;
+  totalCols: number;
+  startMin: number;
+  durationMin: number;
+};
 
 function apptRange(a: Appointment): { startMin: number; durationMin: number } {
   const d = new Date(a.dateTime);
@@ -155,11 +173,18 @@ function layoutTimedAppointments(appts: Appointment[]): Layouted[] {
       } else {
         colEnds[col] = end;
       }
-      result.push({ appt: item.appt, col, totalCols: -1, startMin: item.startMin, durationMin: item.durationMin });
+      result.push({
+        appt: item.appt,
+        col,
+        totalCols: -1,
+        startMin: item.startMin,
+        durationMin: item.durationMin,
+      });
     }
     // totalCols só é conhecido depois de posicionar todo mundo do cluster
     const totalCols = colEnds.length;
-    for (let i = result.length - cluster.length; i < result.length; i++) result[i].totalCols = totalCols;
+    for (let i = result.length - cluster.length; i < result.length; i++)
+      result[i].totalCols = totalCols;
     cluster = [];
   };
 
@@ -187,7 +212,12 @@ function bloqueioAt(dayAppts: Appointment[], candidate: Date): Appointment | und
   });
 }
 
-function timeFromClientY(columnEl: HTMLElement, clientY: number, day: Date, settings: CalendarSettings): Date {
+function timeFromClientY(
+  columnEl: HTMLElement,
+  clientY: number,
+  day: Date,
+  settings: CalendarSettings,
+): Date {
   const rect = columnEl.getBoundingClientRect();
   const rawMin = (clientY - rect.top) / PX_PER_MIN;
   const snapped = Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes;
@@ -226,7 +256,9 @@ export function AppointmentCalendar({
   // (ex.: outra aba salvando configurações diferentes).
   useEffect(() => setSettingsLocal(calendarSettings), [calendarSettings]);
 
-  const [pending, setPending] = useState<{ patient: Patient | null; dateTime: string } | null>(null);
+  const [pending, setPending] = useState<{ patient: Patient | null; dateTime: string } | null>(
+    null,
+  );
   const [note, setNote] = useState("");
   const [isBloqueio, setIsBloqueio] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -322,12 +354,19 @@ export function AppointmentCalendar({
         },
       }),
     onSuccess: (r, v) => {
-      if (!r.ok) return toast.error(v.kind === "bloqueio" ? "Não consegui bloquear o horário." : "Não consegui agendar.");
+      if (!r.ok)
+        return toast.error(
+          v.kind === "bloqueio" ? "Não consegui bloquear o horário." : "Não consegui agendar.",
+        );
       if (v.kind === "bloqueio") {
         toast.success("Evento pessoal criado.");
       } else {
-        const nome = (pending?.patient?.nome ?? byId.get(v.patientId ?? "")?.nome ?? "Paciente").split(" ")[0];
-        const criados = "appointments" in r ? r.appointments?.length ?? 1 : 1;
+        const nome = (
+          pending?.patient?.nome ??
+          byId.get(v.patientId ?? "")?.nome ??
+          "Paciente"
+        ).split(" ")[0];
+        const criados = "appointments" in r ? (r.appointments?.length ?? 1) : 1;
         toast.success(
           criados > 1
             ? `${nome} agendado(a) ${criados}x a partir de ${new Date(v.dateTime).toLocaleDateString("pt-BR")}.`
@@ -355,7 +394,10 @@ export function AppointmentCalendar({
     mutationFn: (v: { id: string; dateTime?: string; durationMin?: number }) =>
       updateMyAppointmentTiming({ data: { token, ...v } }),
     onSuccess: (r, v) => {
-      if (!r.ok) return toast.error(v.durationMin !== undefined ? "Não consegui redimensionar." : "Não consegui remarcar.");
+      if (!r.ok)
+        return toast.error(
+          v.durationMin !== undefined ? "Não consegui redimensionar." : "Não consegui remarcar.",
+        );
       toast.success(
         v.durationMin !== undefined
           ? `Duração ajustada para ${v.durationMin}min.`
@@ -368,7 +410,7 @@ export function AppointmentCalendar({
 
   const shift = (dir: -1 | 1) => {
     const d = new Date(cursor);
-    if (view === "dia") d.setDate(d.getDate() + dir);
+    if (view === "dia" || view === "lista") d.setDate(d.getDate() + dir);
     else if (view === "semana") d.setDate(d.getDate() + dir * 7);
     else d.setMonth(d.getMonth() + dir);
     setCursor(d);
@@ -385,6 +427,9 @@ export function AppointmentCalendar({
       const s = startOfWeek(cursor);
       const e = addDays(s, 6);
       return `${s.getDate().toString().padStart(2, "0")}/${(s.getMonth() + 1).toString().padStart(2, "0")} – ${e.getDate().toString().padStart(2, "0")}/${(e.getMonth() + 1).toString().padStart(2, "0")} · ${cursor.getFullYear()}`;
+    }
+    if (view === "lista") {
+      return `A partir de ${cursor.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}`;
     }
     return cursor.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }, [view, cursor]);
@@ -403,7 +448,8 @@ export function AppointmentCalendar({
 
   const chosenPatientId = pending?.patient?.id ?? selectedPatientId;
   const canConfirm = isBloqueio || !!chosenPatientId;
-  const effectiveCor = corOverride ?? (categoriaId ? categoriesById.get(categoriaId)?.cor ?? null : null);
+  const effectiveCor =
+    corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
 
   const confirmar = () => {
     if (!pending) return;
@@ -482,7 +528,7 @@ export function AppointmentCalendar({
 
           <div className="ml-auto flex items-center gap-2">
             <div className="flex rounded-lg border border-border p-0.5">
-              {(["dia", "semana", "mes"] as View[]).map((v) => (
+              {(["dia", "semana", "mes", "lista"] as View[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -534,22 +580,35 @@ export function AppointmentCalendar({
             <MonthGrid
               cursor={cursor}
               appointments={visibleAppointments}
-              onPickDay={(d) => { setCursor(d); setView("dia"); }}
+              byId={byId}
+              onPickDay={(d) => {
+                setCursor(d);
+                setView("dia");
+              }}
+            />
+          )}
+          {view === "lista" && (
+            <ListView
+              cursor={cursor}
+              appointments={visibleAppointments}
+              byId={byId}
+              onOpenPatient={onOpenPatient}
             />
           )}
         </div>
 
         <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-          Dica: arraste um evento pra outro horário pra remarcar, ou puxe a borda de baixo pra mudar a duração.
-          Sobreposições dividem colunas automaticamente — sem limite.
+          Dica: arraste um evento pra outro horário pra remarcar, ou puxe a borda de baixo pra mudar
+          a duração. Sobreposições dividem colunas automaticamente — sem limite.
         </div>
-
 
         {/* Confirmação */}
         <Dialog open={!!pending} onOpenChange={(o) => !o && closeDialog()}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>{isBloqueio ? "Novo evento pessoal" : "Confirmar agendamento"}</DialogTitle>
+              <DialogTitle>
+                {isBloqueio ? "Novo evento pessoal" : "Confirmar agendamento"}
+              </DialogTitle>
               <DialogDescription>
                 {pending &&
                   new Date(pending.dateTime).toLocaleString("pt-BR", {
@@ -575,7 +634,9 @@ export function AppointmentCalendar({
                       </SelectTrigger>
                       <SelectContent>
                         {patients.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.nome}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -590,7 +651,9 @@ export function AppointmentCalendar({
               {isBloqueio ? (
                 <>
                   <div className="space-y-1">
-                    <Label htmlFor="ap-motivo" className="text-xs">Título</Label>
+                    <Label htmlFor="ap-motivo" className="text-xs">
+                      Título
+                    </Label>
                     <Input
                       id="ap-motivo"
                       value={motivo}
@@ -606,12 +669,18 @@ export function AppointmentCalendar({
                       value={categoriaId ?? "__none"}
                       onValueChange={(v) => setCategoriaId(v === "__none" ? null : v)}
                     >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Sem categoria" /></SelectTrigger>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Sem categoria" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none">Sem categoria</SelectItem>
-                        {categories.filter((c) => c.ativo).map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-                        ))}
+                        {categories
+                          .filter((c) => c.ativo)
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.nome}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -654,7 +723,9 @@ export function AppointmentCalendar({
                   )}
 
                   <div className="space-y-1">
-                    <Label htmlFor="ap-descricao" className="text-xs">Descrição (opcional)</Label>
+                    <Label htmlFor="ap-descricao" className="text-xs">
+                      Descrição (opcional)
+                    </Label>
                     <Textarea
                       id="ap-descricao"
                       value={descricao}
@@ -666,7 +737,9 @@ export function AppointmentCalendar({
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="ap-local" className="text-xs">Local (opcional)</Label>
+                    <Label htmlFor="ap-local" className="text-xs">
+                      Local (opcional)
+                    </Label>
                     <Input
                       id="ap-local"
                       value={local}
@@ -683,7 +756,9 @@ export function AppointmentCalendar({
                     <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="ap-nota" className="text-xs">Observação (opcional)</Label>
+                    <Label htmlFor="ap-nota" className="text-xs">
+                      Observação (opcional)
+                    </Label>
                     <Input
                       id="ap-nota"
                       value={note}
@@ -695,11 +770,18 @@ export function AppointmentCalendar({
                 </>
               )}
 
-              <RecurrencePicker freq={recorrenciaFreq} onFreqChange={setRecorrenciaFreq} count={vezes} onCountChange={setVezes} />
+              <RecurrencePicker
+                freq={recorrenciaFreq}
+                onFreqChange={setRecorrenciaFreq}
+                count={vezes}
+                onCountChange={setVezes}
+              />
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
+              <Button variant="outline" onClick={closeDialog}>
+                Cancelar
+              </Button>
               <Button
                 disabled={agendar.isPending || !canConfirm}
                 onClick={confirmar}
@@ -721,10 +803,14 @@ const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
 function DurationSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
-      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+      <SelectTrigger className="h-9 text-sm">
+        <SelectValue />
+      </SelectTrigger>
       <SelectContent>
         {DURATION_OPTIONS.map((m) => (
-          <SelectItem key={m} value={String(m)}>{m} minutos</SelectItem>
+          <SelectItem key={m} value={String(m)}>
+            {m} minutos
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -753,16 +839,22 @@ function RecurrencePicker({
     <div className="space-y-1">
       <Label className="text-xs">Repetir</Label>
       <Select value={freq} onValueChange={(v) => onFreqChange(v as RecurrenceFreq)}>
-        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-9 text-sm">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           {(Object.keys(RECURRENCE_LABEL) as RecurrenceFreq[]).map((f) => (
-            <SelectItem key={f} value={f}>{RECURRENCE_LABEL[f]}</SelectItem>
+            <SelectItem key={f} value={f}>
+              {RECURRENCE_LABEL[f]}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
       {freq !== "none" && (
         <div className="space-y-1 pt-1">
-          <Label htmlFor="ap-vezes" className="text-xs">Quantas vezes</Label>
+          <Label htmlFor="ap-vezes" className="text-xs">
+            Quantas vezes
+          </Label>
           <Input
             id="ap-vezes"
             type="number"
@@ -837,18 +929,26 @@ function CategorySidebar({
           <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
           <span className="truncate">Consultas</span>
         </label>
-        {categories.filter((c) => c.ativo).map((c) => (
-          <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-0.5 py-1 text-xs hover:bg-muted/50">
-            <input
-              type="checkbox"
-              checked={!hiddenCategoryIds.has(c.id)}
-              onChange={() => onToggleCategory(c.id)}
-              className="h-3.5 w-3.5 rounded accent-primary"
-            />
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.cor }} />
-            <span className="truncate">{c.nome}</span>
-          </label>
-        ))}
+        {categories
+          .filter((c) => c.ativo)
+          .map((c) => (
+            <label
+              key={c.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-0.5 py-1 text-xs hover:bg-muted/50"
+            >
+              <input
+                type="checkbox"
+                checked={!hiddenCategoryIds.has(c.id)}
+                onChange={() => onToggleCategory(c.id)}
+                className="h-3.5 w-3.5 rounded accent-primary"
+              />
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: c.cor }}
+              />
+              <span className="truncate">{c.nome}</span>
+            </label>
+          ))}
       </div>
 
       {creating ? (
@@ -873,7 +973,12 @@ function CategorySidebar({
             ))}
           </div>
           <div className="flex gap-1">
-            <Button size="sm" variant="outline" className="h-6 flex-1 text-[11px]" onClick={() => setCreating(false)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 flex-1 text-[11px]"
+              onClick={() => setCreating(false)}
+            >
               Cancelar
             </Button>
             <Button
@@ -916,14 +1021,18 @@ function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) =
         <div className="flex gap-0.5">
           <button
             type="button"
-            onClick={() => setMiniCursor(new Date(miniCursor.getFullYear(), miniCursor.getMonth() - 1, 1))}
+            onClick={() =>
+              setMiniCursor(new Date(miniCursor.getFullYear(), miniCursor.getMonth() - 1, 1))
+            }
             className="rounded p-0.5 text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
-            onClick={() => setMiniCursor(new Date(miniCursor.getFullYear(), miniCursor.getMonth() + 1, 1))}
+            onClick={() =>
+              setMiniCursor(new Date(miniCursor.getFullYear(), miniCursor.getMonth() + 1, 1))
+            }
             className="rounded p-0.5 text-muted-foreground hover:text-foreground"
           >
             <ChevronRight className="h-3.5 w-3.5" />
@@ -931,7 +1040,9 @@ function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) =
         </div>
       </div>
       <div className="mt-1 grid grid-cols-7 gap-0.5 text-center text-[9px] text-muted-foreground">
-        {WEEKDAYS_SHORT.map((d) => <div key={d}>{d[0]}</div>)}
+        {WEEKDAYS_SHORT.map((d) => (
+          <div key={d}>{d[0]}</div>
+        ))}
       </div>
       <div className="mt-0.5 grid grid-cols-7 gap-0.5">
         {days.map((d) => {
@@ -985,12 +1096,18 @@ function SettingsPopover({
           <Label className="text-[11px]">Duração do slot</Label>
           <Select
             value={String(settings.slotMinutes)}
-            onValueChange={(v) => onChange({ ...settings, slotMinutes: Number(v) as CalendarSettings["slotMinutes"] })}
+            onValueChange={(v) =>
+              onChange({ ...settings, slotMinutes: Number(v) as CalendarSettings["slotMinutes"] })
+            }
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {[15, 20, 30, 45, 60].map((m) => (
-                <SelectItem key={m} value={String(m)}>{m} minutos</SelectItem>
+                <SelectItem key={m} value={String(m)}>
+                  {m} minutos
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1063,7 +1180,8 @@ function TimeGrid({
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
     for (let h = settings.startHour; h < settings.endHour; h++) {
-      for (let m = 0; m < 60; m += settings.slotMinutes) arr.push({ hour: h, minute: m, isHour: m === 0 });
+      for (let m = 0; m < 60; m += settings.slotMinutes)
+        arr.push({ hour: h, minute: m, isHour: m === 0 });
     }
     return arr;
   }, [settings.startHour, settings.endHour, settings.slotMinutes]);
@@ -1110,7 +1228,12 @@ function TimeGrid({
             dia todo
           </div>
           {days.map((d) => (
-            <AllDayCell key={ymd(d)} appts={allDayByDay.get(ymd(d)) ?? []} byId={byId} onDeleteBloqueio={onDeleteBloqueio} />
+            <AllDayCell
+              key={ymd(d)}
+              appts={allDayByDay.get(ymd(d)) ?? []}
+              byId={byId}
+              onDeleteBloqueio={onDeleteBloqueio}
+            />
           ))}
         </div>
       )}
@@ -1121,6 +1244,7 @@ function TimeGrid({
           <DayColumn
             key={ymd(d)}
             day={d}
+            isToday={ymd(d) === todayKey}
             settings={settings}
             timedAppts={timedByDay.get(ymd(d)) ?? []}
             byId={byId}
@@ -1170,7 +1294,10 @@ function AllDayCell({
     <div className="min-w-[120px] flex-1 space-y-0.5 border-l border-border p-0.5">
       {appts.map((a) => {
         const patient = a.patientId ? byId.get(a.patientId) : undefined;
-        const color = a.kind === "bloqueio" ? (a.cor ?? FALLBACK_COLOR) : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
+        const color =
+          a.kind === "bloqueio"
+            ? (a.cor ?? FALLBACK_COLOR)
+            : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
         return (
           <div
             key={a.id}
@@ -1200,6 +1327,7 @@ function AllDayCell({
 
 function DayColumn({
   day,
+  isToday,
   settings,
   timedAppts,
   byId,
@@ -1213,6 +1341,7 @@ function DayColumn({
   onDeleteBloqueio,
 }: {
   day: Date;
+  isToday: boolean;
   settings: CalendarSettings;
   timedAppts: Appointment[];
   byId: Map<string, Patient>;
@@ -1228,6 +1357,12 @@ function DayColumn({
   const colRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
   const layouted = useMemo(() => layoutTimedAppointments(timedAppts), [timedAppts]);
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowWithinHours =
+    isToday && nowMin >= settings.startHour * 60 && nowMin < settings.endHour * 60;
+  const nowTop = (nowMin - settings.startHour * 60) * PX_PER_MIN;
 
   const resolveDrop = (e: React.DragEvent): Date | null => {
     if (!colRef.current) return null;
@@ -1273,6 +1408,16 @@ function DayColumn({
           style={{ top: (t.hour - settings.startHour) * 60 * PX_PER_MIN + t.minute * PX_PER_MIN }}
         />
       ))}
+
+      {nowWithinHours && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
+          style={{ top: nowTop }}
+        >
+          <span className="-ml-[3px] h-2 w-2 shrink-0 rounded-full bg-red-500" />
+          <span className="h-px w-full bg-red-500" />
+        </div>
+      )}
 
       {layouted.map(({ appt, col, totalCols, startMin, durationMin }) => (
         <EventBlock
@@ -1320,8 +1465,11 @@ function EventBlock({
   const startYRef = useRef(0);
   const baseDuration = appt.durationMin ?? 30;
   const isBloqueio = appt.kind === "bloqueio";
-  const color = isBloqueio ? (appt.cor ?? FALLBACK_COLOR) : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
-  const displayHeight = resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
+  const color = isBloqueio
+    ? (appt.cor ?? FALLBACK_COLOR)
+    : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
+  const displayHeight =
+    resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
   const widthPct = 100 / totalCols;
   const gutterPx = 2;
 
@@ -1342,14 +1490,18 @@ function EventBlock({
           : `${patient?.nome ?? ""} · ${formatHourBR(appt.dateTime)}${appt.note ? ` · ${appt.note}` : ""} — arraste pra remarcar, puxe a borda de baixo pra mudar a duração`
       }
       className={`group absolute overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition ${
-        isBloqueio ? "cursor-default bg-slate-200 dark:bg-slate-800/70" : "cursor-grab active:cursor-grabbing"
-      }`}
+        isBloqueio
+          ? "cursor-default bg-slate-200 dark:bg-slate-800/70"
+          : "cursor-grab active:cursor-grabbing"
+      } ${isPastAppt(appt) ? "opacity-50" : ""}`}
       style={{
         top,
         height: displayHeight,
         left: `calc(${col * widthPct}% + ${gutterPx}px)`,
         width: `calc(${widthPct}% - ${gutterPx * 2}px)`,
-        ...(isBloqueio ? {} : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${color}` }),
+        ...(isBloqueio
+          ? {}
+          : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${color}` }),
       }}
     >
       {isBloqueio ? (
@@ -1398,7 +1550,10 @@ function EventBlock({
           onPointerUp={() => {
             if (resizeDeltaPx === null) return;
             const deltaMin = resizeDeltaPx / PX_PER_MIN;
-            const snapped = Math.max(slotMinutes, Math.round((baseDuration + deltaMin) / slotMinutes) * slotMinutes);
+            const snapped = Math.max(
+              slotMinutes,
+              Math.round((baseDuration + deltaMin) / slotMinutes) * slotMinutes,
+            );
             setResizeDeltaPx(null);
             if (snapped !== baseDuration) onResize(appt.id, snapped);
           }}
@@ -1412,13 +1567,96 @@ function EventBlock({
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Visão Lista — cronológica a partir do cursor, agrupada por dia, sobre o
+// mesmo visibleAppointments já filtrado (sem paginação/fetch novo).
+
+function ListView({
+  cursor,
+  appointments,
+  byId,
+  onOpenPatient,
+}: {
+  cursor: Date;
+  appointments: Appointment[];
+  byId: Map<string, Patient>;
+  onOpenPatient?: (p: Patient) => void;
+}) {
+  const cursorKey = ymd(cursor);
+
+  const grouped = useMemo(() => {
+    const upcoming = appointments
+      .filter((a) => ymd(new Date(a.dateTime)) >= cursorKey)
+      .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+    const byDay = new Map<string, Appointment[]>();
+    for (const a of upcoming) {
+      const k = ymd(new Date(a.dateTime));
+      byDay.set(k, [...(byDay.get(k) ?? []), a]);
+    }
+    return [...byDay.entries()];
+  }, [appointments, cursorKey]);
+
+  if (grouped.length === 0) {
+    return (
+      <div className="p-6 text-center text-sm text-muted-foreground">
+        Nenhum evento a partir desta data.
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-border">
+      {grouped.map(([dayKey, dayAppts]) => (
+        <div key={dayKey} className="py-2">
+          <div className="px-2 pb-1 text-xs font-semibold capitalize text-muted-foreground">
+            {fromYmd(dayKey).toLocaleDateString("pt-BR", {
+              weekday: "long",
+              day: "2-digit",
+              month: "long",
+            })}
+          </div>
+          <div className="space-y-1">
+            {dayAppts.map((a) => {
+              const patient = a.patientId ? byId.get(a.patientId) : undefined;
+              const label = a.label || patient?.nome || "Evento";
+              const clickable = a.kind === "consulta" && !!patient;
+              return (
+                <div
+                  key={a.id}
+                  onClick={() => clickable && onOpenPatient?.(patient!)}
+                  className={`flex items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-xs ${
+                    clickable ? "cursor-pointer hover:bg-muted/60" : ""
+                  } ${isPastAppt(a) ? "opacity-50" : ""}`}
+                  style={{ borderLeftColor: resolveApptColor(a, byId) }}
+                >
+                  <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
+                    {a.allDay ? "Dia todo" : formatHourBR(a.dateTime)}
+                  </span>
+                  <span className="truncate font-medium">{label}</span>
+                  {a.kind === "bloqueio" && (
+                    <Lock className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const MONTH_MAX_CHIPS = 3;
+
 function MonthGrid({
   cursor,
   appointments,
+  byId,
   onPickDay,
 }: {
   cursor: Date;
   appointments: Appointment[];
+  byId: Map<string, Patient>;
   onPickDay: (d: Date) => void;
 }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -1427,10 +1665,10 @@ function MonthGrid({
   const todayKey = ymd(new Date());
 
   const perDay = useMemo(() => {
-    const m = new Map<string, number>();
+    const m = new Map<string, Appointment[]>();
     for (const a of appointments) {
       const k = ymd(new Date(a.dateTime));
-      m.set(k, (m.get(k) ?? 0) + 1);
+      m.set(k, [...(m.get(k) ?? []), a]);
     }
     return m;
   }, [appointments]);
@@ -1439,30 +1677,51 @@ function MonthGrid({
     <div>
       <div className="grid grid-cols-7 gap-px bg-border text-[10px] font-medium uppercase text-muted-foreground">
         {WEEKDAYS_SHORT.map((d) => (
-          <div key={d} className="bg-card px-2 py-1 text-center">{d}</div>
+          <div key={d} className="bg-card px-2 py-1 text-center">
+            {d}
+          </div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-px bg-border">
         {days.map((d) => {
           const inMonth = d.getMonth() === cursor.getMonth();
-          const count = perDay.get(ymd(d)) ?? 0;
+          const dayAppts = perDay.get(ymd(d)) ?? [];
+          const shown = dayAppts.slice(0, MONTH_MAX_CHIPS);
+          const overflow = dayAppts.length - shown.length;
           const isToday = ymd(d) === todayKey;
           return (
             <button
               key={ymd(d)}
               onClick={() => onPickDay(d)}
-              className={`flex min-h-[68px] flex-col items-start gap-1 bg-card p-1.5 text-left transition hover:bg-primary/5 ${
+              className={`flex min-h-[88px] flex-col items-start gap-0.5 bg-card p-1.5 text-left transition hover:bg-primary/5 ${
                 inMonth ? "" : "opacity-40"
               }`}
             >
               <span className={`text-xs font-semibold ${isToday ? "text-primary" : ""}`}>
                 {d.getDate()}
               </span>
-              {count > 0 && (
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                  {count} {count === 1 ? "consulta" : "consultas"}
-                </span>
-              )}
+              <div className="flex w-full flex-col gap-0.5">
+                {shown.map((a) => {
+                  const patient = a.patientId ? byId.get(a.patientId) : undefined;
+                  const label = a.label || patient?.nome || "Evento";
+                  return (
+                    <span
+                      key={a.id}
+                      className="w-full truncate rounded px-1 py-0.5 text-[9px] font-medium text-white"
+                      style={{ backgroundColor: resolveApptColor(a, byId) }}
+                      title={label}
+                    >
+                      {!a.allDay && `${formatHourBR(a.dateTime)} `}
+                      {label}
+                    </span>
+                  );
+                })}
+                {overflow > 0 && (
+                  <span className="px-1 text-[9px] font-medium text-muted-foreground">
+                    +{overflow} mais
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
