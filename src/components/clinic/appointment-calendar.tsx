@@ -15,6 +15,7 @@ import {
   Loader2,
   Lock,
   Plus,
+  Search,
   Settings2,
   Trash2,
 } from "lucide-react";
@@ -524,8 +525,9 @@ export function AppointmentCalendar({
     setPending({ patient: p, dateTime });
   };
 
-  const openEmptySlot = (dateTime: string) => {
+  const openEmptySlot = (dateTime: string, durationMin?: number) => {
     resetDialogFields();
+    if (durationMin) setDuracaoMin(durationMin);
     setPending({ patient: null, dateTime });
   };
 
@@ -612,6 +614,17 @@ export function AppointmentCalendar({
           <div className="text-xs font-medium capitalize text-muted-foreground">{label}</div>
 
           <div className="ml-auto flex items-center gap-2">
+            <EventSearch
+              appointments={appointments}
+              byId={byId}
+              onJump={(appt) => {
+                const d = new Date(appt.dateTime);
+                d.setHours(0, 0, 0, 0);
+                setCursor(d);
+                setView("dia");
+                setEditingId(appt.id);
+              }}
+            />
             <div className="flex rounded-lg border border-border p-0.5">
               {(["dia", "semana", "mes", "lista"] as View[]).map((v) => (
                 <button
@@ -899,6 +912,15 @@ export function AppointmentCalendar({
 }
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
+
+/** Arredonda pro valor mais próximo de DURATION_OPTIONS — criar arrastando
+ *  gera minutos em múltiplos do slot (15/20/30...), que nem sempre batem
+ *  com um item do Select; sem isso o Select ficava sem seleção visível. */
+function snapToDurationOption(min: number): number {
+  return DURATION_OPTIONS.reduce((best, opt) =>
+    Math.abs(opt - min) < Math.abs(best - min) ? opt : best,
+  );
+}
 
 function DurationSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -1521,6 +1543,134 @@ function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) =
 }
 
 // ---------------------------------------------------------------------------
+// Busca global — texto livre (paciente, título, descrição, local, obs.) +
+// filtro por tipo. Resultado clicável pula o cursor pro dia do evento, troca
+// pra visão Dia e já abre o editor completo (mesmo caminho de EventBlock).
+
+const DIACRITICS_RE = /[̀-ͯ]/g;
+
+function normalizeForSearch(s: string): string {
+  return s.normalize("NFD").replace(DIACRITICS_RE, "").toLowerCase();
+}
+
+type SearchKindFilter = "todos" | "consulta" | "bloqueio";
+const SEARCH_KIND_LABEL: Record<SearchKindFilter, string> = {
+  todos: "Todos",
+  consulta: "Consultas",
+  bloqueio: "Pessoal",
+};
+
+function EventSearch({
+  appointments,
+  byId,
+  onJump,
+}: {
+  appointments: Appointment[];
+  byId: Map<string, Patient>;
+  onJump: (appt: Appointment) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<SearchKindFilter>("todos");
+
+  const results = useMemo(() => {
+    const q = normalizeForSearch(query.trim());
+    if (q.length < 2) return [];
+    return appointments
+      .filter((a) => kindFilter === "todos" || a.kind === kindFilter)
+      .filter((a) => {
+        const patient = a.patientId ? byId.get(a.patientId) : undefined;
+        const haystack = normalizeForSearch(
+          [a.label, patient?.nome, a.descricao, a.local, a.note].filter(Boolean).join(" "),
+        );
+        return haystack.includes(q);
+      })
+      .sort((a, b) => a.dateTime.localeCompare(b.dateTime))
+      .slice(0, 8);
+  }, [appointments, byId, query, kindFilter]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQuery("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 items-center gap-1.5 rounded-lg border border-border px-2 text-[11px] text-muted-foreground transition hover:text-foreground"
+        >
+          <Search className="h-3.5 w-3.5" /> Buscar
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 space-y-2 p-2" align="start">
+        <Input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Paciente, título, descrição, local…"
+          className="h-8 text-sm"
+        />
+        <div className="flex gap-1">
+          {(Object.keys(SEARCH_KIND_LABEL) as SearchKindFilter[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKindFilter(k)}
+              className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                kindFilter === k
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {SEARCH_KIND_LABEL[k]}
+            </button>
+          ))}
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {query.trim().length < 2 ? (
+            <div className="p-2 text-center text-xs text-muted-foreground">
+              Digite ao menos 2 letras.
+            </div>
+          ) : results.length === 0 ? (
+            <div className="p-2 text-center text-xs text-muted-foreground">Nada encontrado.</div>
+          ) : (
+            results.map((a) => {
+              const patient = a.patientId ? byId.get(a.patientId) : undefined;
+              const label = a.label || patient?.nome || "Evento";
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => {
+                    onJump(a);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-left text-xs transition hover:bg-muted/60"
+                  style={{ borderLeftColor: resolveApptColor(a, byId) }}
+                >
+                  <span className="w-20 shrink-0 tabular-nums text-muted-foreground">
+                    {new Date(a.dateTime).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                    })}{" "}
+                    · {formatHourBR(a.dateTime)}
+                  </span>
+                  <span className="truncate font-medium">{label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function SettingsPopover({
   settings,
@@ -1620,7 +1770,7 @@ function TimeGrid({
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
   onOpenEditor: (id: string) => void;
-  onSlotClick: (dateTime: string) => void;
+  onSlotClick: (dateTime: string, durationMin?: number) => void;
 }) {
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
@@ -1787,10 +1937,13 @@ function DayColumn({
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
   onOpenEditor: (id: string) => void;
-  onSlotClick: (dateTime: string) => void;
+  onSlotClick: (dateTime: string, durationMin?: number) => void;
 }) {
   const colRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
+  // Criar arrastando: clique simples (delta abaixo do limiar) cria com
+  // duração default; arrastar desenha a duração ao vivo, snapada ao slot.
+  const [dragCreate, setDragCreate] = useState<{ startY: number; currentY: number } | null>(null);
   const layouted = useMemo(() => layoutTimedAppointments(timedAppts), [timedAppts]);
 
   const now = new Date();
@@ -1803,6 +1956,14 @@ function DayColumn({
     if (!colRef.current) return null;
     return timeFromClientY(colRef.current, e.clientY, day, settings);
   };
+
+  const dragPreview = useMemo(() => {
+    if (!dragCreate || !colRef.current) return null;
+    const rect = colRef.current.getBoundingClientRect();
+    const top = Math.min(dragCreate.startY, dragCreate.currentY) - rect.top;
+    const height = Math.max(Math.abs(dragCreate.currentY - dragCreate.startY), MIN_BLOCK_PX);
+    return { top: Math.max(0, top), height };
+  }, [dragCreate]);
 
   return (
     <div
@@ -1830,10 +1991,33 @@ function DayColumn({
         const patientId = e.dataTransfer.getData(DRAG_KEY) || e.dataTransfer.getData("text/plain");
         if (patientId) onDropPatient(patientId, iso);
       }}
-      onClick={(e) => {
-        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques que vieram de um bloco
-        const candidate = timeFromClientY(colRef.current, e.clientY, day, settings);
-        onSlotClick(toIsoLocal(candidate));
+      onPointerDown={(e) => {
+        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques vindos de um bloco
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragCreate({ startY: e.clientY, currentY: e.clientY });
+      }}
+      onPointerMove={(e) => {
+        if (!dragCreate) return;
+        setDragCreate((prev) => (prev ? { ...prev, currentY: e.clientY } : prev));
+      }}
+      onPointerUp={(e) => {
+        if (!dragCreate || !colRef.current) return;
+        const deltaPx = Math.abs(e.clientY - dragCreate.startY);
+        const dragThresholdPx = settings.slotMinutes * PX_PER_MIN * 0.6;
+        const startY = Math.min(dragCreate.startY, e.clientY);
+        setDragCreate(null);
+        const startCandidate = timeFromClientY(colRef.current, startY, day, settings);
+        if (deltaPx < dragThresholdPx) {
+          onSlotClick(toIsoLocal(startCandidate)); // clique simples — duração default
+          return;
+        }
+        const rawMin = deltaPx / PX_PER_MIN;
+        const snappedMin = Math.max(
+          settings.slotMinutes,
+          Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes,
+        );
+        onSlotClick(toIsoLocal(startCandidate), snapToDurationOption(snappedMin));
       }}
     >
       {ticks.map((t, i) => (
@@ -1852,6 +2036,13 @@ function DayColumn({
           <span className="-ml-[3px] h-2 w-2 shrink-0 rounded-full bg-red-500" />
           <span className="h-px w-full bg-red-500" />
         </div>
+      )}
+
+      {dragPreview && (
+        <div
+          className="pointer-events-none absolute inset-x-1 z-10 rounded-md border-2 border-dashed border-primary bg-primary/10"
+          style={{ top: dragPreview.top, height: dragPreview.height }}
+        />
       )}
 
       {layouted.map(({ appt, col, totalCols, startMin, durationMin }) => (
