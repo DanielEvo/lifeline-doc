@@ -37,7 +37,20 @@ import {
   Filter,
   Trash2,
   Download,
+  ExternalLink,
 } from "lucide-react";
+
+/** Resumo rápido para o médico: prioriza o trecho de conclusão do abstract
+ *  (CONCLUSION/CONCLUSIONS/INTERPRETATION) e cai para as últimas frases. */
+function conclusaoDe(abstract: string): string {
+  const texto = abstract.replace(/\s+/g, " ").trim();
+  const marcador = texto.match(
+    /(?:conclusions?(?:\s+and\s+relevance)?|interpretation|conclus(?:ão|ões))\s*[:.\-—]\s*(.+)$/i,
+  );
+  if (marcador?.[1]) return marcador[1].trim();
+  const frases = texto.split(/(?<=[.!?])\s+/);
+  return frases.slice(-2).join(" ").trim() || texto;
+}
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
