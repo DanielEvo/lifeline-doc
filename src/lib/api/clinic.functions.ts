@@ -53,6 +53,7 @@ import {
   deleteAppointment,
   listAppointments,
   setAppointmentStatus,
+  updateAppointment,
   updateAppointmentTiming,
 } from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
@@ -197,9 +198,7 @@ export const searchPatientGlobal = createServerFn({ method: "POST" })
   });
 
 export const requestPatientAccess = createServerFn({ method: "POST" })
-  .inputValidator(
-    z.object({ token, globalId: z.string().min(1), purpose: z.enum(["perfil"]) }),
-  )
+  .inputValidator(z.object({ token, globalId: z.string().min(1), purpose: z.enum(["perfil"]) }))
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
@@ -212,7 +211,9 @@ export const requestPatientAccess = createServerFn({ method: "POST" })
 // Consome um token presencial (canal separado do vínculo em si) — sobe o
 // paciente já vinculado de "sem_acesso" pra "com_acesso".
 export const consumePresentialAccessToken = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ token, globalId: z.string().min(1), accessCode: z.string().min(1).max(10) }))
+  .inputValidator(
+    z.object({ token, globalId: z.string().min(1), accessCode: z.string().min(1).max(10) }),
+  )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
@@ -353,11 +354,19 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
     z
       .object({
         token,
-        slotMinutes: z.union([z.literal(15), z.literal(20), z.literal(30), z.literal(45), z.literal(60)]),
+        slotMinutes: z.union([
+          z.literal(15),
+          z.literal(20),
+          z.literal(30),
+          z.literal(45),
+          z.literal(60),
+        ]),
         startHour: z.number().int().min(0).max(23),
         endHour: z.number().int().min(1).max(24),
       })
-      .refine((v) => v.startHour < v.endHour, { message: "startHour precisa ser antes de endHour" }),
+      .refine((v) => v.startHour < v.endHour, {
+        message: "startHour precisa ser antes de endHour",
+      }),
   )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
@@ -369,7 +378,10 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
     };
     const updated = await updateDoctorCalendarSettings(doctor.id, settings);
     return updated
-      ? { ok: true as const, calendarSettings: updated.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS }
+      ? {
+          ok: true as const,
+          calendarSettings: updated.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS,
+        }
       : { ok: false as const, error: "not_found" as const };
   });
 
@@ -449,7 +461,9 @@ export const updateMyPatient = createServerFn({ method: "POST" })
       ...patch,
       ...(column !== undefined ? { column: resolveColumn(columns, column) } : {}),
     });
-    return patient ? { ok: true as const, patient } : { ok: false as const, error: "not_found" as const };
+    return patient
+      ? { ok: true as const, patient }
+      : { ok: false as const, error: "not_found" as const };
   });
 
 export const moveMyPatient = createServerFn({ method: "POST" })
@@ -511,6 +525,16 @@ const RECURRENCE = z
   })
   .optional();
 const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "cor precisa ser um hex válido (#rrggbb)");
+const RECURRENCE_SCOPE = z.enum(["this", "following", "all"]).optional().default("this");
+const LEMBRETES_MIN = z
+  .array(
+    z
+      .number()
+      .int()
+      .min(0)
+      .max(2 * 24 * 60),
+  )
+  .max(5);
 
 export const scheduleAppointment = createServerFn({ method: "POST" })
   .inputValidator(
@@ -527,6 +551,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       cor: HEX_COLOR.nullish(),
       descricao: z.string().max(2000).nullish(),
       local: z.string().max(160).nullish(),
+      lembretesMin: LEMBRETES_MIN.optional().default([]),
       recurrence: RECURRENCE,
     }),
   )
@@ -550,6 +575,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
         cor: data.cor,
         descricao: data.descricao,
         local: data.local,
+        lembretesMin: data.lembretesMin,
       };
       if (wantsRecurrence && recurrence) {
         const appointments = await createRecurringAppointments(doctor.id, input, {
@@ -569,7 +595,13 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
     if (wantsRecurrence && recurrence) {
       const appointments = await createRecurringAppointments(
         doctor.id,
-        { patientId: data.patientId, dateTime: dateTimeIso, note: data.note, durationMin: data.durationMin },
+        {
+          patientId: data.patientId,
+          dateTime: dateTimeIso,
+          note: data.note,
+          durationMin: data.durationMin,
+          lembretesMin: data.lembretesMin,
+        },
         { freq: recurrence.freq as "daily" | "weekly" | "monthly", count: recurrence.count },
       );
       return { ok: true as const, appointment: appointments[0], appointments };
@@ -580,17 +612,51 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       dateTime: dateTimeIso,
       note: data.note,
       durationMin: data.durationMin,
+      lembretesMin: data.lembretesMin,
     });
     return { ok: true as const, appointment };
   });
 
 export const deleteMyAppointment = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ token, id: z.string().min(1) }))
+  .inputValidator(z.object({ token, id: z.string().min(1), scope: RECURRENCE_SCOPE }))
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const ok = await deleteAppointment(doctor.id, data.id);
-    return ok ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
+    const deletedCount = await deleteAppointment(doctor.id, data.id, data.scope);
+    return deletedCount > 0
+      ? { ok: true as const, deletedCount }
+      : { ok: false as const, error: "not_found" as const };
+  });
+
+// Reabre o editor completo (dia/semana canvas ou lista) — diferente de
+// updateMyAppointmentTiming (só dateTime/durationMin, drag/resize). Escopo de
+// série (this/following/all) só importa quando o evento faz parte de uma
+// série (recurrenceId); fora disso o servidor trata como "this" de qualquer forma.
+export const updateMyAppointment = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      id: z.string().min(1),
+      note: z.string().max(200).nullish(),
+      label: z.string().max(80).nullish(),
+      durationMin: z.number().int().min(5).max(480).nullish(),
+      allDay: z.boolean().optional(),
+      categoriaId: z.string().min(1).nullish(),
+      cor: HEX_COLOR.nullish(),
+      descricao: z.string().max(2000).nullish(),
+      local: z.string().max(160).nullish(),
+      lembretesMin: LEMBRETES_MIN.optional(),
+      scope: RECURRENCE_SCOPE,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const { token: _t, id, scope, ...patch } = data;
+    const appointment = await updateAppointment(doctor.id, id, patch, scope);
+    return appointment
+      ? { ok: true as const, appointment }
+      : { ok: false as const, error: "not_found" as const };
   });
 
 export const setMyAppointmentStatus = createServerFn({ method: "POST" })
@@ -618,7 +684,10 @@ export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
       .object({
         token,
         id: z.string().min(1),
-        dateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida").optional(),
+        dateTime: z
+          .string()
+          .refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida")
+          .optional(),
         durationMin: z.number().int().min(5).max(480).optional(),
       })
       .refine((v) => v.dateTime !== undefined || v.durationMin !== undefined, {
@@ -666,14 +735,14 @@ export const createMyCharge = createServerFn({ method: "POST" })
   });
 
 export const setMyChargeStatus = createServerFn({ method: "POST" })
-  .inputValidator(
-    z.object({ token, id: z.string().min(1), status: z.enum(["pendente", "pago"]) }),
-  )
+  .inputValidator(z.object({ token, id: z.string().min(1), status: z.enum(["pendente", "pago"]) }))
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
     const charge = await setChargeStatus(doctor.id, data.id, data.status);
-    return charge ? { ok: true as const, charge } : { ok: false as const, error: "not_found" as const };
+    return charge
+      ? { ok: true as const, charge }
+      : { ok: false as const, error: "not_found" as const };
   });
 
 export const generateChargePaymentLink = createServerFn({ method: "POST" })
@@ -837,7 +906,9 @@ export const getMemedSandboxConfig = createServerFn({ method: "POST" })
   });
 
 export const sendWhatsAppNow = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ token, telefone: z.string().min(8).max(24), texto: z.string().min(1).max(1000) }))
+  .inputValidator(
+    z.object({ token, telefone: z.string().min(8).max(24), texto: z.string().min(1).max(1000) }),
+  )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
@@ -1092,17 +1163,31 @@ export const importSamplePatients = createServerFn({ method: "POST" })
       await createCharge(doctor.id, { patientId: mariana.id, valor: 350, vencimento: todayIso() });
     }
     if (carlos) {
-      const a = await createAppointment(doctor.id, { patientId: carlos.id, dateTime: atLocal(0, 15, 30) });
+      const a = await createAppointment(doctor.id, {
+        patientId: carlos.id,
+        dateTime: atLocal(0, 15, 30),
+      });
       await setAppointmentStatus(doctor.id, a.id, "confirmada");
     }
     if (juliana) {
-      const a = await createAppointment(doctor.id, { patientId: juliana.id, dateTime: atLocal(-6, 10) });
+      const a = await createAppointment(doctor.id, {
+        patientId: juliana.id,
+        dateTime: atLocal(-6, 10),
+      });
       await setAppointmentStatus(doctor.id, a.id, "faltou");
-      await createCharge(doctor.id, { patientId: juliana.id, valor: 280, vencimento: ymdOffset(-10) });
+      await createCharge(doctor.id, {
+        patientId: juliana.id,
+        valor: 280,
+        vencimento: ymdOffset(-10),
+      });
     }
     if (roberto) {
       await createAppointment(doctor.id, { patientId: roberto.id, dateTime: atLocal(1, 9) });
-      const c = await createCharge(doctor.id, { patientId: roberto.id, valor: 300, vencimento: ymdOffset(-3) });
+      const c = await createCharge(doctor.id, {
+        patientId: roberto.id,
+        valor: 300,
+        vencimento: ymdOffset(-3),
+      });
       await setChargeStatus(doctor.id, c.id, "pago");
     }
     if (sofia) {

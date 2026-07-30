@@ -7,14 +7,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  Bell,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Loader2,
   Lock,
   Plus,
   Settings2,
-  X,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +46,7 @@ import {
   deleteMyAppointment,
   saveMyCalendarSettings,
   scheduleAppointment,
+  updateMyAppointment,
   updateMyAppointmentTiming,
 } from "@/lib/api/clinic.functions";
 import {
@@ -51,12 +54,14 @@ import {
   EVENT_COLOR_SWATCHES,
   formatHourBR,
   initialsOf,
+  REMINDER_PRESETS,
   TINT_TO_HEX,
   type Appointment,
   type CalendarSettings,
   type EventCategory,
   type Patient,
   type RecurrenceFreq,
+  type RecurrenceScope,
 } from "@/lib/clinic-types";
 
 type View = "dia" | "semana" | "mes" | "lista";
@@ -229,6 +234,41 @@ function timeFromClientY(
   return d;
 }
 
+const REMINDER_CHECK_MS = 30_000;
+
+/** Dispara os lembretes configurados (Appointment.lembretesMin) via toast
+ *  enquanto o app está aberto — não existe infra de push/e-mail no projeto,
+ *  então isso é deliberadamente client-side e não sobrevive a fechar a aba.
+ *  `firedRef` evita repetir o mesmo toast a cada tick do intervalo. */
+function useAppointmentReminders(appointments: Appointment[], byId: Map<string, Patient>) {
+  const firedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const check = () => {
+      const now = Date.now();
+      for (const a of appointments) {
+        if (a.lembretesMin.length === 0) continue;
+        const start = new Date(a.dateTime).getTime();
+        if (start <= now) continue;
+        for (const min of a.lembretesMin) {
+          const key = `${a.id}:${min}`;
+          if (firedRef.current.has(key)) continue;
+          if (now >= start - min * 60_000) {
+            firedRef.current.add(key);
+            const patient = a.patientId ? byId.get(a.patientId) : undefined;
+            const label = a.label || patient?.nome || "Evento";
+            toast(`Lembrete: ${label} às ${formatHourBR(a.dateTime)}`, {
+              icon: <Bell className="h-4 w-4" />,
+            });
+          }
+        }
+      }
+    };
+    check();
+    const id = setInterval(check, REMINDER_CHECK_MS);
+    return () => clearInterval(id);
+  }, [appointments, byId]);
+}
+
 export function AppointmentCalendar({
   token,
   patients,
@@ -271,6 +311,13 @@ export function AppointmentCalendar({
   const [allDay, setAllDay] = useState(false);
   const [descricao, setDescricao] = useState("");
   const [local, setLocal] = useState("");
+  const [lembretesMin, setLembretesMin] = useState<number[]>([]);
+
+  // Editor completo (reabre em cima de evento já existente) — separado do
+  // dialog de criação acima; guarda só o id pra ficar sincronizado se
+  // `appointments` mudar (evita fechar em estado desatualizado).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editingAppt = editingId ? (appointments.find((a) => a.id === editingId) ?? null) : null;
 
   // Filtro da sidebar — só visual/local, não persiste (mesmo padrão do
   // showAll do painel de biomarcadores: estado de sessão, não config salva).
@@ -291,6 +338,9 @@ export function AppointmentCalendar({
 
   const byId = useMemo(() => new Map(patients.map((p) => [p.id, p])), [patients]);
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  // Lembretes disparam pra todos os eventos, independente do filtro da
+  // sidebar (hiddenCategoryIds/showConsultas é só visual do grid).
+  useAppointmentReminders(appointments, byId);
 
   const visibleAppointments = useMemo(
     () =>
@@ -314,6 +364,7 @@ export function AppointmentCalendar({
     setAllDay(false);
     setDescricao("");
     setLocal("");
+    setLembretesMin([]);
   };
 
   const closeDialog = () => {
@@ -334,6 +385,7 @@ export function AppointmentCalendar({
       cor: string | null;
       descricao: string | null;
       local: string | null;
+      lembretesMin: number[];
       recurrence: { freq: RecurrenceFreq; count: number };
     }) =>
       scheduleAppointment({
@@ -350,6 +402,7 @@ export function AppointmentCalendar({
           cor: v.cor,
           descricao: v.descricao,
           local: v.local,
+          lembretesMin: v.lembretesMin,
           recurrence: v.recurrence,
         },
       }),
@@ -378,11 +431,41 @@ export function AppointmentCalendar({
     },
   });
 
-  const excluirBloqueio = useMutation({
-    mutationFn: (id: string) => deleteMyAppointment({ data: { token, id } }),
+  // Exclusão só acontece de dentro do editor completo agora (sem X inline no
+  // canvas) — scope importa quando o evento faz parte de uma série.
+  const excluirEvento = useMutation({
+    mutationFn: (v: { id: string; scope: RecurrenceScope }) =>
+      deleteMyAppointment({ data: { token, id: v.id, scope: v.scope } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui remover o evento.");
-      toast.success("Evento removido.");
+      toast.success(
+        r.deletedCount > 1 ? `${r.deletedCount} eventos removidos.` : "Evento removido.",
+      );
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+  });
+
+  // Reabre o editor completo (diferente de atualizarTiming, que só cuida de
+  // dateTime/durationMin via drag/resize).
+  const editarEvento = useMutation({
+    mutationFn: (v: {
+      id: string;
+      scope: RecurrenceScope;
+      note?: string | null;
+      label?: string | null;
+      durationMin?: number | null;
+      allDay?: boolean;
+      categoriaId?: string | null;
+      cor?: string | null;
+      descricao?: string | null;
+      local?: string | null;
+      lembretesMin?: number[];
+    }) => updateMyAppointment({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar as alterações.");
+      toast.success("Evento atualizado.");
+      setEditingId(null);
       qc.invalidateQueries({ queryKey: ["workspace"] });
     },
   });
@@ -467,6 +550,7 @@ export function AppointmentCalendar({
         cor: effectiveCor,
         descricao: descricao.trim() || null,
         local: local.trim() || null,
+        lembretesMin,
         recurrence,
       });
       return;
@@ -484,6 +568,7 @@ export function AppointmentCalendar({
       cor: null,
       descricao: null,
       local: null,
+      lembretesMin,
       recurrence,
     });
   };
@@ -557,9 +642,8 @@ export function AppointmentCalendar({
               onDropPatient={openConfirm}
               onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
               onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
-              onOpenPatient={onOpenPatient}
+              onOpenEditor={setEditingId}
               onSlotClick={openEmptySlot}
-              onDeleteBloqueio={(id) => excluirBloqueio.mutate(id)}
             />
           )}
           {view === "semana" && (
@@ -571,9 +655,8 @@ export function AppointmentCalendar({
               onDropPatient={openConfirm}
               onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
               onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
-              onOpenPatient={onOpenPatient}
+              onOpenEditor={setEditingId}
               onSlotClick={openEmptySlot}
-              onDeleteBloqueio={(id) => excluirBloqueio.mutate(id)}
             />
           )}
           {view === "mes" && (
@@ -592,7 +675,7 @@ export function AppointmentCalendar({
               cursor={cursor}
               appointments={visibleAppointments}
               byId={byId}
-              onOpenPatient={onOpenPatient}
+              onOpenEditor={setEditingId}
             />
           )}
         </div>
@@ -770,6 +853,8 @@ export function AppointmentCalendar({
                 </>
               )}
 
+              <ReminderPicker selected={lembretesMin} onChange={setLembretesMin} />
+
               <RecurrencePicker
                 freq={recorrenciaFreq}
                 onFreqChange={setRecorrenciaFreq}
@@ -793,6 +878,21 @@ export function AppointmentCalendar({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {editingAppt && (
+          <EventEditorDialog
+            key={editingAppt.id}
+            appt={editingAppt}
+            patient={editingAppt.patientId ? byId.get(editingAppt.patientId) : undefined}
+            categories={categories}
+            onClose={() => setEditingId(null)}
+            onOpenPatient={onOpenPatient}
+            onSave={(patch, scope) => editarEvento.mutate({ id: editingAppt.id, scope, ...patch })}
+            onDelete={(scope) => excluirEvento.mutate({ id: editingAppt.id, scope })}
+            saving={editarEvento.isPending}
+            deleting={excluirEvento.isPending}
+          />
+        )}
       </div>
     </div>
   );
@@ -814,6 +914,48 @@ function DurationSelect({ value, onChange }: { value: number; onChange: (v: numb
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** Chips de múltipla seleção (igual ao menu de lembrete do Google Agenda) —
+ *  disparo é só client-side (toast) enquanto o app está aberto, ver
+ *  useAppointmentReminders. */
+function ReminderPicker({
+  selected,
+  onChange,
+}: {
+  selected: number[];
+  onChange: (v: number[]) => void;
+}) {
+  const set = new Set(selected);
+  const toggle = (min: number) => {
+    const next = new Set(set);
+    if (next.has(min)) next.delete(min);
+    else next.add(min);
+    onChange([...next].sort((a, b) => a - b));
+  };
+  return (
+    <div className="space-y-1">
+      <Label className="flex items-center gap-1 text-xs">
+        <Bell className="h-3 w-3" /> Lembretes
+      </Label>
+      <div className="flex flex-wrap gap-1.5">
+        {REMINDER_PRESETS.map((p) => (
+          <button
+            key={p.minutes}
+            type="button"
+            onClick={() => toggle(p.minutes)}
+            className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
+              set.has(p.minutes)
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -866,6 +1008,311 @@ function RecurrencePicker({
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Editor completo — reabre em cima de um evento já existente (canvas dia/
+// semana ou lista). Diferente do dialog de criação: nunca navega direto pro
+// prontuário (isso agora é um botão dedicado "Ver prontuário" dentro do
+// próprio editor) e é o único lugar de onde dá pra excluir (sem X inline).
+
+type EditPatch = {
+  note?: string | null;
+  label?: string | null;
+  durationMin?: number | null;
+  allDay?: boolean;
+  categoriaId?: string | null;
+  cor?: string | null;
+  descricao?: string | null;
+  local?: string | null;
+  lembretesMin?: number[];
+};
+
+function EventEditorDialog({
+  appt,
+  patient,
+  categories,
+  onClose,
+  onOpenPatient,
+  onSave,
+  onDelete,
+  saving,
+  deleting,
+}: {
+  appt: Appointment;
+  patient: Patient | undefined;
+  categories: EventCategory[];
+  onClose: () => void;
+  onOpenPatient?: (p: Patient) => void;
+  onSave: (patch: EditPatch, scope: RecurrenceScope) => void;
+  onDelete: (scope: RecurrenceScope) => void;
+  saving: boolean;
+  deleting: boolean;
+}) {
+  const isBloqueio = appt.kind === "bloqueio";
+  const isRecurring = !!appt.recurrenceId;
+  const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  const [note, setNote] = useState(appt.note ?? "");
+  const [label, setLabel] = useState(appt.label ?? "");
+  const [duracaoMin, setDuracaoMin] = useState(appt.durationMin ?? 30);
+  const [allDay, setAllDay] = useState(appt.allDay);
+  const [categoriaId, setCategoriaId] = useState<string | null>(appt.categoriaId);
+  const [corOverride, setCorOverride] = useState<string | null>(appt.cor);
+  const [descricao, setDescricao] = useState(appt.descricao ?? "");
+  const [local, setLocal] = useState(appt.local ?? "");
+  const [lembretesMin, setLembretesMin] = useState<number[]>(appt.lembretesMin);
+  const [scope, setScope] = useState<RecurrenceScope>("this");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const effectiveCor =
+    corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
+
+  const salvar = () => {
+    const patch: EditPatch = isBloqueio
+      ? {
+          label: label.trim() || null,
+          allDay,
+          durationMin: allDay ? null : duracaoMin,
+          categoriaId,
+          cor: effectiveCor,
+          descricao: descricao.trim() || null,
+          local: local.trim() || null,
+          lembretesMin,
+        }
+      : {
+          note: note.trim() || null,
+          durationMin: duracaoMin,
+          lembretesMin,
+        };
+    onSave(patch, scope);
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isBloqueio ? "Editar evento pessoal" : "Editar consulta"}</DialogTitle>
+          <DialogDescription>
+            {new Date(appt.dateTime).toLocaleString("pt-BR", {
+              weekday: "short",
+              day: "2-digit",
+              month: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          {!isBloqueio && patient && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
+              <div className="text-sm font-medium">{patient.nome}</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={() => onOpenPatient?.(patient)}
+              >
+                Ver prontuário <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+
+          {isBloqueio ? (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor="edit-titulo" className="text-xs">
+                  Título
+                </Label>
+                <Input
+                  id="edit-titulo"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  maxLength={80}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Categoria</Label>
+                <Select
+                  value={categoriaId ?? "__none"}
+                  onValueChange={(v) => setCategoriaId(v === "__none" ? null : v)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Sem categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Sem categoria</SelectItem>
+                    {categories
+                      .filter((c) => c.ativo)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Cor</Label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {EVENT_COLOR_SWATCHES.map((sw) => (
+                    <button
+                      key={sw}
+                      type="button"
+                      onClick={() => setCorOverride(sw)}
+                      className={`h-5 w-5 rounded-full ring-2 transition ${
+                        effectiveCor === sw ? "ring-foreground" : "ring-transparent"
+                      }`}
+                      style={{ backgroundColor: sw }}
+                      title={sw}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={effectiveCor ?? FALLBACK_COLOR}
+                    onChange={(e) => setCorOverride(e.target.value)}
+                    className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent p-0"
+                    title="Cor personalizada"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center justify-between gap-2 text-xs">
+                <span>Dia inteiro</span>
+                <Switch checked={allDay} onCheckedChange={setAllDay} />
+              </label>
+
+              {!allDay && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Duração</Label>
+                  <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label htmlFor="edit-descricao" className="text-xs">
+                  Descrição (opcional)
+                </Label>
+                <Textarea
+                  id="edit-descricao"
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  rows={2}
+                  maxLength={2000}
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="edit-local" className="text-xs">
+                  Local (opcional)
+                </Label>
+                <Input
+                  id="edit-local"
+                  value={local}
+                  onChange={(e) => setLocal(e.target.value)}
+                  maxLength={160}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">Duração</Label>
+                <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-nota" className="text-xs">
+                  Observação (opcional)
+                </Label>
+                <Input
+                  id="edit-nota"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={200}
+                />
+              </div>
+            </>
+          )}
+
+          <ReminderPicker selected={lembretesMin} onChange={setLembretesMin} />
+
+          {isRecurring && (
+            <div className="space-y-1 rounded-lg border border-border p-2">
+              <Label className="text-xs">Esta consulta faz parte de uma série. Aplicar a:</Label>
+              <Select value={scope} onValueChange={(v) => setScope(v as RecurrenceScope)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="this">Esta ocorrência</SelectItem>
+                  <SelectItem value="following">Esta e as seguintes</SelectItem>
+                  <SelectItem value="all">Todas as ocorrências</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {confirmingDelete && (
+            <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2">
+              <div className="text-xs text-destructive">
+                {isRecurring
+                  ? "Excluir de acordo com o escopo selecionado acima?"
+                  : "Excluir este evento? Essa ação não pode ser desfeita."}
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 flex-1 text-xs"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 flex-1 text-xs"
+                  disabled={deleting}
+                  onClick={() => onDelete(scope)}
+                >
+                  {deleting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />} Confirmar exclusão
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="flex-row items-center sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={confirmingDelete}
+          >
+            <Trash2 className="h-4 w-4" /> Excluir
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={saving}
+              onClick={salvar}
+              className="brand-gradient text-primary-foreground"
+            >
+              {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />} Salvar
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1162,9 +1609,8 @@ function TimeGrid({
   onDropPatient,
   onMoveAppointment,
   onResizeAppointment,
-  onOpenPatient,
+  onOpenEditor,
   onSlotClick,
-  onDeleteBloqueio,
 }: {
   days: Date[];
   settings: CalendarSettings;
@@ -1173,9 +1619,8 @@ function TimeGrid({
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
-  onOpenPatient?: (p: Patient) => void;
+  onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string) => void;
-  onDeleteBloqueio: (id: string) => void;
 }) {
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
@@ -1232,7 +1677,7 @@ function TimeGrid({
               key={ymd(d)}
               appts={allDayByDay.get(ymd(d)) ?? []}
               byId={byId}
-              onDeleteBloqueio={onDeleteBloqueio}
+              onOpenEditor={onOpenEditor}
             />
           ))}
         </div>
@@ -1253,9 +1698,8 @@ function TimeGrid({
             onDropPatient={onDropPatient}
             onMoveAppointment={onMoveAppointment}
             onResizeAppointment={onResizeAppointment}
-            onOpenPatient={onOpenPatient}
+            onOpenEditor={onOpenEditor}
             onSlotClick={onSlotClick}
-            onDeleteBloqueio={onDeleteBloqueio}
           />
         ))}
       </div>
@@ -1284,11 +1728,11 @@ function TimeGutter({ ticks, settings }: { ticks: Tick[]; settings: CalendarSett
 function AllDayCell({
   appts,
   byId,
-  onDeleteBloqueio,
+  onOpenEditor,
 }: {
   appts: Appointment[];
   byId: Map<string, Patient>;
-  onDeleteBloqueio: (id: string) => void;
+  onOpenEditor: (id: string) => void;
 }) {
   return (
     <div className="min-w-[120px] flex-1 space-y-0.5 border-l border-border p-0.5">
@@ -1301,23 +1745,16 @@ function AllDayCell({
         return (
           <div
             key={a.id}
-            className="flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenEditor(a.id);
+            }}
+            className={`flex cursor-pointer items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${isPastAppt(a) ? "opacity-50" : ""}`}
             style={{ backgroundColor: color }}
             title={a.label ?? patient?.nome ?? ""}
           >
+            {a.kind === "bloqueio" && <Lock className="h-2.5 w-2.5 shrink-0" />}
             <span className="truncate">{a.label || patient?.nome || "Evento"}</span>
-            {a.kind === "bloqueio" && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteBloqueio(a.id);
-                }}
-                className="ml-auto shrink-0"
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            )}
           </div>
         );
       })}
@@ -1336,9 +1773,8 @@ function DayColumn({
   onDropPatient,
   onMoveAppointment,
   onResizeAppointment,
-  onOpenPatient,
+  onOpenEditor,
   onSlotClick,
-  onDeleteBloqueio,
 }: {
   day: Date;
   isToday: boolean;
@@ -1350,9 +1786,8 @@ function DayColumn({
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
-  onOpenPatient?: (p: Patient) => void;
+  onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string) => void;
-  onDeleteBloqueio: (id: string) => void;
 }) {
   const colRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
@@ -1429,8 +1864,7 @@ function DayColumn({
           col={col}
           totalCols={totalCols}
           slotMinutes={settings.slotMinutes}
-          onOpenPatient={onOpenPatient}
-          onDeleteBloqueio={onDeleteBloqueio}
+          onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
         />
       ))}
@@ -1446,8 +1880,7 @@ function EventBlock({
   col,
   totalCols,
   slotMinutes,
-  onOpenPatient,
-  onDeleteBloqueio,
+  onOpenEditor,
   onResize,
 }: {
   appt: Appointment;
@@ -1457,8 +1890,7 @@ function EventBlock({
   col: number;
   totalCols: number;
   slotMinutes: number;
-  onOpenPatient?: (p: Patient) => void;
-  onDeleteBloqueio: (id: string) => void;
+  onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
 }) {
   const [resizeDeltaPx, setResizeDeltaPx] = useState<number | null>(null);
@@ -1482,17 +1914,15 @@ function EventBlock({
       }}
       onClick={(e) => {
         e.stopPropagation();
-        if (!isBloqueio && patient) onOpenPatient?.(patient);
+        onOpenEditor(appt.id);
       }}
       title={
         isBloqueio
-          ? appt.label || "Bloqueado"
-          : `${patient?.nome ?? ""} · ${formatHourBR(appt.dateTime)}${appt.note ? ` · ${appt.note}` : ""} — arraste pra remarcar, puxe a borda de baixo pra mudar a duração`
+          ? `${appt.label || "Bloqueado"} — clique pra editar`
+          : `${patient?.nome ?? ""} · ${formatHourBR(appt.dateTime)}${appt.note ? ` · ${appt.note}` : ""} — clique pra editar, arraste pra remarcar, puxe a borda de baixo pra mudar a duração`
       }
-      className={`group absolute overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition ${
-        isBloqueio
-          ? "cursor-default bg-slate-200 dark:bg-slate-800/70"
-          : "cursor-grab active:cursor-grabbing"
+      className={`group absolute cursor-pointer overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition ${
+        isBloqueio ? "bg-slate-200 dark:bg-slate-800/70" : "active:cursor-grabbing"
       } ${isPastAppt(appt) ? "opacity-50" : ""}`}
       style={{
         top,
@@ -1510,17 +1940,6 @@ function EventBlock({
           <span className="min-w-0 flex-1 truncate font-medium text-slate-600 dark:text-slate-300">
             {appt.label || "Bloqueado"}
           </span>
-          <button
-            type="button"
-            title="Remover bloqueio"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteBloqueio(appt.id);
-            }}
-            className="shrink-0 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
-          >
-            <X className="h-3 w-3" />
-          </button>
         </div>
       ) : (
         patient && (
@@ -1575,12 +1994,12 @@ function ListView({
   cursor,
   appointments,
   byId,
-  onOpenPatient,
+  onOpenEditor,
 }: {
   cursor: Date;
   appointments: Appointment[];
   byId: Map<string, Patient>;
-  onOpenPatient?: (p: Patient) => void;
+  onOpenEditor: (id: string) => void;
 }) {
   const cursorKey = ymd(cursor);
 
@@ -1619,14 +2038,11 @@ function ListView({
             {dayAppts.map((a) => {
               const patient = a.patientId ? byId.get(a.patientId) : undefined;
               const label = a.label || patient?.nome || "Evento";
-              const clickable = a.kind === "consulta" && !!patient;
               return (
                 <div
                   key={a.id}
-                  onClick={() => clickable && onOpenPatient?.(patient!)}
-                  className={`flex items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-xs ${
-                    clickable ? "cursor-pointer hover:bg-muted/60" : ""
-                  } ${isPastAppt(a) ? "opacity-50" : ""}`}
+                  onClick={() => onOpenEditor(a.id)}
+                  className={`flex cursor-pointer items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-xs hover:bg-muted/60 ${isPastAppt(a) ? "opacity-50" : ""}`}
                   style={{ borderLeftColor: resolveApptColor(a, byId) }}
                 >
                   <span className="w-14 shrink-0 tabular-nums text-muted-foreground">

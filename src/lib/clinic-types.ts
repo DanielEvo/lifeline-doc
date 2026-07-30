@@ -130,9 +130,14 @@ export type Appointment = {
   descricao: string | null;
   local: string | null;
   recurrenceId: string | null; // agrupa eventos gerados na mesma série (consulta ou bloqueio)
+  // Minutos antes do início pra lembrar (ex.: [10, 60] = 10min e 1h antes).
+  // Disparo é só client-side (toast) enquanto o app está aberto — sem push/e-mail.
+  lembretesMin: number[];
   createdAt: string;
   updatedAt: string;
 };
+
+export type RecurrenceScope = "this" | "following" | "all";
 
 /** Narrowing helper — todo consumidor que assume patientId presente deve
  *  filtrar por isso antes de usar (ex.: listas de "hoje"/"faltas" por paciente). */
@@ -150,7 +155,11 @@ export type CalendarSettings = {
   endHour: number; // 1-24
 };
 
-export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = { slotMinutes: 30, startHour: 8, endHour: 19 };
+export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
+  slotMinutes: 30,
+  startHour: 8,
+  endHour: 19,
+};
 
 // Categoria/cor de eventos pessoais (agenda, PRO-XX) — nunca se aplica a
 // consultas, que mantêm a cor própria do paciente (Patient.tint).
@@ -175,6 +184,16 @@ export const EVENT_COLOR_SWATCHES = [
   "#8e24aa", // Roxo
   "#e67c73", // Rosa
 ] as const;
+
+// Presets de lembrete (minutos antes) oferecidos no editor de evento — mesmo
+// menu do Google Agenda, sem o "no dia às" (não temos horário fixo de lembrete diário).
+export const REMINDER_PRESETS: { minutes: number; label: string }[] = [
+  { minutes: 10, label: "10 minutos antes" },
+  { minutes: 30, label: "30 minutos antes" },
+  { minutes: 60, label: "1 hora antes" },
+  { minutes: 24 * 60, label: "1 dia antes" },
+  { minutes: 2 * 24 * 60, label: "2 dias antes" },
+];
 
 // Mapeia os 5 gradientes de Patient.tint (patients.server.ts) pra um hex
 // representativo (stop "from-") — usado pra renderizar blocos de consulta
@@ -235,61 +254,394 @@ export type Measurement = {
 // verificado por jq/busca direta no arquivo antes de gravar (ver
 // HANDOVER_LOINC_v3_Pendencias.md para os que ficaram null e por quê).
 export const BIOMARKER_CATALOG = [
-  { name: "Hemoglobina", unit: "g/dL", min: 12, max: 16, synonyms: ["Hb", "HGB", "Hemoglobina Total"], loincCode: "718-7" },
-  { name: "Ferritina", unit: "ng/mL", min: 30, max: 200, synonyms: ["Ferritina Sérica"], loincCode: "2276-4" },
-  { name: "Vitamina D", unit: "ng/mL", min: 30, max: 100, synonyms: ["25-OH Vitamina D", "Vitamina D Total", "25-Hidroxivitamina D", "25 OH Vitamina D"], loincCode: "1989-3" },
-  { name: "Vitamina B12", unit: "pg/mL", min: 300, max: 900, synonyms: ["Cobalamina", "Vit B12", "Vitamina B-12, Dosagem"], loincCode: "2132-9" },
+  {
+    name: "Hemoglobina",
+    unit: "g/dL",
+    min: 12,
+    max: 16,
+    synonyms: ["Hb", "HGB", "Hemoglobina Total"],
+    loincCode: "718-7",
+  },
+  {
+    name: "Ferritina",
+    unit: "ng/mL",
+    min: 30,
+    max: 200,
+    synonyms: ["Ferritina Sérica"],
+    loincCode: "2276-4",
+  },
+  {
+    name: "Vitamina D",
+    unit: "ng/mL",
+    min: 30,
+    max: 100,
+    synonyms: ["25-OH Vitamina D", "Vitamina D Total", "25-Hidroxivitamina D", "25 OH Vitamina D"],
+    loincCode: "1989-3",
+  },
+  {
+    name: "Vitamina B12",
+    unit: "pg/mL",
+    min: 300,
+    max: 900,
+    synonyms: ["Cobalamina", "Vit B12", "Vitamina B-12, Dosagem"],
+    loincCode: "2132-9",
+  },
   { name: "Zinco", unit: "µg/dL", min: 70, max: 120, synonyms: ["Zinco Sérico"], loincCode: null },
-  { name: "Creatinina", unit: "mg/dL", min: 0.5, max: 1.1, synonyms: ["Cr", "Creatinina Sérica"], loincCode: "2160-0" },
-  { name: "Glicemia de jejum", unit: "mg/dL", min: 70, max: 99, synonyms: ["Glicose", "Glicemia"], loincCode: null },
-  { name: "HbA1c", unit: "%", min: 4, max: 5.6, synonyms: ["Hemoglobina Glicada", "A1c", "Hemoglobina Glicada - HbA1c"], loincCode: "4548-4" },
-  { name: "Colesterol total", unit: "mg/dL", min: 100, max: 190, synonyms: ["Colesterol"], loincCode: "2093-3" },
-  { name: "TSH", unit: "µUI/mL", min: 0.4, max: 4, synonyms: ["Hormônio Tireoestimulante", "Hormônio Tireoestimulante Ultrassensível (TSH)", "Hormônio Tireoestimulante Ultrassensível"], loincCode: "3016-3" },
-  { name: "Eritrócitos", unit: "10^6/µL", min: 4.5, max: 5.5, synonyms: ["Eritrócitos", "Hemácias"], loincCode: "789-8" },
-  { name: "Hematócrito", unit: "%", min: 40, max: 50, synonyms: ["Hematócrito", "Ht", "HT"], loincCode: "4544-3" },
+  {
+    name: "Creatinina",
+    unit: "mg/dL",
+    min: 0.5,
+    max: 1.1,
+    synonyms: ["Cr", "Creatinina Sérica"],
+    loincCode: "2160-0",
+  },
+  {
+    name: "Glicemia de jejum",
+    unit: "mg/dL",
+    min: 70,
+    max: 99,
+    synonyms: ["Glicose", "Glicemia"],
+    loincCode: null,
+  },
+  {
+    name: "HbA1c",
+    unit: "%",
+    min: 4,
+    max: 5.6,
+    synonyms: ["Hemoglobina Glicada", "A1c", "Hemoglobina Glicada - HbA1c"],
+    loincCode: "4548-4",
+  },
+  {
+    name: "Colesterol total",
+    unit: "mg/dL",
+    min: 100,
+    max: 190,
+    synonyms: ["Colesterol"],
+    loincCode: "2093-3",
+  },
+  {
+    name: "TSH",
+    unit: "µUI/mL",
+    min: 0.4,
+    max: 4,
+    synonyms: [
+      "Hormônio Tireoestimulante",
+      "Hormônio Tireoestimulante Ultrassensível (TSH)",
+      "Hormônio Tireoestimulante Ultrassensível",
+    ],
+    loincCode: "3016-3",
+  },
+  {
+    name: "Eritrócitos",
+    unit: "10^6/µL",
+    min: 4.5,
+    max: 5.5,
+    synonyms: ["Eritrócitos", "Hemácias"],
+    loincCode: "789-8",
+  },
+  {
+    name: "Hematócrito",
+    unit: "%",
+    min: 40,
+    max: 50,
+    synonyms: ["Hematócrito", "Ht", "HT"],
+    loincCode: "4544-3",
+  },
   { name: "VCM", unit: "fL", min: 83, max: 101, synonyms: ["VCM", "MCV"], loincCode: "787-2" },
   { name: "HCM", unit: "pg", min: 27, max: 32, synonyms: ["HCM", "MCH"], loincCode: "785-6" },
   { name: "CHCM", unit: "g/dL", min: 31, max: 35, synonyms: ["CHCM", "MCHC"], loincCode: "786-4" },
   { name: "RDW", unit: "%", min: 11.6, max: 14, synonyms: ["RDW"], loincCode: "788-0" },
-  { name: "Leucócitos", unit: "/µL", min: 4000, max: 10000, synonyms: ["Leucócitos", "WBC"], loincCode: "6690-2" },
-  { name: "Neutrófilos", unit: "/µL", min: 1800, max: 7800, synonyms: ["Neutrófilos"], loincCode: "751-8" },
-  { name: "Eosinófilos", unit: "/µL", min: 20, max: 500, synonyms: ["Eosinófilos"], loincCode: "711-2" },
-  { name: "Basófilos", unit: "/µL", min: 20, max: 100, synonyms: ["Basófilos"], loincCode: "704-7" },
-  { name: "Linfócitos", unit: "/µL", min: 1000, max: 3000, synonyms: ["Linfócitos"], loincCode: "731-0" },
-  { name: "Monócitos", unit: "/µL", min: 200, max: 1000, synonyms: ["Monócitos"], loincCode: "742-7" },
-  { name: "Plaquetas", unit: "/µL", min: 150000, max: 450000, synonyms: ["Contagem de Plaquetas", "Plaquetas", "PLT"], loincCode: "777-3" },
+  {
+    name: "Leucócitos",
+    unit: "/µL",
+    min: 4000,
+    max: 10000,
+    synonyms: ["Leucócitos", "WBC"],
+    loincCode: "6690-2",
+  },
+  {
+    name: "Neutrófilos",
+    unit: "/µL",
+    min: 1800,
+    max: 7800,
+    synonyms: ["Neutrófilos"],
+    loincCode: "751-8",
+  },
+  {
+    name: "Eosinófilos",
+    unit: "/µL",
+    min: 20,
+    max: 500,
+    synonyms: ["Eosinófilos"],
+    loincCode: "711-2",
+  },
+  {
+    name: "Basófilos",
+    unit: "/µL",
+    min: 20,
+    max: 100,
+    synonyms: ["Basófilos"],
+    loincCode: "704-7",
+  },
+  {
+    name: "Linfócitos",
+    unit: "/µL",
+    min: 1000,
+    max: 3000,
+    synonyms: ["Linfócitos"],
+    loincCode: "731-0",
+  },
+  {
+    name: "Monócitos",
+    unit: "/µL",
+    min: 200,
+    max: 1000,
+    synonyms: ["Monócitos"],
+    loincCode: "742-7",
+  },
+  {
+    name: "Plaquetas",
+    unit: "/µL",
+    min: 150000,
+    max: 450000,
+    synonyms: ["Contagem de Plaquetas", "Plaquetas", "PLT"],
+    loincCode: "777-3",
+  },
   { name: "VPM", unit: "fL", min: 8.3, max: 12.5, synonyms: ["VPM", "MPV"], loincCode: "32623-1" },
-  { name: "Ferro", unit: "µg/dL", min: 65, max: 175, synonyms: ["Ferro", "Ferro Sérico"], loincCode: "2498-4" },
-  { name: "Ureia", unit: "mg/dL", min: 19, max: 49, synonyms: ["Uréia", "Ureia"], loincCode: "3094-0" },
-  { name: "eGFR", unit: "mL/min/1.73m²", min: 90, max: 200, synonyms: ["eGFR", "Taxa de Filtração Glomerular"], loincCode: null },
-  { name: "Potássio", unit: "mmol/L", min: 3.5, max: 5.1, synonyms: ["Potássio", "K+"], loincCode: "2823-3" },
-  { name: "Sódio", unit: "mmol/L", min: 136, max: 145, synonyms: ["Sódio", "Na+"], loincCode: "2951-2" },
-  { name: "Magnésio", unit: "mg/dL", min: 1.6, max: 2.6, synonyms: ["Magnésio", "Mg"], loincCode: "2601-3" },
-  { name: "Cálcio", unit: "mg/dL", min: 8.3, max: 10.6, synonyms: ["Cálcio", "Ca"], loincCode: "17861-6" },
-  { name: "Cálcio Ionizado", unit: "mmol/L", min: 1.05, max: 1.3, synonyms: ["Calcio Ionizado", "Cálcio Iônico"], loincCode: "1994-3" },
-  { name: "Insulina", unit: "µUI/mL", min: 2.5, max: 13.1, synonyms: ["Insulina"], loincCode: "20448-7" },
-  { name: "HOMA-IR", unit: "", min: 0, max: 2.7, synonyms: ["HOMA-IR", "Índice HOMA"], loincCode: null },
-  { name: "Triglicérides", unit: "mg/dL", min: 0, max: 150, synonyms: ["Triglicérides", "Triglicerídeos"], loincCode: "2571-8" },
-  { name: "HDL Colesterol", unit: "mg/dL", min: 40, max: 100, synonyms: ["HDL - Colesterol", "HDL"], loincCode: "2085-9" },
-  { name: "LDL Colesterol", unit: "mg/dL", min: 0, max: 130, synonyms: ["LDL - Colesterol (calculado)", "LDL"], loincCode: "13457-7" },
-  { name: "VLDL Colesterol", unit: "mg/dL", min: 5, max: 40, synonyms: ["VLDL - Colesterol", "VLDL"], loincCode: "13458-5" },
-  { name: "Não-HDL Colesterol", unit: "mg/dL", min: 0, max: 160, synonyms: ["Não HDL - Colesterol", "Não-HDL"], loincCode: null },
-  { name: "Ácido Úrico", unit: "mg/dL", min: 3.8, max: 8.6, synonyms: ["Ácido Úrico"], loincCode: "3084-1" },
-  { name: "TGO", unit: "U/L", min: 0, max: 34, synonyms: ["Transaminase oxalacética - TGO", "TGO", "AST"], loincCode: "1920-8" },
-  { name: "TGP", unit: "U/L", min: 10, max: 49, synonyms: ["Transaminase pirúvica - TGP", "TGP", "ALT"], loincCode: "1742-6" },
-  { name: "Gama-GT", unit: "U/L", min: 0, max: 73, synonyms: ["Gama-Glutamil Transferase", "Gama GT", "GGT"], loincCode: "2324-2" },
-  { name: "Fosfatase Alcalina", unit: "U/L", min: 46, max: 116, synonyms: ["Fosfatase Alcalina"], loincCode: "6768-6" },
-  { name: "T3 Livre", unit: "pg/mL", min: 2.3, max: 4.2, synonyms: ["T3 Livre (Triiodotironina Livre)", "T3 Livre"], loincCode: null },
-  { name: "T4 Livre", unit: "ng/dL", min: 0.89, max: 1.76, synonyms: ["Tiroxina Livre (T4 Livre)", "T4 Livre"], loincCode: "3024-7" },
-  { name: "Testosterona Total", unit: "ng/dL", min: 164.94, max: 753.38, synonyms: ["Testosterona Total"], loincCode: "2986-8" },
-  { name: "SHBG", unit: "nmol/L", min: 10, max: 57, synonyms: ["SHBG (Globulina Transportadora de Hormônios Sexuais)", "SHBG"], loincCode: null },
-  { name: "Testosterona Livre Calculada", unit: "ng/dL", min: 3.4, max: 24.6, synonyms: ["Testosterona Livre Calculada"], loincCode: null },
-  { name: "Testosterona Biodisponível", unit: "ng/dL", min: 82, max: 626, synonyms: ["Testosterona Biodisponível"], loincCode: null },
-  { name: "PSA Total", unit: "ng/mL", min: 0, max: 4, synonyms: ["PSA Total"], loincCode: "2857-1" },
-  { name: "PSA Livre", unit: "ng/mL", min: 0, max: 1, synonyms: ["PSA Livre"], loincCode: "10886-0" },
+  {
+    name: "Ferro",
+    unit: "µg/dL",
+    min: 65,
+    max: 175,
+    synonyms: ["Ferro", "Ferro Sérico"],
+    loincCode: "2498-4",
+  },
+  {
+    name: "Ureia",
+    unit: "mg/dL",
+    min: 19,
+    max: 49,
+    synonyms: ["Uréia", "Ureia"],
+    loincCode: "3094-0",
+  },
+  {
+    name: "eGFR",
+    unit: "mL/min/1.73m²",
+    min: 90,
+    max: 200,
+    synonyms: ["eGFR", "Taxa de Filtração Glomerular"],
+    loincCode: null,
+  },
+  {
+    name: "Potássio",
+    unit: "mmol/L",
+    min: 3.5,
+    max: 5.1,
+    synonyms: ["Potássio", "K+"],
+    loincCode: "2823-3",
+  },
+  {
+    name: "Sódio",
+    unit: "mmol/L",
+    min: 136,
+    max: 145,
+    synonyms: ["Sódio", "Na+"],
+    loincCode: "2951-2",
+  },
+  {
+    name: "Magnésio",
+    unit: "mg/dL",
+    min: 1.6,
+    max: 2.6,
+    synonyms: ["Magnésio", "Mg"],
+    loincCode: "2601-3",
+  },
+  {
+    name: "Cálcio",
+    unit: "mg/dL",
+    min: 8.3,
+    max: 10.6,
+    synonyms: ["Cálcio", "Ca"],
+    loincCode: "17861-6",
+  },
+  {
+    name: "Cálcio Ionizado",
+    unit: "mmol/L",
+    min: 1.05,
+    max: 1.3,
+    synonyms: ["Calcio Ionizado", "Cálcio Iônico"],
+    loincCode: "1994-3",
+  },
+  {
+    name: "Insulina",
+    unit: "µUI/mL",
+    min: 2.5,
+    max: 13.1,
+    synonyms: ["Insulina"],
+    loincCode: "20448-7",
+  },
+  {
+    name: "HOMA-IR",
+    unit: "",
+    min: 0,
+    max: 2.7,
+    synonyms: ["HOMA-IR", "Índice HOMA"],
+    loincCode: null,
+  },
+  {
+    name: "Triglicérides",
+    unit: "mg/dL",
+    min: 0,
+    max: 150,
+    synonyms: ["Triglicérides", "Triglicerídeos"],
+    loincCode: "2571-8",
+  },
+  {
+    name: "HDL Colesterol",
+    unit: "mg/dL",
+    min: 40,
+    max: 100,
+    synonyms: ["HDL - Colesterol", "HDL"],
+    loincCode: "2085-9",
+  },
+  {
+    name: "LDL Colesterol",
+    unit: "mg/dL",
+    min: 0,
+    max: 130,
+    synonyms: ["LDL - Colesterol (calculado)", "LDL"],
+    loincCode: "13457-7",
+  },
+  {
+    name: "VLDL Colesterol",
+    unit: "mg/dL",
+    min: 5,
+    max: 40,
+    synonyms: ["VLDL - Colesterol", "VLDL"],
+    loincCode: "13458-5",
+  },
+  {
+    name: "Não-HDL Colesterol",
+    unit: "mg/dL",
+    min: 0,
+    max: 160,
+    synonyms: ["Não HDL - Colesterol", "Não-HDL"],
+    loincCode: null,
+  },
+  {
+    name: "Ácido Úrico",
+    unit: "mg/dL",
+    min: 3.8,
+    max: 8.6,
+    synonyms: ["Ácido Úrico"],
+    loincCode: "3084-1",
+  },
+  {
+    name: "TGO",
+    unit: "U/L",
+    min: 0,
+    max: 34,
+    synonyms: ["Transaminase oxalacética - TGO", "TGO", "AST"],
+    loincCode: "1920-8",
+  },
+  {
+    name: "TGP",
+    unit: "U/L",
+    min: 10,
+    max: 49,
+    synonyms: ["Transaminase pirúvica - TGP", "TGP", "ALT"],
+    loincCode: "1742-6",
+  },
+  {
+    name: "Gama-GT",
+    unit: "U/L",
+    min: 0,
+    max: 73,
+    synonyms: ["Gama-Glutamil Transferase", "Gama GT", "GGT"],
+    loincCode: "2324-2",
+  },
+  {
+    name: "Fosfatase Alcalina",
+    unit: "U/L",
+    min: 46,
+    max: 116,
+    synonyms: ["Fosfatase Alcalina"],
+    loincCode: "6768-6",
+  },
+  {
+    name: "T3 Livre",
+    unit: "pg/mL",
+    min: 2.3,
+    max: 4.2,
+    synonyms: ["T3 Livre (Triiodotironina Livre)", "T3 Livre"],
+    loincCode: null,
+  },
+  {
+    name: "T4 Livre",
+    unit: "ng/dL",
+    min: 0.89,
+    max: 1.76,
+    synonyms: ["Tiroxina Livre (T4 Livre)", "T4 Livre"],
+    loincCode: "3024-7",
+  },
+  {
+    name: "Testosterona Total",
+    unit: "ng/dL",
+    min: 164.94,
+    max: 753.38,
+    synonyms: ["Testosterona Total"],
+    loincCode: "2986-8",
+  },
+  {
+    name: "SHBG",
+    unit: "nmol/L",
+    min: 10,
+    max: 57,
+    synonyms: ["SHBG (Globulina Transportadora de Hormônios Sexuais)", "SHBG"],
+    loincCode: null,
+  },
+  {
+    name: "Testosterona Livre Calculada",
+    unit: "ng/dL",
+    min: 3.4,
+    max: 24.6,
+    synonyms: ["Testosterona Livre Calculada"],
+    loincCode: null,
+  },
+  {
+    name: "Testosterona Biodisponível",
+    unit: "ng/dL",
+    min: 82,
+    max: 626,
+    synonyms: ["Testosterona Biodisponível"],
+    loincCode: null,
+  },
+  {
+    name: "PSA Total",
+    unit: "ng/mL",
+    min: 0,
+    max: 4,
+    synonyms: ["PSA Total"],
+    loincCode: "2857-1",
+  },
+  {
+    name: "PSA Livre",
+    unit: "ng/mL",
+    min: 0,
+    max: 1,
+    synonyms: ["PSA Livre"],
+    loincCode: "10886-0",
+  },
   // Faixa ampla (não é referência clínica real — peso não tem "normal" sem
   // altura/IMC) só pra não disparar falso alerta de fora-da-faixa.
-  { name: "Peso", unit: "kg", min: 30, max: 200, synonyms: ["Peso corporal", "Peso Corporal"], loincCode: null },
+  {
+    name: "Peso",
+    unit: "kg",
+    min: 30,
+    max: 200,
+    synonyms: ["Peso corporal", "Peso Corporal"],
+    loincCode: null,
+  },
 ] as const;
 
 export function resolveBiomarkerName(rawName: string): (typeof BIOMARKER_CATALOG)[number] | null {
@@ -310,7 +662,11 @@ export const MED_CATALOG: { name: string; dosage: string; duration: string }[] =
   { name: "Vitamina B12 1000mcg", dosage: "1 comprimido, 1x/dia", duration: "60 dias" },
   { name: "Ácido Fólico 5mg", dosage: "1 comprimido, 1x/dia", duration: "60 dias" },
   { name: "Colecalciferol 50.000UI", dosage: "1 comprimido, 1x/semana", duration: "8 semanas" },
-  { name: "Metformina 850mg", dosage: "1 comprimido, 2x/dia, após refeições", duration: "Uso contínuo" },
+  {
+    name: "Metformina 850mg",
+    dosage: "1 comprimido, 2x/dia, após refeições",
+    duration: "Uso contínuo",
+  },
   { name: "Losartana 50mg", dosage: "1 comprimido, 1x/dia", duration: "Uso contínuo" },
 ];
 
@@ -455,7 +811,13 @@ export function waLink(telefone: string, text: string): string {
 export const WA_TEMPLATES = {
   confirmar: (paciente: string, hora: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Confirmando sua consulta hoje às ${hora}. Qualquer imprevisto, me avise por aqui. — ${medico}`,
-  cobrar: (paciente: string, valor: string, venc: string, medico: string, paymentUrl?: string | null) =>
+  cobrar: (
+    paciente: string,
+    valor: string,
+    venc: string,
+    medico: string,
+    paymentUrl?: string | null,
+  ) =>
     `Olá, ${paciente.split(" ")[0]}! Tudo bem? Passando para lembrar do pagamento de ${valor} com vencimento em ${venc}.${paymentUrl ? ` Link para pagar: ${paymentUrl}` : ""} Qualquer dúvida estou à disposição. — ${medico}`,
   reengajar: (paciente: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Sentimos sua falta na última consulta. Vamos remarcar? Me diga o melhor dia e horário para você. — ${medico}`,

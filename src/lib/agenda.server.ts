@@ -3,29 +3,37 @@
 // "Faltou" alimenta a visão de reengajamento no painel de pacientes.
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
-import type { Appointment, AppointmentStatus, RecurrenceFreq } from "./clinic-types";
+import type {
+  Appointment,
+  AppointmentStatus,
+  RecurrenceFreq,
+  RecurrenceScope,
+} from "./clinic-types";
 
 const FILE = "appointments.json";
 const DEFAULT_DURATION_MIN = 30;
 
 export async function listAppointments(doctorId: string): Promise<Appointment[]> {
   const rows = await readRows<Appointment>(FILE);
-  return rows
-    .filter((a) => a.doctorId === doctorId)
-    // linhas antigas não têm os campos abaixo — normaliza sem migrar o arquivo
-    .map((a) => ({
-      ...a,
-      kind: a.kind ?? "consulta",
-      label: a.label ?? null,
-      recurrenceId: a.recurrenceId ?? null,
-      durationMin: a.durationMin ?? DEFAULT_DURATION_MIN,
-      allDay: a.allDay ?? false,
-      categoriaId: a.categoriaId ?? null,
-      cor: a.cor ?? null,
-      descricao: a.descricao ?? null,
-      local: a.local ?? null,
-    }))
-    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+  return (
+    rows
+      .filter((a) => a.doctorId === doctorId)
+      // linhas antigas não têm os campos abaixo — normaliza sem migrar o arquivo
+      .map((a) => ({
+        ...a,
+        kind: a.kind ?? "consulta",
+        label: a.label ?? null,
+        recurrenceId: a.recurrenceId ?? null,
+        durationMin: a.durationMin ?? DEFAULT_DURATION_MIN,
+        allDay: a.allDay ?? false,
+        categoriaId: a.categoriaId ?? null,
+        cor: a.cor ?? null,
+        descricao: a.descricao ?? null,
+        local: a.local ?? null,
+        lembretesMin: a.lembretesMin ?? [],
+      }))
+      .sort((a, b) => a.dateTime.localeCompare(b.dateTime))
+  );
 }
 
 type CreateAppointmentInput = {
@@ -41,9 +49,14 @@ type CreateAppointmentInput = {
   cor?: string | null;
   descricao?: string | null;
   local?: string | null;
+  lembretesMin?: number[];
 };
 
-function buildAppointment(doctorId: string, input: CreateAppointmentInput, now: string): Appointment {
+function buildAppointment(
+  doctorId: string,
+  input: CreateAppointmentInput,
+  now: string,
+): Appointment {
   const allDay = input.allDay ?? false;
   return {
     id: newId(),
@@ -61,6 +74,7 @@ function buildAppointment(doctorId: string, input: CreateAppointmentInput, now: 
     cor: input.cor ?? null,
     descricao: input.descricao?.trim() || null,
     local: input.local?.trim() || null,
+    lembretesMin: input.lembretesMin ?? [],
     createdAt: now,
     updatedAt: now,
   };
@@ -112,15 +126,86 @@ export async function createRecurringAppointments(
   return created;
 }
 
-export async function deleteAppointment(doctorId: string, id: string): Promise<boolean> {
-  let deleted = false;
+/** scope "this" apaga só a ocorrência; "following" apaga essa e as
+ *  seguintes da mesma série (por dateTime); "all" apaga a série inteira.
+ *  Fora de uma série (recurrenceId null), scope é sempre tratado como "this". */
+export async function deleteAppointment(
+  doctorId: string,
+  id: string,
+  scope: RecurrenceScope = "this",
+): Promise<number> {
+  let deletedCount = 0;
   await mutateRows<Appointment>(FILE, (rows) => {
-    const idx = rows.findIndex((r) => r.id === id && r.doctorId === doctorId);
-    if (idx === -1) return;
-    rows.splice(idx, 1);
-    deleted = true;
+    const target = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!target) return;
+    const idsToDelete = new Set<string>([target.id]);
+    if (scope !== "this" && target.recurrenceId) {
+      for (const r of rows) {
+        if (r.doctorId !== doctorId || r.recurrenceId !== target.recurrenceId) continue;
+        if (scope === "all" || r.dateTime >= target.dateTime) idsToDelete.add(r.id);
+      }
+    }
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (idsToDelete.has(rows[i].id)) {
+        rows.splice(i, 1);
+        deletedCount++;
+      }
+    }
   });
-  return deleted;
+  return deletedCount;
+}
+
+export type AppointmentEditableFields = {
+  note?: string | null;
+  label?: string | null;
+  durationMin?: number | null;
+  allDay?: boolean;
+  categoriaId?: string | null;
+  cor?: string | null;
+  descricao?: string | null;
+  local?: string | null;
+  lembretesMin?: number[];
+};
+
+/** Edição completa (reabrir o editor) — não mexe em dateTime/durationMin de
+ *  drag/resize (isso continua em updateAppointmentTiming). Escopo de série
+ *  igual ao delete: "this" só essa ocorrência, "following" essa e as
+ *  seguintes, "all" a série inteira. */
+export async function updateAppointment(
+  doctorId: string,
+  id: string,
+  patch: AppointmentEditableFields,
+  scope: RecurrenceScope = "this",
+): Promise<Appointment | undefined> {
+  let updated: Appointment | undefined;
+  await mutateRows<Appointment>(FILE, (rows) => {
+    const target = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!target) return;
+    const targets =
+      scope === "this" || !target.recurrenceId
+        ? [target]
+        : rows.filter(
+            (r) =>
+              r.doctorId === doctorId &&
+              r.recurrenceId === target.recurrenceId &&
+              (scope === "all" || r.dateTime >= target.dateTime),
+          );
+    const now = nowIso();
+    for (const a of targets) {
+      if (patch.note !== undefined) a.note = patch.note;
+      if (patch.label !== undefined) a.label = patch.label;
+      if (patch.durationMin !== undefined) a.durationMin = patch.durationMin;
+      if (patch.allDay !== undefined) a.allDay = patch.allDay;
+      if (patch.categoriaId !== undefined) a.categoriaId = patch.categoriaId;
+      if (patch.cor !== undefined) a.cor = patch.cor;
+      if (patch.descricao !== undefined) a.descricao = patch.descricao;
+      if (patch.local !== undefined) a.local = patch.local;
+      if (patch.lembretesMin !== undefined) a.lembretesMin = patch.lembretesMin;
+      a.updatedAt = now;
+    }
+    updated = { ...target };
+  });
+  return updated;
 }
 
 export async function setAppointmentStatus(
@@ -158,4 +243,3 @@ export async function updateAppointmentTiming(
   });
   return updated;
 }
-
