@@ -39,7 +39,14 @@ function pickMimeType(): string {
   return "audio/webm";
 }
 
-export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
+export function Dictation({
+  sections,
+  onAcceptToSection,
+}: {
+  /** Cabeçalhos de seção do template ativo — vazio em modo "Texto livre". */
+  sections: string[];
+  onAcceptToSection: (label: string, text: string) => void;
+}) {
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -70,14 +77,14 @@ export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
       const mimeType = recorderRef.current?.mimeType || "audio/webm";
       const blob = new Blob(chunks, { type: mimeType });
       const audioBase64 = await blobToBase64(blob);
-      return transcribeConsult({ data: { audioBase64, mimeType, durationSec: seconds } });
+      return transcribeConsult({
+        data: { audioBase64, mimeType, durationSec: seconds, templateSections: sections },
+      });
     },
     onSuccess: (r) => {
-      setBlocks([
-        { id: "s", label: "Queixa", text: r.subjective, status: "pending" },
-        { id: "a", label: "Avaliação", text: r.assessment, status: "pending" },
-        { id: "p", label: "Conduta", text: r.plan, status: "pending" },
-      ]);
+      setBlocks(
+        r.blocks.map((b, i) => ({ id: String(i), label: b.label, text: b.text, status: "pending" })),
+      );
       toast.message("Transcrição pronta", {
         description: "Revise os blocos antes de incorporar à evolução.",
       });
@@ -135,7 +142,7 @@ export function Dictation({ onAppend }: { onAppend: (text: string) => void }) {
   };
 
   const accept = (b: Block) => {
-    onAppend(b.text);
+    onAcceptToSection(b.label, b.text);
     setBlocks((all) => all.map((x) => (x.id === b.id ? { ...x, status: "accepted" } : x)));
   };
 

@@ -24,6 +24,7 @@ import {
   Loader2,
   Lock,
   Mail,
+  NotebookPen,
   Pencil,
   Phone,
   Pill,
@@ -83,6 +84,7 @@ import {
   saveEvolution,
   saveEvolutionNote,
   saveMemedProfile,
+  saveMyPatientNotes,
   saveMyPreferredMetrics,
   sealMyEvolution,
   setMyAppointmentStatus,
@@ -91,6 +93,12 @@ import {
 } from "@/lib/api/clinic.functions";
 import { invalidateWorkspace, ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { listMyServices } from "@/lib/api/services.functions";
+import {
+  generateMyTemplateDraft,
+  listMyTemplates,
+  saveMyTemplate,
+} from "@/lib/api/templates.functions";
+import type { EvolutionTemplate } from "@/lib/templates.server";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
@@ -111,7 +119,9 @@ import {
   isConsultaAppointment,
   isOutOfRange,
   MED_CATALOG,
+  parseTemplateSections,
   TABAGISMO_LABEL,
+  TEMPLATE_PADRAO,
   WA_TEMPLATES,
   type Appointment,
   type Evolution,
@@ -443,6 +453,8 @@ function Prontuario() {
           </>
         }
       />
+
+      <MinhasNotas token={token} patientId={id} notasMedicas={p.notasMedicas} onSaved={invalidate} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0">
@@ -1658,6 +1670,138 @@ function PrivateNoteBlock({
   );
 }
 
+// "Minhas Notas" (PRO-01) — anotação do médico entre Histórico e Evolução.
+// Auto-save debounced; nunca chamamos isso de "privado"/"confidencial" na UI
+// (§6.3 do PRD) — é um registro médico comum, só não aparece para o paciente.
+function MinhasNotas({
+  token,
+  patientId,
+  notasMedicas,
+  onSaved,
+}: {
+  token: string;
+  patientId: string;
+  notasMedicas: string | null;
+  onSaved: () => void;
+}) {
+  const [texto, setTexto] = useState(notasMedicas ?? "");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Troca de paciente → resincroniza com o valor persistido (novo id, novo texto).
+  useEffect(() => {
+    setTexto(notasMedicas ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const salvar = useMutation({
+    mutationFn: (v: string) =>
+      saveMyPatientNotes({ data: { token, patientId, notasMedicas: v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar a nota.");
+      onSaved();
+    },
+  });
+
+  const onChange = (v: string) => {
+    setTexto(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => salvar.mutate(v), 600);
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+          <NotebookPen className="h-4 w-4 text-primary" /> Minhas Notas
+        </h2>
+        {salvar.isPending && <span className="text-[11px] text-muted-foreground">Salvando…</span>}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Não aparece para o paciente. Como qualquer registro médico, pode ser objeto de requisição
+        judicial.
+      </p>
+      <Textarea
+        value={texto}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Anotações livres sobre este paciente…"
+        maxLength={4000}
+        className="mt-2 min-h-[80px] resize-none bg-background text-sm"
+      />
+    </div>
+  );
+}
+
+type TemplateMode =
+  | "historico"
+  | "padrao"
+  | "anamnese"
+  | "texto_livre"
+  | "ephemeral"
+  | `custom:${string}`;
+
+function contentForTemplate(
+  mode: TemplateMode,
+  myTemplates: EvolutionTemplate[],
+  ephemeralConteudo: string,
+): string {
+  if (mode === "padrao") return TEMPLATE_PADRAO;
+  if (mode === "anamnese") return ANAMNESE_TEMPLATE;
+  if (mode === "texto_livre") return "";
+  if (mode === "ephemeral") return ephemeralConteudo;
+  if (mode.startsWith("custom:")) {
+    const id = mode.slice("custom:".length);
+    return myTemplates.find((t) => t.id === id)?.conteudo ?? "";
+  }
+  return "";
+}
+
+const HEADER_LINE_RE = /^([A-ZÀ-Ú][A-ZÀ-Ú\s]{1,40}):\s*$/;
+
+/** Insere o texto de um bloco aceito do ditado embaixo do cabeçalho certo:
+ *  se o cabeçalho já existe no texto atual, entra logo abaixo dele; senão é
+ *  criado na posição correta segundo `ordem` (seções do template ativo) —
+ *  assim aceitar fora de ordem ainda resulta num texto organizado. */
+function inserirNaSecao(label: string, texto: string, textoAtual: string, ordem: string[]): string {
+  const norm = (s: string) => s.trim().toLowerCase();
+  if (textoAtual.trim().length === 0) {
+    return `${label.toUpperCase()}:\n${texto}\n\n`;
+  }
+
+  const lines = textoAtual.split("\n");
+  const headerIdx = lines.findIndex((l) => {
+    const m = l.trim().match(HEADER_LINE_RE);
+    return m ? norm(m[1]) === norm(label) : false;
+  });
+  if (headerIdx !== -1) {
+    const next = [...lines];
+    next.splice(headerIdx + 1, 0, texto);
+    return next.join("\n");
+  }
+
+  const myPos = ordem.findIndex((s) => norm(s) === norm(label));
+  let insertAt = lines.length;
+  if (myPos !== -1) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].trim().match(HEADER_LINE_RE);
+      if (!m) continue;
+      const otherPos = ordem.findIndex((s) => norm(s) === norm(m[1]));
+      if (otherPos !== -1 && otherPos > myPos) {
+        insertAt = i;
+        break;
+      }
+    }
+  }
+  const next = [...lines];
+  next.splice(insertAt, 0, `${label.toUpperCase()}:`, texto, "");
+  return next.join("\n");
+}
+
 function NovaEvolucao({
   token,
   patientId,
@@ -1677,10 +1821,16 @@ function NovaEvolucao({
   activeHistoricoId: string | null;
   onActiveHistoricoChange: (id: string | null) => void;
 }) {
-  const [texto, setTexto] = useState(() => (isPrimeiraConsulta ? ANAMNESE_TEMPLATE : ""));
-  const [template, setTemplate] = useState<"anamnese" | "soap" | "historico">(
-    isPrimeiraConsulta ? "anamnese" : "soap",
-  );
+  const qc = useQueryClient();
+  // "Padrão" ativo por default — zero tela em branco, sem forçar anamnese
+  // completa na 1ª consulta (isso é o ajuste de UX do PRO-02/PRO-03).
+  const [texto, setTexto] = useState<string>(() => TEMPLATE_PADRAO);
+  const [template, setTemplate] = useState<TemplateMode>("padrao");
+  // Conteúdo de um template gerado via IA e aplicado sem salvar (Dialog
+  // "+ Criar template" → "Usar sem salvar") — não persiste, só fica ativo
+  // nesta sessão de edição.
+  const [ephemeralConteudo, setEphemeralConteudo] = useState("");
+  const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
   // Consulta selecionada dentro do modo "Histórico". Mantida separada do id
   // pilotado pelo pai (linha do tempo) mas sincronizada via useEffect abaixo.
   const [historicoId, setHistoricoId] = useState<string | null>(null);
@@ -1696,6 +1846,16 @@ function NovaEvolucao({
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const toggleService = (id: string) =>
     setSelectedServiceIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  // Templates salvos do médico (PRO-02/PRO-03) — cada um vira uma pill própria.
+  const tmpl = useQuery({
+    queryKey: ["templates"],
+    queryFn: () => listMyTemplates({ data: { token } }),
+  });
+  const myTemplates = useMemo(
+    () => (tmpl.data?.ok ? tmpl.data.templates : []),
+    [tmpl.data],
+  );
 
   // Sincroniza com o clique na linha do tempo: quando o pai muda
   // `activeHistoricoId`, entramos em modo Histórico com aquela consulta.
@@ -1725,23 +1885,13 @@ function NovaEvolucao({
     },
   });
 
-  const applyTemplate = (t: "anamnese" | "soap" | "historico") => {
-    if (t === template) return;
-    // Só bloqueamos a troca entre Anamnese ↔ Retorno (evita perder rascunho
-    // ao trocar template de escrita). Histórico é sempre acessível — voltar
-    // de Histórico para os outros modos preserva o texto intacto.
-    if (t !== "historico" && template !== "historico" && texto.trim().length > 0) {
-      toast.message("Limpe o campo de evolução antes de trocar de template", {
-        description: "Isso evita perder o que você já escreveu.",
-      });
-      return;
-    }
-    setTemplate(t);
-    if (t === "anamnese" && texto.trim().length === 0) setTexto(ANAMNESE_TEMPLATE);
-    if (t === "soap" && texto.trim().length === 0) setTexto("");
-    if (t !== "historico") {
-      // saindo do modo histórico → limpa seleção no pai
-      onActiveHistoricoChange(null);
+  const applyTemplate = (mode: TemplateMode) => {
+    if (mode === template) return;
+    if (mode !== "historico") onActiveHistoricoChange(null);
+    setTemplate(mode);
+    // Só preenche se o campo estiver vazio — nunca sobrescreve rascunho.
+    if (mode !== "historico" && texto.trim().length === 0) {
+      setTexto(contentForTemplate(mode, myTemplates, ephemeralConteudo));
     }
   };
 
@@ -1750,11 +1900,21 @@ function NovaEvolucao({
     onActiveHistoricoChange(id);
   };
 
-  const templatesPills = [
-    { id: "historico" as const, label: "Histórico", disabled: evolutions.length === 0 },
-    { id: "anamnese" as const, label: "Anamnese completa · 1ª consulta", disabled: false },
-    { id: "soap" as const, label: "Evolução · retorno", disabled: false },
+  const templatesPills: { id: TemplateMode; label: string; disabled?: boolean }[] = [
+    { id: "historico", label: "Histórico", disabled: evolutions.length === 0 },
+    { id: "padrao", label: "Padrão" },
+    { id: "anamnese", label: "Anamnese completa · 1ª consulta" },
+    { id: "texto_livre", label: "Texto livre" },
+    ...myTemplates.map((t) => ({ id: `custom:${t.id}` as TemplateMode, label: t.nome })),
   ];
+
+  const activeSections = useMemo(
+    () =>
+      template === "historico"
+        ? []
+        : parseTemplateSections(contentForTemplate(template, myTemplates, ephemeralConteudo)),
+    [template, myTemplates, ephemeralConteudo],
+  );
 
   const consultaSelecionada = historicoId
     ? evolutions.find((e) => e.id === historicoId) ?? null
@@ -1768,7 +1928,7 @@ function NovaEvolucao({
       </div>
 
       <div className="mb-2 mt-2 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
+        <div className="flex flex-wrap rounded-full border border-border bg-muted/40 p-0.5">
           {templatesPills.map((t) => (
             <button
               key={t.id}
@@ -1787,7 +1947,14 @@ function NovaEvolucao({
             </button>
           ))}
         </div>
-        {template === "historico" ? (
+        <button
+          type="button"
+          onClick={() => setCreateTemplateOpen(true)}
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-[10px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+        >
+          <Plus className="h-3 w-3" /> Criar template
+        </button>
+        {template === "historico" && (
           <Select
             value={historicoId ?? ""}
             onValueChange={(v) => selecionarConsulta(v)}
@@ -1812,11 +1979,6 @@ function NovaEvolucao({
                 })}
             </SelectContent>
           </Select>
-        ) : (
-          <span className="text-[10px] text-muted-foreground">
-            Auto: {evolutionsCount} consulta{evolutionsCount === 1 ? "" : "s"} anterior
-            {evolutionsCount === 1 ? "" : "es"} → {isPrimeiraConsulta ? "1ª consulta" : "retorno"}
-          </span>
         )}
       </div>
 
@@ -1826,7 +1988,10 @@ function NovaEvolucao({
         <>
           <div className="mt-2">
             <Dictation
-              onAppend={(t) => setTexto((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
+              sections={activeSections}
+              onAcceptToSection={(label, t) =>
+                setTexto((prev) => inserirNaSecao(label, t, prev, activeSections))
+              }
             />
           </div>
           <Textarea
@@ -1881,7 +2046,159 @@ function NovaEvolucao({
           </div>
         </>
       )}
+
+      <CreateTemplateDialog
+        open={createTemplateOpen}
+        onOpenChange={setCreateTemplateOpen}
+        token={token}
+        onTemplateSaved={(t) => {
+          qc.invalidateQueries({ queryKey: ["templates"] });
+          setTemplate(`custom:${t.id}`);
+          if (texto.trim().length === 0) setTexto(t.conteudo);
+        }}
+        onUseWithoutSaving={(conteudo) => {
+          setEphemeralConteudo(conteudo);
+          setTemplate("ephemeral");
+          if (texto.trim().length === 0) setTexto(conteudo);
+        }}
+      />
     </div>
+  );
+}
+
+// "+ Criar template" (PRO-03) — descrição em linguagem natural → IA monta só
+// a estrutura (cabeçalhos) → rascunho editável → salvar (persiste, vira pill
+// própria) ou usar sem salvar (aplica na evolução atual, não persiste). Sem
+// LOVABLE_API_KEY configurada, cai direto no modo manual (textarea vazio).
+function CreateTemplateDialog({
+  open,
+  onOpenChange,
+  token,
+  onTemplateSaved,
+  onUseWithoutSaving,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  token: string;
+  onTemplateSaved: (t: EvolutionTemplate) => void;
+  onUseWithoutSaving: (conteudo: string) => void;
+}) {
+  const [descricao, setDescricao] = useState("");
+  const [rascunho, setRascunho] = useState<string | null>(null);
+  const [nome, setNome] = useState("");
+
+  const reset = () => {
+    setDescricao("");
+    setRascunho(null);
+    setNome("");
+  };
+
+  const gerar = useMutation({
+    mutationFn: () => generateMyTemplateDraft({ data: { token, descricao } }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        if (r.error === "not_configured") {
+          toast.message("IA não configurada — edite o template manualmente.");
+          setRascunho("");
+        } else {
+          toast.error("Não consegui gerar o rascunho.");
+        }
+        return;
+      }
+      setRascunho(r.conteudo);
+    },
+  });
+
+  const salvar = useMutation({
+    mutationFn: () => saveMyTemplate({ data: { token, nome, conteudo: rascunho ?? "" } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar o template.");
+      toast.success("Template salvo.");
+      onTemplateSaved(r.template);
+      onOpenChange(false);
+      reset();
+    },
+  });
+
+  const usarSemSalvar = () => {
+    onUseWithoutSaving(rascunho ?? "");
+    onOpenChange(false);
+    reset();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Criar template de evolução</DialogTitle>
+          <DialogDescription>
+            Descreva o tipo de consulta em linguagem natural — a IA monta só a estrutura
+            (cabeçalhos), nunca preenche dado clínico.
+          </DialogDescription>
+        </DialogHeader>
+
+        {rascunho === null ? (
+          <div className="space-y-2">
+            <Textarea
+              autoFocus
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex.: retorno de paciente com hipertensão"
+              rows={3}
+              className="text-sm"
+            />
+            <Button
+              className="w-full brand-gradient text-primary-foreground"
+              disabled={descricao.trim().length < 3 || gerar.isPending}
+              onClick={() => gerar.mutate()}
+            >
+              {gerar.isPending ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 h-4 w-4" />
+              )}
+              Gerar com IA
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label className="text-xs">Estrutura do template</Label>
+            <Textarea
+              value={rascunho}
+              onChange={(e) => setRascunho(e.target.value)}
+              rows={8}
+              className="font-mono text-xs"
+            />
+            <Label className="text-xs">Nome do template</Label>
+            <Input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Ex.: Retorno HAS"
+              maxLength={60}
+            />
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          {rascunho !== null && (
+            <>
+              <Button variant="outline" onClick={usarSemSalvar} disabled={rascunho.trim().length === 0}>
+                Usar sem salvar
+              </Button>
+              <Button
+                disabled={nome.trim().length < 2 || rascunho.trim().length === 0 || salvar.isPending}
+                onClick={() => salvar.mutate()}
+                className="brand-gradient text-primary-foreground"
+              >
+                {salvar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                Salvar template
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

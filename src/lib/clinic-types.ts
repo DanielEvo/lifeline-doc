@@ -67,6 +67,10 @@ export type Patient = {
   medicacaoContinua: string | null;
   pesoKg: number | null;
   alturaCm: number | null;
+  // Anotações do médico sobre o paciente — nunca visível ao paciente. Não é
+  // "privado"/"confidencial" no sentido de imune a requisição judicial: é só
+  // um registro médico comum que não entra no app do paciente (ver §6.3 PRD).
+  notasMedicas: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -685,6 +689,18 @@ EXAME FÍSICO:
 AVALIAÇÃO:
 
 PLANO:`;
+
+// Template padrão da Evolução Atual — ativo por default (zero tela em
+// branco), sem forçar anamnese completa numa 1ª consulta.
+export const TEMPLATE_PADRAO = "QUEIXA:\n\nAVALIAÇÃO:\n\nCONDUTA:\n\n";
+export const TEMPLATE_PADRAO_SECOES = ["QUEIXA", "AVALIAÇÃO", "CONDUTA"];
+
+/** Extrai os cabeçalhos de seção (linha em MAIÚSCULAS terminando em ":") de
+ *  um template ou texto de evolução — mesmo padrão de extração usado em
+ *  HistoricoConsultaContent (pacientes.$id.tsx). */
+export function parseTemplateSections(conteudo: string): string[] {
+  return [...conteudo.matchAll(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]{1,40}):\s*$/gm)].map((m) => m[1].trim());
+}
 
 export function isOutOfRange(m: Pick<Measurement, "value" | "refMin" | "refMax">): boolean {
   return m.value < m.refMin || m.value > m.refMax;

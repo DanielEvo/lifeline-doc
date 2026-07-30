@@ -49,6 +49,7 @@ export type PatientInput = {
   medicacaoContinua?: string | null;
   pesoKg?: number | null;
   alturaCm?: number | null;
+  notasMedicas?: string | null;
 };
 
 export async function listPatients(
@@ -139,6 +140,7 @@ export async function createPatient(doctorId: string, input: PatientInput): Prom
     medicacaoContinua: input.medicacaoContinua?.trim() || null,
     pesoKg: input.pesoKg ?? null,
     alturaCm: input.alturaCm ?? null,
+    notasMedicas: input.notasMedicas?.trim() || null,
     convenio: input.convenio?.trim() || null,
     queixa: input.queixa?.trim() || "",
     column: input.column ?? "triagem",
@@ -204,6 +206,7 @@ export async function updatePatient(
     if (patch.medicacaoContinua !== undefined) p.medicacaoContinua = patch.medicacaoContinua?.trim() || null;
     if (patch.pesoKg !== undefined) p.pesoKg = patch.pesoKg ?? null;
     if (patch.alturaCm !== undefined) p.alturaCm = patch.alturaCm ?? null;
+    if (patch.notasMedicas !== undefined) p.notasMedicas = patch.notasMedicas?.trim() || null;
     if (patch.queixa !== undefined) p.queixa = patch.queixa.trim();
     if (patch.column !== undefined && patch.column) p.column = patch.column;
     if (patch.criticalFlag !== undefined) p.criticalFlag = patch.criticalFlag;

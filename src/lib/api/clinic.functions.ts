@@ -466,6 +466,23 @@ export const updateMyPatient = createServerFn({ method: "POST" })
       : { ok: false as const, error: "not_found" as const };
   });
 
+// "Minhas Notas" (PRO-01) — anotação do médico sobre o paciente, entre
+// Histórico e Evolução no prontuário. Nunca exposta a rotas do paciente.
+export const saveMyPatientNotes = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({ token, patientId: z.string().min(1), notasMedicas: z.string().max(4000) }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const patient = await updatePatient(doctor.id, data.patientId, {
+      notasMedicas: data.notasMedicas.trim(),
+    });
+    return patient
+      ? { ok: true as const, patient }
+      : { ok: false as const, error: "not_found" as const };
+  });
+
 export const moveMyPatient = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token, id: z.string().min(1), to: COLUMN }))
   .handler(async ({ data }) => {
