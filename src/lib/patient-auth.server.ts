@@ -30,13 +30,40 @@ export type PatientAccount = {
   patientCode: string | null; // vínculo com prontuário — decisão futura, sempre null por ora
   globalId: string; // TECH-13: aponta para patients_registry.json
   createdAt: string;
+  // Verificação de e-mail. OPCIONAL de propósito: contas anteriores a este
+  // campo (ausente) contam como verificadas — ver isPatientEmailVerified().
+  emailVerified?: boolean;
 };
+
+/** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
+export function isPatientEmailVerified(p: PatientAccount): boolean {
+  return p.emailVerified !== false;
+}
 
 type PatientSession = { token: string; patientId: string; createdAt: string; expiresAt: string };
 
+export type PatientEmailVerification = {
+  token: string;
+  patientId: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type PatientPasswordReset = {
+  token: string;
+  patientId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+};
+
 const PATIENT_ACCOUNTS = "patient_accounts.json";
 const PATIENT_SESSIONS = "patient_sessions.json";
+const PATIENT_EMAIL_VERIFICATIONS = "patient_email_verifications.json";
+const PATIENT_PASSWORD_RESETS = "patient_password_resets.json";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
@@ -71,6 +98,8 @@ export async function createPatient(input: {
     patientCode: null,
     globalId: registry.globalId,
     createdAt: nowIso(),
+    // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
+    emailVerified: input.provider === "google",
   };
   await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
     rows.push(patient);
@@ -122,6 +151,101 @@ export async function revokePatientSession(token: string): Promise<void> {
   await mutateRows<PatientSession>(PATIENT_SESSIONS, (rows) =>
     rows.filter((x) => x.token !== token),
   );
+}
+
+/** Derruba TODAS as sessões da conta — usado ao trocar a senha. */
+export async function revokeAllPatientSessions(patientId: string): Promise<void> {
+  await mutateRows<PatientSession>(PATIENT_SESSIONS, (rows) =>
+    rows.filter((x) => x.patientId !== patientId),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Verificação de e-mail (token de uso único, 24h) — espelha auth.server.ts.
+// ---------------------------------------------------------------------------
+
+export async function createPatientEmailVerification(patientId: string): Promise<string> {
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = Date.now();
+  await mutateRows<PatientEmailVerification>(PATIENT_EMAIL_VERIFICATIONS, (rows) => {
+    const alive = rows.filter(
+      (r) => Date.parse(r.expiresAt) > now && r.patientId !== patientId,
+    );
+    alive.push({
+      token,
+      patientId,
+      createdAt: nowIso(),
+      expiresAt: new Date(now + VERIFICATION_TTL_MS).toISOString(),
+    });
+    return alive;
+  });
+  return token;
+}
+
+export async function verifyPatientEmailToken(token: string): Promise<PatientAccount | null> {
+  const rows = await readRows<PatientEmailVerification>(PATIENT_EMAIL_VERIFICATIONS);
+  const row = rows.find((r) => r.token === token);
+  if (!row || Date.parse(row.expiresAt) <= Date.now()) return null;
+  let updated: PatientAccount | null = null;
+  await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (list) => {
+    const p = list.find((x) => x.id === row.patientId);
+    if (!p) return;
+    p.emailVerified = true;
+    updated = { ...p };
+  });
+  await mutateRows<PatientEmailVerification>(PATIENT_EMAIL_VERIFICATIONS, (list) =>
+    list.filter((r) => r.token !== token),
+  );
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Recuperação de senha (token de uso único, 30 min).
+// ---------------------------------------------------------------------------
+
+export async function createPatientPasswordReset(patientId: string): Promise<string> {
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = Date.now();
+  await mutateRows<PatientPasswordReset>(PATIENT_PASSWORD_RESETS, (rows) => {
+    const alive = rows.filter((r) => Date.parse(r.expiresAt) > now && !r.usedAt);
+    alive.push({
+      token,
+      patientId,
+      createdAt: nowIso(),
+      expiresAt: new Date(now + RESET_TTL_MS).toISOString(),
+      usedAt: null,
+    });
+    return alive;
+  });
+  return token;
+}
+
+export async function consumePatientPasswordReset(
+  token: string,
+  novaSenha: string,
+): Promise<PatientAccount | null> {
+  const rows = await readRows<PatientPasswordReset>(PATIENT_PASSWORD_RESETS);
+  const row = rows.find((r) => r.token === token);
+  if (!row || row.usedAt || Date.parse(row.expiresAt) <= Date.now()) return null;
+
+  const salt = crypto.randomBytes(12).toString("hex");
+  let updated: PatientAccount | null = null;
+  await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (list) => {
+    const p = list.find((x) => x.id === row.patientId);
+    if (!p) return;
+    p.salt = salt;
+    p.passHash = hashPassword(novaSenha, salt);
+    p.emailVerified = true;
+    updated = { ...p };
+  });
+  if (!updated) return null;
+
+  await mutateRows<PatientPasswordReset>(PATIENT_PASSWORD_RESETS, (list) => {
+    const r = list.find((x) => x.token === token);
+    if (r) r.usedAt = nowIso();
+  });
+  await revokeAllPatientSessions(row.patientId);
+  return updated;
 }
 
 // ---------------------------------------------------------------------------

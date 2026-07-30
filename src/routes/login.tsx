@@ -1,12 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Activity, ArrowLeft, CheckCircle2, Loader2, Lock, Mail, User } from "lucide-react";
+import { Activity, ArrowLeft, CheckCircle2, Loader2, Lock, Mail, MailCheck, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { googleAuthStart, googleLogin, loginDoctor, registerDoctor } from "@/lib/api/auth.functions";
+import {
+  googleAuthStart,
+  googleLogin,
+  loginDoctor,
+  registerDoctor,
+  resendVerificationEmail,
+} from "@/lib/api/auth.functions";
 import { getSession, setSession } from "@/lib/session";
 
 export const Route = createFileRoute("/login")({
@@ -27,7 +33,9 @@ function LoginPage() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState<"form" | "google" | null>(null);
+  const [busy, setBusy] = useState<"form" | "google" | "resend" | null>(null);
+  // Cadastro por e-mail não loga: fica nesta tela até confirmar o e-mail.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   // Já logado → direto para o consultório
   useEffect(() => {
@@ -55,18 +63,39 @@ function LoginPage() {
     }
     setBusy("form");
     try {
-      const r =
-        mode === "register"
-          ? await registerDoctor({ data: { nome, email, password } })
-          : await loginDoctor({ data: { email, password } });
-      if (r.ok) finish(r);
-      else toast.error(r.error);
+      if (mode === "register") {
+        const r = await registerDoctor({
+          data: { nome, email, password, origin: window.location.origin },
+        });
+        if (r.ok) setPendingEmail(r.email);
+        else toast.error(r.error);
+      } else {
+        const r = await loginDoctor({ data: { email, password } });
+        if (r.ok) finish(r);
+        else toast.error(r.error);
+      }
     } catch {
       toast.error("Não consegui conectar agora. Tente novamente.");
     } finally {
       setBusy(null);
     }
   };
+
+  const resend = async () => {
+    if (busy || !pendingEmail) return;
+    setBusy("resend");
+    try {
+      await resendVerificationEmail({
+        data: { email: pendingEmail, origin: window.location.origin },
+      });
+      toast.success("Link reenviado. Confira sua caixa de entrada.");
+    } catch {
+      toast.error("Não consegui reenviar agora. Tente novamente.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
 
   // OAuth real quando o servidor tem credenciais Google; sem elas (dev),
   // cai no login simulado — mesma conta + sessão reais no backend.
@@ -89,6 +118,44 @@ function LoginPage() {
       setBusy(null);
     }
   };
+
+  if (pendingEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
+        <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-7 text-center shadow-xl shadow-primary/5">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+            <MailCheck className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold tracking-tight">Verifique seu e-mail</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Enviamos um link de confirmação para{" "}
+            <span className="font-medium text-foreground">{pendingEmail}</span>. Clique nele para
+            ativar sua conta.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resend}
+            disabled={busy !== null}
+            className="press mt-5 w-full"
+          >
+            {busy === "resend" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            Reenviar e-mail de verificação
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setPendingEmail(null);
+              setMode("login");
+            }}
+            className="mt-4 w-full text-xs text-muted-foreground transition hover:text-foreground"
+          >
+            Voltar para o login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
@@ -224,7 +291,18 @@ function LoginPage() {
                     className="pl-9"
                   />
                 </div>
+                {mode === "login" && (
+                  <div className="pt-0.5 text-right">
+                    <Link
+                      to="/esqueci-senha"
+                      className="text-[11px] text-muted-foreground transition hover:text-foreground"
+                    >
+                      Esqueci minha senha
+                    </Link>
+                  </div>
+                )}
               </div>
+
               <Button
                 type="submit"
                 disabled={busy !== null}

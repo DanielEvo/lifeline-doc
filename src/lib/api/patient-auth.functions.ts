@@ -5,19 +5,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import {
+  consumePatientPasswordReset,
   createPatient,
+  createPatientEmailVerification,
+  createPatientPasswordReset,
   createPatientSession,
   exchangeGoogleCode,
   findPatientByEmail,
   findPatientByToken,
   getGoogleConfig,
   googleAuthUrl,
+  isPatientEmailVerified,
   requirePatient,
   revokePatientSession,
   verifyOAuthState,
   verifyPassword,
+  verifyPatientEmailToken,
   type PatientAccount,
 } from "../patient-auth.server";
+import { sendPasswordResetEmail, sendVerificationEmail } from "../email.server";
 import { updateRegistryProfile, findRegistryByGlobalId } from "../patients-registry.server";
 import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
 import { BIOMARKER_CATALOG, resolveBiomarkerName } from "../clinic-types";
@@ -30,24 +36,42 @@ type PatientAuthResult =
   | { ok: true; token: string; patient: { nome: string; email: string; avatarUrl: string | null } }
   | { ok: false; error: string };
 
+type PatientRegisterResult =
+  | { ok: true; needsVerification: true; email: string }
+  | { ok: false; error: string };
+
 function pub(p: PatientAccount) {
   return { nome: p.nome, email: p.email, avatarUrl: p.avatarUrl };
 }
 
+const origemSchema = z.string().url().max(300);
+
+// Cadastro por e-mail/senha NÃO cria sessão: manda o link de confirmação.
 export const registerPatient = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       nome: z.string().min(2).max(120),
       email: z.string().email().max(160),
       password: z.string().min(6).max(120),
+      origin: origemSchema,
     }),
   )
-  .handler(async ({ data }): Promise<PatientAuthResult> => {
+  .handler(async ({ data }): Promise<PatientRegisterResult> => {
     const existing = await findPatientByEmail(data.email);
     if (existing) return { ok: false, error: "Este e-mail já tem cadastro. Faça login." };
-    const patient = await createPatient({ ...data, provider: "email" });
-    const token = await createPatientSession(patient.id);
-    return { ok: true, token, patient: pub(patient) };
+    const patient = await createPatient({
+      nome: data.nome,
+      email: data.email,
+      password: data.password,
+      provider: "email",
+    });
+    const token = await createPatientEmailVerification(patient.id);
+    await sendVerificationEmail(
+      patient.email,
+      patient.nome,
+      `${data.origin}/paciente/confirmar-cadastro/${token}`,
+    );
+    return { ok: true, needsVerification: true, email: patient.email };
   });
 
 export const loginPatient = createServerFn({ method: "POST" })
@@ -64,9 +88,64 @@ export const loginPatient = createServerFn({ method: "POST" })
       return { ok: false, error: "Esta conta usa login com Google." };
     if (!verifyPassword(patient, data.password))
       return { ok: false, error: "Senha incorreta. Tente novamente." };
+    if (!isPatientEmailVerified(patient))
+      return { ok: false, error: "E-mail ainda não confirmado. Verifique sua caixa de entrada." };
     const token = await createPatientSession(patient.id);
     return { ok: true, token, patient: pub(patient) };
   });
+
+export const confirmPatientEmailVerification = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(10).max(120) }))
+  .handler(async ({ data }) => {
+    const patient = await verifyPatientEmailToken(data.token);
+    if (!patient) return { ok: false as const, error: "invalid_or_expired" as const };
+    return { ok: true as const, nome: patient.nome };
+  });
+
+export const resendPatientVerificationEmail = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
+  .handler(async ({ data }) => {
+    const patient = await findPatientByEmail(data.email);
+    if (patient && !isPatientEmailVerified(patient)) {
+      const token = await createPatientEmailVerification(patient.id);
+      await sendVerificationEmail(
+        patient.email,
+        patient.nome,
+        `${data.origin}/paciente/confirmar-cadastro/${token}`,
+      );
+    }
+    return { ok: true as const };
+  });
+
+export const requestPatientPasswordReset = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
+  .handler(async ({ data }) => {
+    const patient = await findPatientByEmail(data.email);
+    if (patient) {
+      const token = await createPatientPasswordReset(patient.id);
+      await sendPasswordResetEmail(
+        patient.email,
+        patient.nome,
+        `${data.origin}/paciente/redefinir-senha/${token}`,
+        { googleOnly: patient.provider === "google" && !patient.passHash },
+      );
+    }
+    return { ok: true as const };
+  });
+
+export const resetPatientPassword = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token: z.string().min(10).max(120),
+      novaSenha: z.string().min(6).max(120),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const patient = await consumePatientPasswordReset(data.token, data.novaSenha);
+    if (!patient) return { ok: false as const, error: "invalid_or_expired" as const };
+    return { ok: true as const, email: patient.email };
+  });
+
 
 // Passo 1 do Google: devolve a URL de autorização quando o OAuth real está
 // configurado (GOOGLE_CLIENT_ID/SECRET), ou url:null para o cliente cair no

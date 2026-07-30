@@ -32,13 +32,41 @@ export type Doctor = {
   // Config da agenda (duração do slot, expediente) — null = usa os
   // DEFAULT_CALENDAR_SETTINGS; antes vivia só em localStorage por token.
   calendarSettings: CalendarSettings | null;
+  // Verificação de e-mail. OPCIONAL de propósito: contas que já existiam
+  // antes deste campo (ausente) são tratadas como verificadas — ver
+  // isEmailVerified(). Contas Google nascem true (o Google já validou).
+  emailVerified?: boolean;
 };
+
+/** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
+export function isEmailVerified(d: Doctor): boolean {
+  return d.emailVerified !== false;
+}
 
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
 
+export type EmailVerification = {
+  token: string;
+  doctorId: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type PasswordReset = {
+  token: string;
+  doctorId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+};
+
 const DOCTORS = "doctors.json";
 const SESSIONS = "sessions.json";
+const EMAIL_VERIFICATIONS = "email_verifications.json";
+const PASSWORD_RESETS = "password_resets.json";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
@@ -73,6 +101,8 @@ export async function createDoctor(input: {
     crmCidade: null,
     preferredMetrics: [],
     calendarSettings: null,
+    // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
+    emailVerified: input.provider === "google",
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
@@ -175,6 +205,105 @@ export async function requireDoctor(token: string | undefined | null): Promise<D
 export async function revokeSession(token: string): Promise<void> {
   await mutateRows<Session>(SESSIONS, (rows) => rows.filter((x) => x.token !== token));
 }
+
+/** Derruba TODAS as sessões de uma conta — usado ao trocar a senha. */
+export async function revokeAllSessions(doctorId: string): Promise<void> {
+  await mutateRows<Session>(SESSIONS, (rows) => rows.filter((x) => x.doctorId !== doctorId));
+}
+
+// ---------------------------------------------------------------------------
+// Verificação de e-mail (token de uso único, 24h).
+// ---------------------------------------------------------------------------
+
+export async function createEmailVerification(doctorId: string): Promise<string> {
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = Date.now();
+  await mutateRows<EmailVerification>(EMAIL_VERIFICATIONS, (rows) => {
+    // limpa expirados e pedidos anteriores da mesma conta
+    const alive = rows.filter(
+      (r) => Date.parse(r.expiresAt) > now && r.doctorId !== doctorId,
+    );
+    alive.push({
+      token,
+      doctorId,
+      createdAt: nowIso(),
+      expiresAt: new Date(now + VERIFICATION_TTL_MS).toISOString(),
+    });
+    return alive;
+  });
+  return token;
+}
+
+/** Marca a conta como verificada e invalida o token. Devolve o médico ou null. */
+export async function verifyEmailToken(token: string): Promise<Doctor | null> {
+  const rows = await readRows<EmailVerification>(EMAIL_VERIFICATIONS);
+  const row = rows.find((r) => r.token === token);
+  if (!row || Date.parse(row.expiresAt) <= Date.now()) return null;
+  let updated: Doctor | null = null;
+  await mutateRows<Doctor>(DOCTORS, (list) => {
+    const d = list.find((x) => x.id === row.doctorId);
+    if (!d) return;
+    d.emailVerified = true;
+    updated = { ...d };
+  });
+  await mutateRows<EmailVerification>(EMAIL_VERIFICATIONS, (list) =>
+    list.filter((r) => r.token !== token),
+  );
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Recuperação de senha (token de uso único, 30 min).
+// ---------------------------------------------------------------------------
+
+export async function createPasswordReset(doctorId: string): Promise<string> {
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = Date.now();
+  await mutateRows<PasswordReset>(PASSWORD_RESETS, (rows) => {
+    const alive = rows.filter((r) => Date.parse(r.expiresAt) > now && !r.usedAt);
+    alive.push({
+      token,
+      doctorId,
+      createdAt: nowIso(),
+      expiresAt: new Date(now + RESET_TTL_MS).toISOString(),
+      usedAt: null,
+    });
+    return alive;
+  });
+  return token;
+}
+
+/** Valida expiração + uso único, troca a senha e derruba todas as sessões. */
+export async function consumePasswordReset(
+  token: string,
+  novaSenha: string,
+): Promise<Doctor | null> {
+  const rows = await readRows<PasswordReset>(PASSWORD_RESETS);
+  const row = rows.find((r) => r.token === token);
+  if (!row || row.usedAt || Date.parse(row.expiresAt) <= Date.now()) return null;
+
+  const salt = crypto.randomBytes(12).toString("hex");
+  let updated: Doctor | null = null;
+  await mutateRows<Doctor>(DOCTORS, (list) => {
+    const d = list.find((x) => x.id === row.doctorId);
+    if (!d) return;
+    d.salt = salt;
+    d.passHash = hashPassword(novaSenha, salt);
+    // Quem redefine a senha por link de e-mail comprovou o e-mail.
+    d.emailVerified = true;
+    updated = { ...d };
+  });
+  if (!updated) return null;
+
+  await mutateRows<PasswordReset>(PASSWORD_RESETS, (list) => {
+    const r = list.find((x) => x.token === token);
+    if (r) r.usedAt = nowIso();
+  });
+  await revokeAllSessions(row.doctorId);
+  return updated;
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Google OAuth 2.0 (authorization code). Configuração via variáveis de
