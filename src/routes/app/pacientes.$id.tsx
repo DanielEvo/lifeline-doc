@@ -1717,23 +1717,39 @@ function MinhasNotas({
 
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           <NotebookPen className="h-4 w-4 text-primary" /> Minhas Notas
         </h2>
-        {salvar.isPending && <span className="text-[11px] text-muted-foreground">Salvando…</span>}
-      </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        Não aparece para o paciente. Como qualquer registro médico, pode ser objeto de requisição
-        judicial.
-      </p>
-      <Textarea
-        value={texto}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Anotações livres sobre este paciente…"
-        maxLength={4000}
-        className="mt-2 min-h-[80px] resize-none bg-background text-sm"
-      />
+        <span className="flex items-center gap-2">
+          {salvar.isPending && <span className="text-[11px] text-muted-foreground">Salvando…</span>}
+          {!aberto && texto.trim() && (
+            <span className="text-[11px] text-muted-foreground">{texto.trim().length} car.</span>
+          )}
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`}
+          />
+        </span>
+      </button>
+      {aberto && (
+        <>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Não aparece para o paciente. Como qualquer registro médico, pode ser objeto de requisição
+            judicial.
+          </p>
+          <Textarea
+            value={texto}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Anotações livres sobre este paciente…"
+            maxLength={4000}
+            className="mt-2 min-h-[80px] resize-none bg-background text-sm"
+          />
+        </>
+      )}
     </div>
   );
 }
