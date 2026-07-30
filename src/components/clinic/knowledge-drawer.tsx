@@ -719,13 +719,35 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
                               </>
                             )}
                           </div>
-                          <div className="text-sm font-medium leading-snug">{p.title}</div>
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium leading-snug hover:text-primary hover:underline"
+                          >
+                            {p.title}
+                          </a>
                           {p.abstract && (
-                            <div className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
-                              {p.abstract}
+                            <div className="mt-1.5 rounded-lg bg-muted/40 p-2">
+                              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                Conclusão
+                              </div>
+                              <p className="line-clamp-4 text-xs leading-relaxed text-foreground/80">
+                                {conclusaoDe(p.abstract)}
+                              </p>
                             </div>
                           )}
-                          <div className="mt-2 flex items-center gap-1.5">
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              asChild
+                            >
+                              <a href={p.url} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="mr-1 h-3 w-3" /> Ler documento
+                              </a>
+                            </Button>
                             <Button
                               size="sm"
                               className="h-7 text-xs"
