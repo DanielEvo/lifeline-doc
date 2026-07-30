@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { askKnowledgeAssistant } from "@/lib/knowledge-chat.functions";
 import {
   listMyCriterios,
@@ -57,7 +58,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -155,7 +155,7 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
     if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
   }, []);
 
-  const iniciarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+  const iniciarResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     setRedimensionando(true);
     const mover = (ev: PointerEvent) => {

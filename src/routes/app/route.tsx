@@ -214,9 +214,6 @@ function Shell({ clinic }: { clinic: Clinic }) {
           onClick={() => setKbOpen(true)}
           aria-label="Base de conhecimento"
           title="Base de conhecimento"
-          className="fixed right-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground md:inline-flex"
-        >
-          <BookOpen className="h-4 w-4" />
         </button>
         <Outlet />
         <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} token={clinic.token} />
