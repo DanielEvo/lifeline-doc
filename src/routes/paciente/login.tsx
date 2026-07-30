@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Activity, ArrowLeft, HeartPulse, Loader2, Lock, Mail, User } from "lucide-react";
+import { Activity, ArrowLeft, HeartPulse, Loader2, Lock, Mail, MailCheck, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   patientGoogleAuthStart,
   patientGoogleLogin,
   registerPatient,
+  resendPatientVerificationEmail,
 } from "@/lib/api/patient-auth.functions";
 import { getPatientSession, setPatientSession } from "@/lib/patient-session";
 
