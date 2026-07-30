@@ -32,9 +32,33 @@ export type Doctor = {
   // Config da agenda (duração do slot, expediente) — null = usa os
   // DEFAULT_CALENDAR_SETTINGS; antes vivia só em localStorage por token.
   calendarSettings: CalendarSettings | null;
+  // Verificação de e-mail. OPCIONAL de propósito: contas que já existiam
+  // antes deste campo (ausente) são tratadas como verificadas — ver
+  // isEmailVerified(). Contas Google nascem true (o Google já validou).
+  emailVerified?: boolean;
 };
 
+/** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
+export function isEmailVerified(d: Doctor): boolean {
+  return d.emailVerified !== false;
+}
+
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
+
+export type EmailVerification = {
+  token: string;
+  doctorId: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type PasswordReset = {
+  token: string;
+  doctorId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+};
 
 const DOCTORS = "doctors.json";
 const SESSIONS = "sessions.json";
