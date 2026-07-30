@@ -247,7 +247,18 @@ function PatientLoginPage() {
                     className="pl-9"
                   />
                 </div>
+                {mode === "login" && (
+                  <div className="pt-0.5 text-right">
+                    <Link
+                      to="/paciente/esqueci-senha"
+                      className="text-[11px] text-muted-foreground transition hover:text-foreground"
+                    >
+                      Esqueci minha senha
+                    </Link>
+                  </div>
+                )}
               </div>
+
               <Button
                 type="submit"
                 disabled={busy !== null}
