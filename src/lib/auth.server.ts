@@ -62,7 +62,11 @@ export type PasswordReset = {
 
 const DOCTORS = "doctors.json";
 const SESSIONS = "sessions.json";
+const EMAIL_VERIFICATIONS = "email_verifications.json";
+const PASSWORD_RESETS = "password_resets.json";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
