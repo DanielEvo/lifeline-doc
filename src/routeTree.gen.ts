@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as RedefinirSenhaTokenRouteImport } from './routes/redefinir-senha.$token'
 import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteEsqueciSenhaRouteImport } from './routes/paciente/esqueci-senha'
@@ -84,6 +85,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedefinirSenhaTokenRoute = RedefinirSenhaTokenRouteImport.update({
+  id: '/redefinir-senha/$token',
+  path: '/redefinir-senha/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/redefinir-senha/$token': typeof RedefinirSenhaTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/redefinir-senha/$token': typeof RedefinirSenhaTokenRoute
   '/admin': typeof AdminIndexRoute
   '/app': typeof AppIndexRoute
   '/assinatura': typeof AssinaturaIndexRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
+  '/redefinir-senha/$token': typeof RedefinirSenhaTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
   '/assinatura/': typeof AssinaturaIndexRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
+    | '/redefinir-senha/$token'
     | '/admin/'
     | '/app/'
     | '/assinatura/'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
+    | '/redefinir-senha/$token'
     | '/admin'
     | '/app'
     | '/assinatura'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
+    | '/redefinir-senha/$token'
     | '/admin/'
     | '/app/'
     | '/assinatura/'
@@ -356,6 +368,7 @@ export interface RootRouteChildren {
   PacienteEsqueciSenhaRoute: typeof PacienteEsqueciSenhaRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
   ReceitaCodeRoute: typeof ReceitaCodeRoute
+  RedefinirSenhaTokenRoute: typeof RedefinirSenhaTokenRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
@@ -433,6 +446,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha/$token': {
+      id: '/redefinir-senha/$token'
+      path: '/redefinir-senha/$token'
+      fullPath: '/redefinir-senha/$token'
+      preLoaderRoute: typeof RedefinirSenhaTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/receita/$code': {
@@ -587,6 +607,7 @@ const rootRouteChildren: RootRouteChildren = {
   PacienteEsqueciSenhaRoute: PacienteEsqueciSenhaRoute,
   PacienteLoginRoute: PacienteLoginRoute,
   ReceitaCodeRoute: ReceitaCodeRoute,
+  RedefinirSenhaTokenRoute: RedefinirSenhaTokenRoute,
   AdminIndexRoute: AdminIndexRoute,
   AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
