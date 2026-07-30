@@ -65,7 +65,7 @@ import {
   type RecurrenceScope,
 } from "@/lib/clinic-types";
 
-type View = "dia" | "semana" | "mes" | "lista";
+type View = "dia" | "semana" | "mes" | "ano" | "lista" | "custom";
 
 // px por minuto do canvas contínuo — 30min ≈ 48px, altura na mesma ordem de
 // grandeza do grid antigo de linha fixa (36px por slot).
@@ -292,6 +292,9 @@ export function AppointmentCalendar({
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  // Visão "N dias" — quantidade configurável (padrão 4, como o Google
+  // Agenda oferece "3 dias"/"4 dias" fixos); só client-side, não persiste.
+  const [customDayCount, setCustomDayCount] = useState(4);
   const [settings, setSettingsLocal] = useState<CalendarSettings>(calendarSettings);
   // servidor é a fonte da verdade (PRO-XX) — sincroniza se mudar por fora
   // (ex.: outra aba salvando configurações diferentes).
@@ -496,6 +499,8 @@ export function AppointmentCalendar({
     const d = new Date(cursor);
     if (view === "dia" || view === "lista") d.setDate(d.getDate() + dir);
     else if (view === "semana") d.setDate(d.getDate() + dir * 7);
+    else if (view === "custom") d.setDate(d.getDate() + dir * customDayCount);
+    else if (view === "ano") d.setFullYear(d.getFullYear() + dir);
     else d.setMonth(d.getMonth() + dir);
     setCursor(d);
   };
@@ -507,16 +512,21 @@ export function AppointmentCalendar({
 
   const label = useMemo(() => {
     if (view === "mes") return `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    if (view === "ano") return `${cursor.getFullYear()}`;
     if (view === "semana") {
       const s = startOfWeek(cursor);
       const e = addDays(s, 6);
       return `${s.getDate().toString().padStart(2, "0")}/${(s.getMonth() + 1).toString().padStart(2, "0")} – ${e.getDate().toString().padStart(2, "0")}/${(e.getMonth() + 1).toString().padStart(2, "0")} · ${cursor.getFullYear()}`;
     }
+    if (view === "custom") {
+      const e = addDays(cursor, customDayCount - 1);
+      return `${cursor.getDate().toString().padStart(2, "0")}/${(cursor.getMonth() + 1).toString().padStart(2, "0")} – ${e.getDate().toString().padStart(2, "0")}/${(e.getMonth() + 1).toString().padStart(2, "0")} · ${cursor.getFullYear()}`;
+    }
     if (view === "lista") {
       return `A partir de ${cursor.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}`;
     }
     return cursor.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
-  }, [view, cursor]);
+  }, [view, cursor, customDayCount]);
 
   const openConfirm = (patientId: string, dateTime: string) => {
     const p = byId.get(patientId);
@@ -593,6 +603,7 @@ export function AppointmentCalendar({
         onToggleConsultas={setShowConsultas}
         cursor={cursor}
         onPickDate={setCursor}
+        appointments={appointments}
       />
 
       <div className="min-w-0 flex-1">
@@ -625,8 +636,8 @@ export function AppointmentCalendar({
                 setEditingId(appt.id);
               }}
             />
-            <div className="flex rounded-lg border border-border p-0.5">
-              {(["dia", "semana", "mes", "lista"] as View[]).map((v) => (
+            <div className="flex flex-wrap rounded-lg border border-border p-0.5">
+              {(["dia", "custom", "semana", "mes", "ano", "lista"] as View[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -636,11 +647,16 @@ export function AppointmentCalendar({
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {v === "mes" ? "mês" : v}
+                  {v === "mes" ? "mês" : v === "custom" ? `${customDayCount}d` : v}
                 </button>
               ))}
             </div>
-            <SettingsPopover settings={settings} onChange={persistSettings} />
+            <SettingsPopover
+              settings={settings}
+              onChange={persistSettings}
+              customDayCount={customDayCount}
+              onCustomDayCountChange={setCustomDayCount}
+            />
           </div>
         </div>
 
@@ -672,6 +688,19 @@ export function AppointmentCalendar({
               onSlotClick={openEmptySlot}
             />
           )}
+          {view === "custom" && (
+            <TimeGrid
+              days={Array.from({ length: customDayCount }, (_, i) => addDays(cursor, i))}
+              settings={settings}
+              appointments={visibleAppointments}
+              byId={byId}
+              onDropPatient={openConfirm}
+              onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
+              onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
+              onOpenEditor={setEditingId}
+              onSlotClick={openEmptySlot}
+            />
+          )}
           {view === "mes" && (
             <MonthGrid
               cursor={cursor}
@@ -680,6 +709,20 @@ export function AppointmentCalendar({
               onPickDay={(d) => {
                 setCursor(d);
                 setView("dia");
+              }}
+            />
+          )}
+          {view === "ano" && (
+            <YearGrid
+              cursor={cursor}
+              appointments={visibleAppointments}
+              onPickDay={(d) => {
+                setCursor(d);
+                setView("dia");
+              }}
+              onPickMonth={(d) => {
+                setCursor(d);
+                setView("mes");
               }}
             />
           )}
@@ -1353,6 +1396,7 @@ function CategorySidebar({
   onToggleConsultas,
   cursor,
   onPickDate,
+  appointments,
 }: {
   token: string;
   categories: EventCategory[];
@@ -1362,6 +1406,7 @@ function CategorySidebar({
   onToggleConsultas: (v: boolean) => void;
   cursor: Date;
   onPickDate: (d: Date) => void;
+  appointments: Appointment[];
 }) {
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -1382,7 +1427,7 @@ function CategorySidebar({
 
   return (
     <aside className="hidden w-52 shrink-0 border-r border-border p-3 lg:block">
-      <MiniMonthPicker cursor={cursor} onPick={onPickDate} />
+      <MiniMonthPicker cursor={cursor} onPick={onPickDate} appointments={appointments} />
 
       <div className="mt-4 space-y-0.5">
         <div className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1473,13 +1518,32 @@ function CategorySidebar({
   );
 }
 
-function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) => void }) {
+function MiniMonthPicker({
+  cursor,
+  onPick,
+  appointments,
+}: {
+  cursor: Date;
+  onPick: (d: Date) => void;
+  appointments: Appointment[];
+}) {
   const [miniCursor, setMiniCursor] = useState(cursor);
   const first = new Date(miniCursor.getFullYear(), miniCursor.getMonth(), 1);
   const start = startOfWeek(first);
   const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const todayKey = ymd(new Date());
   const selectedKey = ymd(cursor);
+
+  // Densidade — só conta quantos eventos caem no dia, sem diferenciar tipo
+  // (o filtro de tipo já existe na lista de categorias logo abaixo).
+  const countByDay = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of appointments) {
+      const k = ymd(new Date(a.dateTime));
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [appointments]);
 
   return (
     <div>
@@ -1518,12 +1582,13 @@ function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) =
           const inMonth = d.getMonth() === miniCursor.getMonth();
           const isToday = ymd(d) === todayKey;
           const isSelected = ymd(d) === selectedKey;
+          const count = countByDay.get(ymd(d)) ?? 0;
           return (
             <button
               key={ymd(d)}
               type="button"
               onClick={() => onPick(d)}
-              className={`rounded-full py-0.5 text-[10px] transition hover:bg-primary/10 ${
+              className={`relative rounded-full py-0.5 text-[10px] transition hover:bg-primary/10 ${
                 isSelected
                   ? "bg-primary text-primary-foreground hover:bg-primary"
                   : isToday
@@ -1534,6 +1599,16 @@ function MiniMonthPicker({ cursor, onPick }: { cursor: Date; onPick: (d: Date) =
               }`}
             >
               {d.getDate()}
+              {inMonth && count > 0 && (
+                <span className="absolute inset-x-0 -bottom-0.5 flex justify-center gap-px">
+                  {Array.from({ length: Math.min(3, count) }, (_, i) => (
+                    <span
+                      key={i}
+                      className={`h-[3px] w-[3px] rounded-full ${isSelected ? "bg-primary-foreground" : "bg-primary"}`}
+                    />
+                  ))}
+                </span>
+              )}
             </button>
           );
         })}
@@ -1675,9 +1750,13 @@ function EventSearch({
 function SettingsPopover({
   settings,
   onChange,
+  customDayCount,
+  onCustomDayCountChange,
 }: {
   settings: CalendarSettings;
   onChange: (s: CalendarSettings) => void;
+  customDayCount: number;
+  onCustomDayCountChange: (n: number) => void;
 }) {
   return (
     <Popover>
@@ -1738,6 +1817,19 @@ function SettingsPopover({
               className="h-8 text-xs"
             />
           </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px]">Dias exibidos (visão "N dias")</Label>
+          <Input
+            type="number"
+            min={2}
+            max={14}
+            value={customDayCount}
+            onChange={(e) =>
+              onCustomDayCountChange(Math.max(2, Math.min(14, Number(e.target.value) || 4)))
+            }
+            className="h-8 text-xs"
+          />
         </div>
       </PopoverContent>
     </Popover>
@@ -2253,7 +2345,9 @@ function ListView({
   );
 }
 
-const MONTH_MAX_CHIPS = 3;
+const MONTH_CHIP_ROW_PX = 15; // altura aproximada de 1 chip (linha + gap de 2px)
+const MONTH_DAY_HEADER_PX = 20; // espaço do número do dia + padding da célula
+const MONTH_WEEK_ROWS = 6;
 
 function MonthGrid({
   cursor,
@@ -2270,6 +2364,25 @@ function MonthGrid({
   const start = startOfWeek(first);
   const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const todayKey = ymd(new Date());
+
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Densidade dinâmica — mede a altura real disponível por semana e calcula
+  // quantos chips cabem antes de colapsar em "+N mais" (nunca menos de 1).
+  // Dia/semana nunca colapsam (ver backlog); só o mês tem esse comportamento.
+  const [chipCapacity, setChipCapacity] = useState(3);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rowHeight = el.clientHeight / MONTH_WEEK_ROWS;
+      const capacity = Math.floor((rowHeight - MONTH_DAY_HEADER_PX) / MONTH_CHIP_ROW_PX);
+      setChipCapacity(Math.max(1, capacity));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const perDay = useMemo(() => {
     const m = new Map<string, Appointment[]>();
@@ -2289,18 +2402,22 @@ function MonthGrid({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-border">
+      <div
+        ref={gridRef}
+        className="grid grid-cols-7 auto-rows-fr gap-px bg-border"
+        style={{ minHeight: 560 }}
+      >
         {days.map((d) => {
           const inMonth = d.getMonth() === cursor.getMonth();
           const dayAppts = perDay.get(ymd(d)) ?? [];
-          const shown = dayAppts.slice(0, MONTH_MAX_CHIPS);
+          const shown = dayAppts.slice(0, chipCapacity);
           const overflow = dayAppts.length - shown.length;
           const isToday = ymd(d) === todayKey;
           return (
             <button
               key={ymd(d)}
               onClick={() => onPickDay(d)}
-              className={`flex min-h-[88px] flex-col items-start gap-0.5 bg-card p-1.5 text-left transition hover:bg-primary/5 ${
+              className={`flex flex-col items-start gap-0.5 bg-card p-1.5 text-left transition hover:bg-primary/5 ${
                 inMonth ? "" : "opacity-40"
               }`}
             >
@@ -2333,6 +2450,90 @@ function MonthGrid({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Visão Ano — 12 mini-meses do ano do cursor; clique no dia vai pra Dia,
+// clique no nome do mês vai pra Mês. Densidade por bolinhas, mesmo padrão do
+// mini-calendário da sidebar.
+
+function YearGrid({
+  cursor,
+  appointments,
+  onPickDay,
+  onPickMonth,
+}: {
+  cursor: Date;
+  appointments: Appointment[];
+  onPickDay: (d: Date) => void;
+  onPickMonth: (d: Date) => void;
+}) {
+  const year = cursor.getFullYear();
+  const todayKey = ymd(new Date());
+
+  const countByDay = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of appointments) {
+      const k = ymd(new Date(a.dateTime));
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [appointments]);
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {MONTHS.map((monthName, monthIdx) => {
+        const first = new Date(year, monthIdx, 1);
+        const start = startOfWeek(first);
+        const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+        return (
+          <div key={monthName} className="rounded-lg border border-border p-2">
+            <button
+              type="button"
+              onClick={() => onPickMonth(first)}
+              className="mb-1 text-xs font-semibold capitalize hover:text-primary"
+            >
+              {monthName}
+            </button>
+            <div className="grid grid-cols-7 gap-0.5 text-center text-[8px] text-muted-foreground">
+              {WEEKDAYS_SHORT.map((d) => (
+                <div key={d}>{d[0]}</div>
+              ))}
+            </div>
+            <div className="mt-0.5 grid grid-cols-7 gap-0.5">
+              {days.map((d) => {
+                const inMonth = d.getMonth() === monthIdx;
+                const count = countByDay.get(ymd(d)) ?? 0;
+                const isToday = ymd(d) === todayKey;
+                return (
+                  <button
+                    key={ymd(d)}
+                    type="button"
+                    onClick={() => inMonth && onPickDay(d)}
+                    disabled={!inMonth}
+                    className={`relative rounded-full py-0.5 text-[9px] transition ${
+                      !inMonth
+                        ? "text-transparent"
+                        : isToday
+                          ? "bg-primary font-semibold text-primary-foreground"
+                          : "text-foreground hover:bg-primary/10"
+                    }`}
+                  >
+                    {inMonth ? d.getDate() : "·"}
+                    {inMonth && count > 0 && !isToday && (
+                      <span className="absolute inset-x-0 -bottom-0.5 flex justify-center">
+                        <span className="h-[3px] w-[3px] rounded-full bg-primary" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
