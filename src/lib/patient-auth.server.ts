@@ -30,13 +30,40 @@ export type PatientAccount = {
   patientCode: string | null; // vínculo com prontuário — decisão futura, sempre null por ora
   globalId: string; // TECH-13: aponta para patients_registry.json
   createdAt: string;
+  // Verificação de e-mail. OPCIONAL de propósito: contas anteriores a este
+  // campo (ausente) contam como verificadas — ver isPatientEmailVerified().
+  emailVerified?: boolean;
 };
+
+/** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
+export function isPatientEmailVerified(p: PatientAccount): boolean {
+  return p.emailVerified !== false;
+}
 
 type PatientSession = { token: string; patientId: string; createdAt: string; expiresAt: string };
 
+export type PatientEmailVerification = {
+  token: string;
+  patientId: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type PatientPasswordReset = {
+  token: string;
+  patientId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+};
+
 const PATIENT_ACCOUNTS = "patient_accounts.json";
 const PATIENT_SESSIONS = "patient_sessions.json";
+const PATIENT_EMAIL_VERIFICATIONS = "patient_email_verifications.json";
+const PATIENT_PASSWORD_RESETS = "patient_password_resets.json";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
