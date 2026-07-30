@@ -516,30 +516,8 @@ function PainelPacientes() {
         )}
       </div>
 
-      {/* Agenda drag & drop — só pacientes visíveis na tabela acima com agendamento */}
-      {(() => {
-        const idsVisiveis = new Set<string>(
-          view === "todos"
-            ? listaTodos.map((p) => p.id)
-            : view === "hoje"
-              ? listaHoje.map((a) => a.patientId)
-              : view === "faltas"
-                ? listaFaltas.map((a) => a.patientId)
-                : listaCobrancas.map((c) => c.patientId),
-        );
-        // bloqueios não pertencem a paciente nenhum — sempre visíveis, independente do filtro de view
-        const apptsVisiveis = appointments.filter((a) => !isConsultaAppointment(a) || idsVisiveis.has(a.patientId));
-        return (
-          <AppointmentCalendar
-            token={token}
-            patients={ativos}
-            appointments={apptsVisiveis}
-            categories={data?.categories ?? []}
-            calendarSettings={data?.doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS}
-            onOpenPatient={abrir}
-          />
-        );
-      })()}
+      {/* A agenda vive só no Painel do Dia — aqui ficava duplicada. */}
+
 
 
 
