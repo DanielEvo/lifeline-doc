@@ -510,7 +510,10 @@ function BiomarkerChart({
   const pad = (yMax - yMin || 1) * 0.15;
 
   return (
-    <div className={`rounded-xl border p-2.5 ${out ? "border-rose-300/70 dark:border-rose-800" : "border-border"}`}>
+    <div
+      id={`biomarker-${name}`}
+      className={`rounded-xl border p-2.5 ${out ? "border-rose-300/70 dark:border-rose-800" : "border-border"}`}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="truncate text-xs font-medium">{name}</span>
         <span className={`flex items-center gap-1 text-xs font-semibold tabular-nums ${out ? "text-rose-600 dark:text-rose-400" : "text-foreground"}`}>

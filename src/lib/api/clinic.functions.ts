@@ -9,7 +9,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireDoctor, updateDoctorMemedProfile } from "../auth.server";
+import { requireDoctor, updateDoctorMemedProfile, updateDoctorPreferredMetrics } from "../auth.server";
 import {
   bumpExams,
   createPatient,
@@ -322,12 +322,33 @@ export const getWorkspace = createServerFn({ method: "POST" })
     ]);
     return {
       ok: true as const,
-      doctor: { nome: doctor.nome, email: doctor.email, avatarUrl: doctor.avatarUrl },
+      doctor: {
+        nome: doctor.nome,
+        email: doctor.email,
+        avatarUrl: doctor.avatarUrl,
+        preferredMetrics: doctor.preferredMetrics ?? [],
+      },
       patients: await withVinculo(doctor.id, patients),
       columns,
       appointments,
       charges,
     };
+  });
+
+// Métricas principais do header do prontuário (PRO-08) — nomes filtrados
+// contra BIOMARKER_CATALOG; nomes desconhecidos são silenciosamente
+// ignorados em vez de rejeitar a request inteira.
+export const saveMyPreferredMetrics = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, metrics: z.array(z.string()).max(5) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const validNames = new Set<string>(BIOMARKER_CATALOG.map((b) => b.name));
+    const metrics = data.metrics.filter((m) => validNames.has(m));
+    const updated = await updateDoctorPreferredMetrics(doctor.id, metrics);
+    return updated
+      ? { ok: true as const, preferredMetrics: updated.preferredMetrics }
+      : { ok: false as const, error: "not_found" as const };
   });
 
 export const createMyPatient = createServerFn({ method: "POST" })

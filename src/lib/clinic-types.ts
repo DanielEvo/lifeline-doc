@@ -229,6 +229,9 @@ export const BIOMARKER_CATALOG = [
   { name: "Testosterona Biodisponível", unit: "ng/dL", min: 82, max: 626, synonyms: ["Testosterona Biodisponível"], loincCode: null },
   { name: "PSA Total", unit: "ng/mL", min: 0, max: 4, synonyms: ["PSA Total"], loincCode: "2857-1" },
   { name: "PSA Livre", unit: "ng/mL", min: 0, max: 1, synonyms: ["PSA Livre"], loincCode: "10886-0" },
+  // Faixa ampla (não é referência clínica real — peso não tem "normal" sem
+  // altura/IMC) só pra não disparar falso alerta de fora-da-faixa.
+  { name: "Peso", unit: "kg", min: 30, max: 200, synonyms: ["Peso corporal", "Peso Corporal"], loincCode: null },
 ] as const;
 
 export function resolveBiomarkerName(rawName: string): (typeof BIOMARKER_CATALOG)[number] | null {

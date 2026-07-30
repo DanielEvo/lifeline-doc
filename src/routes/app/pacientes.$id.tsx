@@ -28,9 +28,12 @@ import {
   Phone,
   Pill,
   Plus,
+  Search,
   ShieldCheck,
   Sparkles,
   Stethoscope,
+  TrendingDown,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -81,6 +84,7 @@ import {
   saveEvolution,
   saveEvolutionNote,
   saveMemedProfile,
+  saveMyPreferredMetrics,
   sealMyEvolution,
   setMyAppointmentStatus,
   updateMyPatient,
@@ -105,11 +109,13 @@ import {
   formatHourBR,
   initialsOf,
   isConsultaAppointment,
+  isOutOfRange,
   MED_CATALOG,
   TABAGISMO_LABEL,
   WA_TEMPLATES,
   type Appointment,
   type Evolution,
+  type Measurement,
   type Patient,
 } from "@/lib/clinic-types";
 import { deriveSoap } from "@/lib/soap";
@@ -140,6 +146,7 @@ function Prontuario() {
     },
   });
   const columns = wsq.data?.ok ? wsq.data.columns : DEFAULT_COLUMNS;
+  const doctorMetrics = wsq.data?.ok ? wsq.data.doctor.preferredMetrics : [];
 
   const rec = useQuery({
     queryKey: ["patient", id],
@@ -216,6 +223,24 @@ function Prontuario() {
   const measurements = rec.data?.ok ? rec.data.measurements : [];
   const evolutions = rec.data?.ok ? rec.data.evolutions : [];
   const hist = usePatientHistory(measurements, evolutions);
+
+  // "foco" de uma métrica principal (PRO-08): reaproveita o showAll existente
+  // do BiomarkerPanel (garante que o gráfico esteja na lista) e rola até ele
+  // assim que o DOM tiver o card — mesmo padrão de sincronização por id do
+  // NovaEvolucao (activeHistoricoId).
+  const [pendingFocusMetric, setPendingFocusMetric] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingFocusMetric) return;
+    const el = document.getElementById(`biomarker-${pendingFocusMetric}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setPendingFocusMetric(null);
+    }
+  }, [pendingFocusMetric, hist.showAll]);
+  const onFocusMetric = (name: string) => {
+    hist.setShowAll(true);
+    setPendingFocusMetric(name);
+  };
 
   if (rec.isLoading) {
     return (
@@ -362,6 +387,14 @@ function Prontuario() {
           </div>
         )}
 
+        <PreferredMetricsHeader
+          doctorMetrics={doctorMetrics}
+          measurements={measurements}
+          onFocusMetric={onFocusMetric}
+          token={token}
+          onChanged={() => qc.invalidateQueries({ queryKey: ["workspace"] })}
+        />
+
         {p.pendingEmail && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-900">
             <span>
@@ -503,6 +536,233 @@ function Prontuario() {
         telefone={p.telefone}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Métricas principais (PRO-08) — chips de biomarcadores em destaque no header,
+// configuráveis por médico (até 5, do BIOMARKER_CATALOG). Clique num chip com
+// dado foca o gráfico correspondente no painel de biomarcadores. Mostra
+// "estava → está" (não só o valor atual) — é a leitura mais rápida pra saber
+// se o paciente está melhorando ou piorando sem abrir o gráfico.
+
+type MetricInfo = { latest: Measurement; prev: Measurement | null; trend: "up" | "down" | null };
+
+function metricInfoFor(measurements: Measurement[], name: string): MetricInfo | null {
+  const series = measurements.filter((m) => m.name === name).sort((a, b) => b.date.localeCompare(a.date));
+  if (series.length === 0) return null;
+  const [latest, prev] = series;
+  const trend: MetricInfo["trend"] =
+    prev && prev.value !== latest.value ? (latest.value > prev.value ? "up" : "down") : null;
+  return { latest, prev: prev ?? null, trend };
+}
+
+function PreferredMetricsHeader({
+  doctorMetrics,
+  measurements,
+  onFocusMetric,
+  token,
+  onChanged,
+}: {
+  doctorMetrics: string[];
+  measurements: Measurement[];
+  onFocusMetric: (name: string) => void;
+  token: string;
+  onChanged: () => void;
+}) {
+  const [configOpen, setConfigOpen] = useState(false);
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-3">
+      {doctorMetrics.length === 0 ? (
+        <button
+          type="button"
+          onClick={() => setConfigOpen(true)}
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+        >
+          <Plus className="h-3 w-3" /> Escolher métricas principais
+        </button>
+      ) : (
+        <>
+          {doctorMetrics.map((name) => {
+            const info = metricInfoFor(measurements, name);
+            if (!info) {
+              return (
+                <span
+                  key={name}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground ring-1 ring-border"
+                >
+                  {name}: sem dado ainda
+                </span>
+              );
+            }
+            const out = isOutOfRange(info.latest);
+            const TrendIcon = info.trend === "up" ? TrendingUp : info.trend === "down" ? TrendingDown : null;
+            const tooltip = info.prev
+              ? `${name}: ${formatDateBR(info.prev.date)} ${info.prev.value} → ${formatDateBR(info.latest.date)} ${info.latest.value} ${info.latest.unit}`
+              : `Ver ${name} no painel de biomarcadores`;
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => onFocusMetric(name)}
+                title={tooltip}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary ring-1 ring-primary/30 transition hover:bg-primary/15"
+              >
+                {name}:
+                {info.prev && (
+                  <span className="font-normal text-primary/60">{info.prev.value} →</span>
+                )}
+                {TrendIcon && <TrendIcon className={`h-3 w-3 ${out ? "text-rose-500" : ""}`} />}
+                <strong className={`font-semibold ${out ? "text-rose-600 dark:text-rose-400" : ""}`}>
+                  {info.latest.value}
+                </strong>{" "}
+                {info.latest.unit}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setConfigOpen(true)}
+            title="Editar métricas principais"
+            className="ml-0.5 text-muted-foreground/50 transition hover:text-foreground"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        </>
+      )}
+
+      <PreferredMetricsDialog
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        token={token}
+        initial={doctorMetrics}
+        onSaved={onChanged}
+      />
+    </div>
+  );
+}
+
+// Ordem alfabética (pt-BR) computada uma vez — a ordem de BIOMARKER_CATALOG
+// é por painel clínico, não por nome, e essa lista é uma busca por texto.
+const SORTED_BIOMARKER_CATALOG = [...BIOMARKER_CATALOG].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+function PreferredMetricsDialog({
+  open,
+  onOpenChange,
+  token,
+  initial,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  token: string;
+  initial: string[];
+  onSaved: () => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(initial);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setSelected(initial);
+      setQuery("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const toggle = (name: string) => {
+    setSelected((prev) => {
+      if (prev.includes(name)) return prev.filter((x) => x !== name);
+      if (prev.length >= 5) {
+        toast.message("Máximo de 5 métricas — remova uma antes de adicionar outra.");
+        return prev;
+      }
+      return [...prev, name];
+    });
+  };
+
+  // Selecionadas sempre aparecem, mesmo sem bater com a busca — senão parece
+  // que a seleção sumiu quando o médico digita pra achar a próxima.
+  const needle = query.trim().toLowerCase();
+  const visible = SORTED_BIOMARKER_CATALOG.filter(
+    (b) => selected.includes(b.name) || b.name.toLowerCase().includes(needle),
+  );
+  const cheia = selected.length >= 5;
+
+  const salvar = useMutation({
+    mutationFn: () => saveMyPreferredMetrics({ data: { token, metrics: selected } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui salvar.");
+      toast.success("Métricas principais atualizadas.");
+      onOpenChange(false);
+      onSaved();
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Métricas principais</DialogTitle>
+          <DialogDescription>
+            Escolha até 5 biomarcadores para aparecerem em destaque no topo do prontuário.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar biomarcador…"
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+        <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
+          {visible.length === 0 ? (
+            <p className="w-full py-4 text-center text-xs text-muted-foreground">
+              Nenhum biomarcador encontrado para "{query}".
+            </p>
+          ) : (
+            visible.map((b) => {
+              const active = selected.includes(b.name);
+              const disabled = !active && cheia;
+              return (
+                <button
+                  key={b.name}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggle(b.name)}
+                  title={disabled ? "Máximo de 5 — remova uma antes de adicionar outra" : undefined}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 transition ${
+                    active
+                      ? "bg-primary/10 text-primary ring-primary/40"
+                      : disabled
+                        ? "cursor-not-allowed bg-muted text-muted-foreground/40 ring-border/60"
+                        : "bg-muted text-muted-foreground ring-border hover:text-foreground"
+                  }`}
+                >
+                  {b.name}
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="text-[11px] text-muted-foreground">{selected.length}/5 selecionadas</div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button
+            disabled={salvar.isPending}
+            onClick={() => salvar.mutate()}
+            className="brand-gradient text-primary-foreground"
+          >
+            {salvar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

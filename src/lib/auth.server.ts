@@ -24,6 +24,10 @@ export type Doctor = {
   cpfMedico: string | null;
   especialidade: string | null;
   crmCidade: string | null;
+  // Biomarcadores em destaque no header do prontuário (PRO-08) — nomes do
+  // BIOMARKER_CATALOG, não loincCode: o resto do sistema já chaveia
+  // Measurement por `name`, então isso evita uma camada de tradução à toa.
+  preferredMetrics: string[];
 };
 
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
@@ -63,11 +67,28 @@ export async function createDoctor(input: {
     cpfMedico: null,
     especialidade: null,
     crmCidade: null,
+    preferredMetrics: [],
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
   });
   return doctor;
+}
+
+/** Sem validação de quantidade aqui — o limite de 5 é responsabilidade do
+ *  chamador (saveMyPreferredMetrics), que também filtra nomes desconhecidos. */
+export async function updateDoctorPreferredMetrics(
+  doctorId: string,
+  metrics: string[],
+): Promise<Doctor | undefined> {
+  let updated: Doctor | undefined;
+  await mutateRows<Doctor>(DOCTORS, (rows) => {
+    const d = rows.find((r) => r.id === doctorId);
+    if (!d) return;
+    d.preferredMetrics = metrics;
+    updated = { ...d };
+  });
+  return updated;
 }
 
 export async function updateDoctorMemedProfile(
