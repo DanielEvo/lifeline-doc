@@ -1874,16 +1874,35 @@ function TimeGrid({
   onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string, durationMin?: number) => void;
 }) {
+  // O expediente configurado é só o padrão da janela visível: se existir
+  // evento fora dele nos dias mostrados, o canvas estica pra que nada que o
+  // médico agendou fique invisível.
+  const gridSettings = useMemo(() => {
+    const dayKeys = new Set(days.map((d) => ymd(d)));
+    let startHour = settings.startHour;
+    let endHour = settings.endHour;
+    for (const a of appointments) {
+      if (a.allDay) continue;
+      const d = new Date(a.dateTime);
+      if (!dayKeys.has(ymd(d))) continue;
+      const endMin = d.getHours() * 60 + d.getMinutes() + (a.durationMin ?? 30);
+      startHour = Math.min(startHour, d.getHours());
+      endHour = Math.max(endHour, Math.min(24, Math.ceil(endMin / 60)));
+    }
+    if (startHour === settings.startHour && endHour === settings.endHour) return settings;
+    return { ...settings, startHour, endHour };
+  }, [settings, appointments, days]);
+
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
-    for (let h = settings.startHour; h < settings.endHour; h++) {
-      for (let m = 0; m < 60; m += settings.slotMinutes)
+    for (let h = gridSettings.startHour; h < gridSettings.endHour; h++) {
+      for (let m = 0; m < 60; m += gridSettings.slotMinutes)
         arr.push({ hour: h, minute: m, isHour: m === 0 });
     }
     return arr;
-  }, [settings.startHour, settings.endHour, settings.slotMinutes]);
+  }, [gridSettings.startHour, gridSettings.endHour, gridSettings.slotMinutes]);
 
-  const canvasHeightPx = (settings.endHour - settings.startHour) * 60 * PX_PER_MIN;
+  const canvasHeightPx = (gridSettings.endHour - gridSettings.startHour) * 60 * PX_PER_MIN;
 
   const { timedByDay, allDayByDay } = useMemo(() => {
     const timed = new Map<string, Appointment[]>();
@@ -2153,7 +2172,6 @@ function DayColumn({
           height={Math.max(durationMin * PX_PER_MIN, MIN_BLOCK_PX)}
           col={col}
           totalCols={totalCols}
-          slotMinutes={settings.slotMinutes}
           onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
         />
@@ -2169,7 +2187,6 @@ function EventBlock({
   height,
   col,
   totalCols,
-  slotMinutes,
   onOpenEditor,
   onResize,
 }: {
@@ -2179,7 +2196,6 @@ function EventBlock({
   height: number;
   col: number;
   totalCols: number;
-  slotMinutes: number;
   onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
 }) {
