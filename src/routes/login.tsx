@@ -1,12 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Activity, ArrowLeft, CheckCircle2, Loader2, Lock, Mail, User } from "lucide-react";
+import { Activity, ArrowLeft, CheckCircle2, Loader2, Lock, Mail, MailCheck, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { googleAuthStart, googleLogin, loginDoctor, registerDoctor } from "@/lib/api/auth.functions";
+import {
+  googleAuthStart,
+  googleLogin,
+  loginDoctor,
+  registerDoctor,
+  resendVerificationEmail,
+} from "@/lib/api/auth.functions";
 import { getSession, setSession } from "@/lib/session";
 
 export const Route = createFileRoute("/login")({
