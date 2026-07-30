@@ -101,6 +101,8 @@ export async function createDoctor(input: {
     crmCidade: null,
     preferredMetrics: [],
     calendarSettings: null,
+    // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
+    emailVerified: input.provider === "google",
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
