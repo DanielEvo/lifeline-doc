@@ -21,6 +21,7 @@ import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
+import { Route as PacienteEsqueciSenhaRouteImport } from './routes/paciente/esqueci-senha'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
 import { Route as ConfirmarCadastroTokenRouteImport } from './routes/confirmar-cadastro.$token'
@@ -93,6 +94,11 @@ const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
 const PacienteLoginRoute = PacienteLoginRouteImport.update({
   id: '/paciente/login',
   path: '/paciente/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PacienteEsqueciSenhaRoute = PacienteEsqueciSenhaRouteImport.update({
+  id: '/paciente/esqueci-senha',
+  path: '/paciente/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PacienteAppRoute = PacienteAppRouteImport.update({
@@ -178,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
   '/admin/': typeof AdminIndexRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByTo {
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
   '/admin': typeof AdminIndexRoute
@@ -232,6 +240,7 @@ export interface FileRoutesById {
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
+  '/paciente/esqueci-senha': typeof PacienteEsqueciSenhaRoute
   '/paciente/login': typeof PacienteLoginRoute
   '/receita/$code': typeof ReceitaCodeRoute
   '/admin/': typeof AdminIndexRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
     | '/admin/'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
     | '/admin'
@@ -314,6 +325,7 @@ export interface FileRouteTypes {
     | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
+    | '/paciente/esqueci-senha'
     | '/paciente/login'
     | '/receita/$code'
     | '/admin/'
@@ -341,6 +353,7 @@ export interface RootRouteChildren {
   ConfirmarCadastroTokenRoute: typeof ConfirmarCadastroTokenRoute
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
+  PacienteEsqueciSenhaRoute: typeof PacienteEsqueciSenhaRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
   ReceitaCodeRoute: typeof ReceitaCodeRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -434,6 +447,13 @@ declare module '@tanstack/react-router' {
       path: '/paciente/login'
       fullPath: '/paciente/login'
       preLoaderRoute: typeof PacienteLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paciente/esqueci-senha': {
+      id: '/paciente/esqueci-senha'
+      path: '/paciente/esqueci-senha'
+      fullPath: '/paciente/esqueci-senha'
+      preLoaderRoute: typeof PacienteEsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/paciente/app': {
@@ -564,6 +584,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfirmarCadastroTokenRoute: ConfirmarCadastroTokenRoute,
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
+  PacienteEsqueciSenhaRoute: PacienteEsqueciSenhaRoute,
   PacienteLoginRoute: PacienteLoginRoute,
   ReceitaCodeRoute: ReceitaCodeRoute,
   AdminIndexRoute: AdminIndexRoute,
