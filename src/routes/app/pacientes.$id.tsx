@@ -1709,6 +1709,8 @@ function MinhasNotas({
     },
   });
 
+  const [aberto, setAberto] = useState(false);
+
   const onChange = (v: string) => {
     setTexto(v);
     if (timerRef.current) clearTimeout(timerRef.current);
