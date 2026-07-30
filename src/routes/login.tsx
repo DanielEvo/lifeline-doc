@@ -33,7 +33,9 @@ function LoginPage() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState<"form" | "google" | null>(null);
+  const [busy, setBusy] = useState<"form" | "google" | "resend" | null>(null);
+  // Cadastro por e-mail não loga: fica nesta tela até confirmar o e-mail.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   // Já logado → direto para o consultório
   useEffect(() => {
@@ -61,18 +63,39 @@ function LoginPage() {
     }
     setBusy("form");
     try {
-      const r =
-        mode === "register"
-          ? await registerDoctor({ data: { nome, email, password } })
-          : await loginDoctor({ data: { email, password } });
-      if (r.ok) finish(r);
-      else toast.error(r.error);
+      if (mode === "register") {
+        const r = await registerDoctor({
+          data: { nome, email, password, origin: window.location.origin },
+        });
+        if (r.ok) setPendingEmail(r.email);
+        else toast.error(r.error);
+      } else {
+        const r = await loginDoctor({ data: { email, password } });
+        if (r.ok) finish(r);
+        else toast.error(r.error);
+      }
     } catch {
       toast.error("Não consegui conectar agora. Tente novamente.");
     } finally {
       setBusy(null);
     }
   };
+
+  const resend = async () => {
+    if (busy || !pendingEmail) return;
+    setBusy("resend");
+    try {
+      await resendVerificationEmail({
+        data: { email: pendingEmail, origin: window.location.origin },
+      });
+      toast.success("Link reenviado. Confira sua caixa de entrada.");
+    } catch {
+      toast.error("Não consegui reenviar agora. Tente novamente.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
 
   // OAuth real quando o servidor tem credenciais Google; sem elas (dev),
   // cai no login simulado — mesma conta + sessão reais no backend.
