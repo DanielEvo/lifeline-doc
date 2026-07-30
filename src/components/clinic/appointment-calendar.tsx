@@ -1961,7 +1961,7 @@ function TimeGrid({
             key={ymd(d)}
             day={d}
             isToday={ymd(d) === todayKey}
-            settings={settings}
+            settings={gridSettings}
             timedAppts={timedByDay.get(ymd(d)) ?? []}
             byId={byId}
             ticks={ticks}
