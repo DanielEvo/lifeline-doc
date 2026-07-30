@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Check, Loader2, Mic, MicOff, Pause, Pencil, Play, X } from "lucide-react";
+import { Check, CheckCheck, Loader2, Mic, MicOff, Pause, Pencil, Play, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -146,6 +146,13 @@ export function Dictation({
     setBlocks((all) => all.map((x) => (x.id === b.id ? { ...x, status: "accepted" } : x)));
   };
 
+  // Templates com várias seções (ex.: Anamnese, 8) tornam clicar bloco a
+  // bloco custoso — atalho pra aceitar tudo de uma vez, mesma revisão que
+  // aceitar individual só que em lote.
+  const acceptAll = () => {
+    blocks.filter((b) => b.status === "pending").forEach(accept);
+  };
+
   const fmt = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
@@ -238,6 +245,20 @@ export function Dictation({
 
       {pending.length > 0 && (
         <div className="mt-2 space-y-1.5">
+          {pending.length > 1 && (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">
+                {pending.length} sugestões pendentes
+              </span>
+              <button
+                type="button"
+                onClick={acceptAll}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-950"
+              >
+                <CheckCheck className="h-3 w-3" /> Aceitar todos
+              </button>
+            </div>
+          )}
           {blocks
             .filter((b) => b.status === "pending")
             .map((b) => (

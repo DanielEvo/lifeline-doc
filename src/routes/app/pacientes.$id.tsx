@@ -94,6 +94,7 @@ import {
 import { invalidateWorkspace, ScheduleDialog } from "@/components/clinic/action-dialogs";
 import { listMyServices } from "@/lib/api/services.functions";
 import {
+  deleteMyTemplate,
   generateMyTemplateDraft,
   listMyTemplates,
   saveMyTemplate,
@@ -1831,6 +1832,9 @@ function NovaEvolucao({
   // nesta sessão de edição.
   const [ephemeralConteudo, setEphemeralConteudo] = useState("");
   const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
+  // Conteúdo pra abrir o dialog já no passo "estrutura + nome", pulando a
+  // descrição — usado por "Salvar como template" (semeia com o texto atual).
+  const [templateDialogSeed, setTemplateDialogSeed] = useState<string | null>(null);
   // Consulta selecionada dentro do modo "Histórico". Mantida separada do id
   // pilotado pelo pai (linha do tempo) mas sincronizada via useEffect abaixo.
   const [historicoId, setHistoricoId] = useState<string | null>(null);
@@ -1900,21 +1904,38 @@ function NovaEvolucao({
     onActiveHistoricoChange(id);
   };
 
+  const deletarTemplate = useMutation({
+    mutationFn: (id: string) => deleteMyTemplate({ data: { token, id } }),
+    onSuccess: (r, id) => {
+      if (!r.ok) return toast.error("Não consegui apagar o template.");
+      qc.invalidateQueries({ queryKey: ["templates"] });
+      // Template apagado era o ativo → volta pro Padrão, sem perder rascunho.
+      if (template === `custom:${id}`) {
+        setTemplate("padrao");
+        if (texto.trim().length === 0) setTexto(TEMPLATE_PADRAO);
+      }
+      toast.success("Template apagado.");
+    },
+  });
+
   const templatesPills: { id: TemplateMode; label: string; disabled?: boolean }[] = [
     { id: "historico", label: "Histórico", disabled: evolutions.length === 0 },
     { id: "padrao", label: "Padrão" },
-    { id: "anamnese", label: "Anamnese completa · 1ª consulta" },
+    { id: "anamnese", label: "Anamnese completa" },
     { id: "texto_livre", label: "Texto livre" },
     ...myTemplates.map((t) => ({ id: `custom:${t.id}` as TemplateMode, label: t.nome })),
   ];
 
-  const activeSections = useMemo(
-    () =>
-      template === "historico"
-        ? []
-        : parseTemplateSections(contentForTemplate(template, myTemplates, ephemeralConteudo)),
-    [template, myTemplates, ephemeralConteudo],
-  );
+  // Deriva das seções JÁ VISÍVEIS no texto (não do template selecionado) —
+  // se o médico só clicou numa pill pra espiar (texto não-vazio não é
+  // sobrescrito), o ditado precisa organizar embaixo do que está na tela,
+  // não embaixo de um template que nem chegou a ser aplicado. "Texto livre"
+  // fica sempre sem seção, mesmo que o texto acidentalmente pareça ter uma.
+  const activeSections = useMemo(() => {
+    if (template === "historico" || template === "texto_livre") return [];
+    if (texto.trim().length > 0) return parseTemplateSections(texto);
+    return parseTemplateSections(contentForTemplate(template, myTemplates, ephemeralConteudo));
+  }, [template, texto, myTemplates, ephemeralConteudo]);
 
   const consultaSelecionada = historicoId
     ? evolutions.find((e) => e.id === historicoId) ?? null
@@ -1928,29 +1949,50 @@ function NovaEvolucao({
       </div>
 
       <div className="mb-2 mt-2 flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap rounded-full border border-border bg-muted/40 p-0.5">
-          {templatesPills.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              disabled={t.disabled}
-              onClick={() => applyTemplate(t.id)}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
-                template === t.id
-                  ? "bg-teal-600 text-white shadow-sm"
-                  : t.disabled
-                    ? "cursor-not-allowed text-muted-foreground/50"
-                    : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center rounded-full border border-border bg-muted/40 p-0.5">
+          {templatesPills.map((t) => {
+            const isCustom = t.id.startsWith("custom:");
+            return (
+              <span key={t.id} className="group inline-flex items-center">
+                <button
+                  type="button"
+                  disabled={t.disabled}
+                  title={t.label}
+                  onClick={() => applyTemplate(t.id)}
+                  className={`max-w-[160px] truncate rounded-full px-2.5 py-1.5 text-[10px] font-medium transition ${
+                    template === t.id
+                      ? "bg-teal-600 text-white shadow-sm"
+                      : t.disabled
+                        ? "cursor-not-allowed text-muted-foreground/70"
+                        : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                </button>
+                {isCustom && (
+                  <button
+                    type="button"
+                    title={`Apagar template "${t.label}"`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deletarTemplate.mutate(t.id.slice("custom:".length));
+                    }}
+                    className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground/50 transition hover:text-red-600 group-hover:inline-flex"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </div>
         <button
           type="button"
-          onClick={() => setCreateTemplateOpen(true)}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-[10px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          onClick={() => {
+            setTemplateDialogSeed(null);
+            setCreateTemplateOpen(true);
+          }}
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1.5 text-[10px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
         >
           <Plus className="h-3 w-3" /> Criar template
         </button>
@@ -2033,7 +2075,19 @@ function NovaEvolucao({
             </div>
           )}
 
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-end gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={texto.trim().length === 0}
+              title="Guardar a estrutura de cabeçalhos deste texto como um template reutilizável"
+              onClick={() => {
+                setTemplateDialogSeed(texto);
+                setCreateTemplateOpen(true);
+              }}
+            >
+              Salvar como template
+            </Button>
             <Button
               size="sm"
               disabled={texto.trim().length < 4 || salvar.isPending}
@@ -2051,6 +2105,7 @@ function NovaEvolucao({
         open={createTemplateOpen}
         onOpenChange={setCreateTemplateOpen}
         token={token}
+        initialConteudo={templateDialogSeed}
         onTemplateSaved={(t) => {
           qc.invalidateQueries({ queryKey: ["templates"] });
           setTemplate(`custom:${t.id}`);
@@ -2070,22 +2125,35 @@ function NovaEvolucao({
 // a estrutura (cabeçalhos) → rascunho editável → salvar (persiste, vira pill
 // própria) ou usar sem salvar (aplica na evolução atual, não persiste). Sem
 // LOVABLE_API_KEY configurada, cai direto no modo manual (textarea vazio).
+// `initialConteudo` pula direto pro passo "estrutura + nome" — usado por
+// "Salvar como template" (semeado com o texto da evolução atual).
 function CreateTemplateDialog({
   open,
   onOpenChange,
   token,
+  initialConteudo,
   onTemplateSaved,
   onUseWithoutSaving,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   token: string;
+  initialConteudo?: string | null;
   onTemplateSaved: (t: EvolutionTemplate) => void;
   onUseWithoutSaving: (conteudo: string) => void;
 }) {
   const [descricao, setDescricao] = useState("");
   const [rascunho, setRascunho] = useState<string | null>(null);
   const [nome, setNome] = useState("");
+  // Semeado (veio de "Salvar como template") → não tem passo de descrição
+  // pra "Recomeçar" nem sentido em "Usar sem salvar" (o conteúdo já É a
+  // evolução atual).
+  const seeded = !!initialConteudo;
+
+  useEffect(() => {
+    if (open && initialConteudo) setRascunho(initialConteudo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const reset = () => {
     setDescricao("");
@@ -2130,10 +2198,11 @@ function CreateTemplateDialog({
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Criar template de evolução</DialogTitle>
+          <DialogTitle>{seeded ? "Salvar como template" : "Criar template de evolução"}</DialogTitle>
           <DialogDescription>
-            Descreva o tipo de consulta em linguagem natural — a IA monta só a estrutura
-            (cabeçalhos), nunca preenche dado clínico.
+            {seeded
+              ? "A estrutura abaixo veio da evolução atual — dê um nome pra reaproveitar depois."
+              : "Descreva o tipo de consulta em linguagem natural — a IA monta só a estrutura (cabeçalhos), nunca preenche dado clínico."}
           </DialogDescription>
         </DialogHeader>
 
@@ -2181,11 +2250,18 @@ function CreateTemplateDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          {rascunho !== null && !seeded && (
+            <Button variant="outline" onClick={() => setRascunho(null)}>
+              Recomeçar
+            </Button>
+          )}
           {rascunho !== null && (
             <>
-              <Button variant="outline" onClick={usarSemSalvar} disabled={rascunho.trim().length === 0}>
-                Usar sem salvar
-              </Button>
+              {!seeded && (
+                <Button variant="outline" onClick={usarSemSalvar} disabled={rascunho.trim().length === 0}>
+                  Usar sem salvar
+                </Button>
+              )}
               <Button
                 disabled={nome.trim().length < 2 || rascunho.trim().length === 0 || salvar.isPending}
                 onClick={() => salvar.mutate()}
