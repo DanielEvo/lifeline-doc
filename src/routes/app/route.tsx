@@ -209,12 +209,6 @@ function Shell({ clinic }: { clinic: Clinic }) {
       </div>
 
       <main className="relative flex-1 overflow-x-hidden">
-        <button
-          type="button"
-          onClick={() => setKbOpen(true)}
-          aria-label="Base de conhecimento"
-          title="Base de conhecimento"
-        </button>
         <Outlet />
         <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} token={clinic.token} />
       </main>
