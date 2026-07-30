@@ -226,14 +226,24 @@ function timeFromClientY(
 ): Date {
   const rect = columnEl.getBoundingClientRect();
   const rawMin = (clientY - rect.top) / PX_PER_MIN;
-  const snapped = Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes;
+  // Movimentação é sempre livre num grid fino de SNAP_MIN — a duração de slot
+  // configurada é só um default "soft" pra novos eventos, nunca uma trava.
+  const snapped = Math.round(rawMin / SNAP_MIN) * SNAP_MIN;
   const totalMin = (settings.endHour - settings.startHour) * 60;
-  const clamped = Math.max(0, Math.min(totalMin - settings.slotMinutes, snapped));
+  const clamped = Math.max(0, Math.min(totalMin - SNAP_MIN, snapped));
   const d = new Date(day);
   d.setHours(settings.startHour, 0, 0, 0);
   d.setMinutes(d.getMinutes() + clamped);
   return d;
 }
+
+/** Granularidade fina de arrasto (mover/redimensionar/criar). Independente
+ *  do slotMinutes configurado, que só define a duração sugerida. */
+const SNAP_MIN = 5;
+/** Faixa à direita da coluna que nunca é coberta por eventos — garante que
+ *  sempre dá pra clicar/soltar em cima de um horário já ocupado e criar um
+ *  atendimento em paralelo. */
+const RESERVE_PX = 18;
 
 const REMINDER_CHECK_MS = 30_000;
 
@@ -1864,16 +1874,35 @@ function TimeGrid({
   onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string, durationMin?: number) => void;
 }) {
+  // O expediente configurado é só o padrão da janela visível: se existir
+  // evento fora dele nos dias mostrados, o canvas estica pra que nada que o
+  // médico agendou fique invisível.
+  const gridSettings = useMemo(() => {
+    const dayKeys = new Set(days.map((d) => ymd(d)));
+    let startHour = settings.startHour;
+    let endHour = settings.endHour;
+    for (const a of appointments) {
+      if (a.allDay) continue;
+      const d = new Date(a.dateTime);
+      if (!dayKeys.has(ymd(d))) continue;
+      const endMin = d.getHours() * 60 + d.getMinutes() + (a.durationMin ?? 30);
+      startHour = Math.min(startHour, d.getHours());
+      endHour = Math.max(endHour, Math.min(24, Math.ceil(endMin / 60)));
+    }
+    if (startHour === settings.startHour && endHour === settings.endHour) return settings;
+    return { ...settings, startHour, endHour };
+  }, [settings, appointments, days]);
+
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
-    for (let h = settings.startHour; h < settings.endHour; h++) {
-      for (let m = 0; m < 60; m += settings.slotMinutes)
+    for (let h = gridSettings.startHour; h < gridSettings.endHour; h++) {
+      for (let m = 0; m < 60; m += gridSettings.slotMinutes)
         arr.push({ hour: h, minute: m, isHour: m === 0 });
     }
     return arr;
-  }, [settings.startHour, settings.endHour, settings.slotMinutes]);
+  }, [gridSettings.startHour, gridSettings.endHour, gridSettings.slotMinutes]);
 
-  const canvasHeightPx = (settings.endHour - settings.startHour) * 60 * PX_PER_MIN;
+  const canvasHeightPx = (gridSettings.endHour - gridSettings.startHour) * 60 * PX_PER_MIN;
 
   const { timedByDay, allDayByDay } = useMemo(() => {
     const timed = new Map<string, Appointment[]>();
@@ -1926,13 +1955,13 @@ function TimeGrid({
       )}
 
       <div className="flex min-w-[560px] border-t border-border">
-        <TimeGutter ticks={ticks} settings={settings} />
+        <TimeGutter ticks={ticks} settings={gridSettings} />
         {days.map((d) => (
           <DayColumn
             key={ymd(d)}
             day={d}
             isToday={ymd(d) === todayKey}
-            settings={settings}
+            settings={gridSettings}
             timedAppts={timedByDay.get(ymd(d)) ?? []}
             byId={byId}
             ticks={ticks}
@@ -2084,7 +2113,7 @@ function DayColumn({
         if (patientId) onDropPatient(patientId, iso);
       }}
       onPointerDown={(e) => {
-        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques vindos de um bloco
+        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques vindos de um bloco (a faixa livre à direita continua clicável)
         if (e.button !== 0) return;
         e.currentTarget.setPointerCapture(e.pointerId);
         setDragCreate({ startY: e.clientY, currentY: e.clientY });
@@ -2096,7 +2125,7 @@ function DayColumn({
       onPointerUp={(e) => {
         if (!dragCreate || !colRef.current) return;
         const deltaPx = Math.abs(e.clientY - dragCreate.startY);
-        const dragThresholdPx = settings.slotMinutes * PX_PER_MIN * 0.6;
+        const dragThresholdPx = 8;
         const startY = Math.min(dragCreate.startY, e.clientY);
         setDragCreate(null);
         const startCandidate = timeFromClientY(colRef.current, startY, day, settings);
@@ -2105,10 +2134,7 @@ function DayColumn({
           return;
         }
         const rawMin = deltaPx / PX_PER_MIN;
-        const snappedMin = Math.max(
-          settings.slotMinutes,
-          Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes,
-        );
+        const snappedMin = Math.max(SNAP_MIN, Math.round(rawMin / SNAP_MIN) * SNAP_MIN);
         onSlotClick(toIsoLocal(startCandidate), snapToDurationOption(snappedMin));
       }}
     >
@@ -2146,7 +2172,6 @@ function DayColumn({
           height={Math.max(durationMin * PX_PER_MIN, MIN_BLOCK_PX)}
           col={col}
           totalCols={totalCols}
-          slotMinutes={settings.slotMinutes}
           onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
         />
@@ -2162,7 +2187,6 @@ function EventBlock({
   height,
   col,
   totalCols,
-  slotMinutes,
   onOpenEditor,
   onResize,
 }: {
@@ -2172,7 +2196,6 @@ function EventBlock({
   height: number;
   col: number;
   totalCols: number;
-  slotMinutes: number;
   onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
 }) {
@@ -2185,7 +2208,6 @@ function EventBlock({
     : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
   const displayHeight =
     resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
-  const widthPct = 100 / totalCols;
   const gutterPx = 2;
 
   return (
@@ -2210,8 +2232,8 @@ function EventBlock({
       style={{
         top,
         height: displayHeight,
-        left: `calc(${col * widthPct}% + ${gutterPx}px)`,
-        width: `calc(${widthPct}% - ${gutterPx * 2}px)`,
+        left: `calc((100% - ${RESERVE_PX}px) * ${col / totalCols} + ${gutterPx}px)`,
+        width: `calc((100% - ${RESERVE_PX}px) / ${totalCols} - ${gutterPx * 2}px)`,
         ...(isBloqueio
           ? {}
           : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${color}` }),
@@ -2253,8 +2275,8 @@ function EventBlock({
             if (resizeDeltaPx === null) return;
             const deltaMin = resizeDeltaPx / PX_PER_MIN;
             const snapped = Math.max(
-              slotMinutes,
-              Math.round((baseDuration + deltaMin) / slotMinutes) * slotMinutes,
+              SNAP_MIN,
+              Math.round((baseDuration + deltaMin) / SNAP_MIN) * SNAP_MIN,
             );
             setResizeDeltaPx(null);
             if (snapped !== baseDuration) onResize(appt.id, snapped);
