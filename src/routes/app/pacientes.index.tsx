@@ -50,7 +50,6 @@ import {
 import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { PageHeader } from "@/components/clinic/page-header";
 import { ChargeDialog, ScheduleDialog } from "@/components/clinic/action-dialogs";
-import { AppointmentCalendar } from "@/components/clinic/appointment-calendar";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import {
   archiveMyPatient,
@@ -64,7 +63,6 @@ import {
 import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
-  DEFAULT_CALENDAR_SETTINGS,
   formatBRL,
   formatDateBR,
   formatHourBR,
