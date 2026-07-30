@@ -32,6 +32,7 @@ import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simula
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AppProdutosIndexRouteImport } from './routes/app/produtos.index'
 import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
+import { Route as PacienteRedefinirSenhaTokenRouteImport } from './routes/paciente/redefinir-senha.$token'
 import { Route as PacienteConfirmarCadastroTokenRouteImport } from './routes/paciente/confirmar-cadastro.$token'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
 import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
@@ -152,6 +153,12 @@ const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
   path: '/pacientes/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const PacienteRedefinirSenhaTokenRoute =
+  PacienteRedefinirSenhaTokenRouteImport.update({
+    id: '/paciente/redefinir-senha/$token',
+    path: '/paciente/redefinir-senha/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const PacienteConfirmarCadastroTokenRoute =
   PacienteConfirmarCadastroTokenRouteImport.update({
     id: '/paciente/confirmar-cadastro/$token',
@@ -200,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/paciente/confirmar-cadastro/$token': typeof PacienteConfirmarCadastroTokenRoute
+  '/paciente/redefinir-senha/$token': typeof PacienteRedefinirSenhaTokenRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
   '/app/produtos/': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -228,6 +236,7 @@ export interface FileRoutesByTo {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/paciente/confirmar-cadastro/$token': typeof PacienteConfirmarCadastroTokenRoute
+  '/paciente/redefinir-senha/$token': typeof PacienteRedefinirSenhaTokenRoute
   '/app/pacientes': typeof AppPacientesIndexRoute
   '/app/produtos': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -258,6 +267,7 @@ export interface FileRoutesById {
   '/app/pacientes/$id': typeof AppPacientesIdRoute
   '/paciente/auth/callback': typeof PacienteAuthCallbackRoute
   '/paciente/confirmar-cadastro/$token': typeof PacienteConfirmarCadastroTokenRoute
+  '/paciente/redefinir-senha/$token': typeof PacienteRedefinirSenhaTokenRoute
   '/app/pacientes/': typeof AppPacientesIndexRoute
   '/app/produtos/': typeof AppProdutosIndexRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -289,6 +299,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/paciente/confirmar-cadastro/$token'
+    | '/paciente/redefinir-senha/$token'
     | '/app/pacientes/'
     | '/app/produtos/'
     | '/api/public/payments/webhook'
@@ -317,6 +328,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/paciente/confirmar-cadastro/$token'
+    | '/paciente/redefinir-senha/$token'
     | '/app/pacientes'
     | '/app/produtos'
     | '/api/public/payments/webhook'
@@ -346,6 +358,7 @@ export interface FileRouteTypes {
     | '/app/pacientes/$id'
     | '/paciente/auth/callback'
     | '/paciente/confirmar-cadastro/$token'
+    | '/paciente/redefinir-senha/$token'
     | '/app/pacientes/'
     | '/app/produtos/'
     | '/api/public/payments/webhook'
@@ -373,6 +386,7 @@ export interface RootRouteChildren {
   AssinaturaIndexRoute: typeof AssinaturaIndexRoute
   PacienteAuthCallbackRoute: typeof PacienteAuthCallbackRoute
   PacienteConfirmarCadastroTokenRoute: typeof PacienteConfirmarCadastroTokenRoute
+  PacienteRedefinirSenhaTokenRoute: typeof PacienteRedefinirSenhaTokenRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
@@ -539,6 +553,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPacientesIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/paciente/redefinir-senha/$token': {
+      id: '/paciente/redefinir-senha/$token'
+      path: '/paciente/redefinir-senha/$token'
+      fullPath: '/paciente/redefinir-senha/$token'
+      preLoaderRoute: typeof PacienteRedefinirSenhaTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/paciente/confirmar-cadastro/$token': {
       id: '/paciente/confirmar-cadastro/$token'
       path: '/paciente/confirmar-cadastro/$token'
@@ -612,6 +633,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssinaturaIndexRoute: AssinaturaIndexRoute,
   PacienteAuthCallbackRoute: PacienteAuthCallbackRoute,
   PacienteConfirmarCadastroTokenRoute: PacienteConfirmarCadastroTokenRoute,
+  PacienteRedefinirSenhaTokenRoute: PacienteRedefinirSenhaTokenRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
