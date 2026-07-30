@@ -138,8 +138,45 @@ type Props = {
   token: string;
 };
 
+const LARGURA_PADRAO = 380;
+const LARGURA_MIN = 300;
+const LARGURA_MAX = 900;
+const LARGURA_KEY = "lifeline:kb-largura";
+
 export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
   const [tab, setTab] = useState<TabId>("chat");
+
+  // largura ajustável do painel (persistida por médico/navegador)
+  const [largura, setLargura] = useState(LARGURA_PADRAO);
+  const [redimensionando, setRedimensionando] = useState(false);
+
+  useEffect(() => {
+    const salvo = Number(window.localStorage.getItem(LARGURA_KEY));
+    if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
+  }, []);
+
+  const iniciarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setRedimensionando(true);
+    const mover = (ev: PointerEvent) => {
+      const nova = Math.min(LARGURA_MAX, Math.max(LARGURA_MIN, window.innerWidth - ev.clientX));
+      setLargura(nova);
+    };
+    const soltar = () => {
+      setRedimensionando(false);
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      document.body.style.userSelect = "";
+      setLargura((l) => {
+        window.localStorage.setItem(LARGURA_KEY, String(l));
+        return l;
+      });
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  };
+
 
   // chat
   const [chatInput, setChatInput] = useState("");
