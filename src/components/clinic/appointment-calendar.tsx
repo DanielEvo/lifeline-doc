@@ -662,7 +662,7 @@ export function AppointmentCalendar({
               ))}
             </div>
             <SettingsPopover
-              settings={settings}
+              settings={gridSettings}
               onChange={persistSettings}
               customDayCount={customDayCount}
               onCustomDayCountChange={setCustomDayCount}
@@ -1955,7 +1955,7 @@ function TimeGrid({
       )}
 
       <div className="flex min-w-[560px] border-t border-border">
-        <TimeGutter ticks={ticks} settings={settings} />
+        <TimeGutter ticks={ticks} settings={gridSettings} />
         {days.map((d) => (
           <DayColumn
             key={ymd(d)}
