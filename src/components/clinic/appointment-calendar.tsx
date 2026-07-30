@@ -662,7 +662,7 @@ export function AppointmentCalendar({
               ))}
             </div>
             <SettingsPopover
-              settings={gridSettings}
+              settings={settings}
               onChange={persistSettings}
               customDayCount={customDayCount}
               onCustomDayCountChange={setCustomDayCount}
