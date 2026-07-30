@@ -22,6 +22,7 @@ import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
 import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
 import { Route as PacienteAppRouteImport } from './routes/paciente/app'
 import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
+import { Route as ConfirmarCadastroTokenRouteImport } from './routes/confirmar-cadastro.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
 import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
@@ -97,6 +98,11 @@ const ConfirmarEmailTokenRoute = ConfirmarEmailTokenRouteImport.update({
   path: '/confirmar-email/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConfirmarCadastroTokenRoute = ConfirmarCadastroTokenRouteImport.update({
+  id: '/confirmar-cadastro/$token',
+  path: '/confirmar-cadastro/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
   '/confirmar-email/$token': typeof ConfirmarEmailTokenRoute
   '/paciente/app': typeof PacienteAppRoute
   '/paciente/login': typeof PacienteLoginRoute
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
+    | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
+    | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/app/memed-simulacao'
     | '/assinatura/retorno'
     | '/auth/callback'
+    | '/confirmar-cadastro/$token'
     | '/confirmar-email/$token'
     | '/paciente/app'
     | '/paciente/login'
@@ -300,6 +312,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AssinaturaRetornoRoute: typeof AssinaturaRetornoRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  ConfirmarCadastroTokenRoute: typeof ConfirmarCadastroTokenRoute
   ConfirmarEmailTokenRoute: typeof ConfirmarEmailTokenRoute
   PacienteAppRoute: typeof PacienteAppRoute
   PacienteLoginRoute: typeof PacienteLoginRoute
@@ -403,6 +416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfirmarEmailTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/confirmar-cadastro/$token': {
+      id: '/confirmar-cadastro/$token'
+      path: '/confirmar-cadastro/$token'
+      fullPath: '/confirmar-cadastro/$token'
+      preLoaderRoute: typeof ConfirmarCadastroTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -499,6 +519,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AssinaturaRetornoRoute: AssinaturaRetornoRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  ConfirmarCadastroTokenRoute: ConfirmarCadastroTokenRoute,
   ConfirmarEmailTokenRoute: ConfirmarEmailTokenRoute,
   PacienteAppRoute: PacienteAppRoute,
   PacienteLoginRoute: PacienteLoginRoute,
