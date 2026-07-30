@@ -810,8 +810,8 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
               </div>
             </TabsContent>
           </Tabs>
-        </SheetContent>
-      </Sheet>
+      </aside>
+
 
       {/* Modal com texto completo do protocolo */}
       <Dialog
