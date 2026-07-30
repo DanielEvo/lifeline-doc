@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SobreRouteImport } from './routes/sobre'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AppRouteRouteImport } from './routes/app/route'
@@ -42,6 +43,11 @@ const SobreRoute = SobreRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
+  id: '/esqueci-senha',
+  path: '/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteRouteWithChildren
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteRouteWithChildren
   '/demo': typeof DemoRoute
   '/entrar': typeof EntrarRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
     | '/sobre'
     | '/admin/login'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
     | '/sobre'
     | '/admin/login'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/demo'
     | '/entrar'
+    | '/esqueci-senha'
     | '/login'
     | '/sobre'
     | '/admin/login'
@@ -320,6 +332,7 @@ export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   DemoRoute: typeof DemoRoute
   EntrarRoute: typeof EntrarRoute
+  EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   LoginRoute: typeof LoginRoute
   SobreRoute: typeof SobreRoute
   AdminLoginRoute: typeof AdminLoginRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/esqueci-senha': {
+      id: '/esqueci-senha'
+      path: '/esqueci-senha'
+      fullPath: '/esqueci-senha'
+      preLoaderRoute: typeof EsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -535,6 +555,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   DemoRoute: DemoRoute,
   EntrarRoute: EntrarRoute,
+  EsqueciSenhaRoute: EsqueciSenhaRoute,
   LoginRoute: LoginRoute,
   SobreRoute: SobreRoute,
   AdminLoginRoute: AdminLoginRoute,
