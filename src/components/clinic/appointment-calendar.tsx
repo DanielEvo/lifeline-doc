@@ -226,14 +226,24 @@ function timeFromClientY(
 ): Date {
   const rect = columnEl.getBoundingClientRect();
   const rawMin = (clientY - rect.top) / PX_PER_MIN;
-  const snapped = Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes;
+  // Movimentação é sempre livre num grid fino de SNAP_MIN — a duração de slot
+  // configurada é só um default "soft" pra novos eventos, nunca uma trava.
+  const snapped = Math.round(rawMin / SNAP_MIN) * SNAP_MIN;
   const totalMin = (settings.endHour - settings.startHour) * 60;
-  const clamped = Math.max(0, Math.min(totalMin - settings.slotMinutes, snapped));
+  const clamped = Math.max(0, Math.min(totalMin - SNAP_MIN, snapped));
   const d = new Date(day);
   d.setHours(settings.startHour, 0, 0, 0);
   d.setMinutes(d.getMinutes() + clamped);
   return d;
 }
+
+/** Granularidade fina de arrasto (mover/redimensionar/criar). Independente
+ *  do slotMinutes configurado, que só define a duração sugerida. */
+const SNAP_MIN = 5;
+/** Faixa à direita da coluna que nunca é coberta por eventos — garante que
+ *  sempre dá pra clicar/soltar em cima de um horário já ocupado e criar um
+ *  atendimento em paralelo. */
+const RESERVE_PX = 18;
 
 const REMINDER_CHECK_MS = 30_000;
 
@@ -2084,7 +2094,7 @@ function DayColumn({
         if (patientId) onDropPatient(patientId, iso);
       }}
       onPointerDown={(e) => {
-        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques vindos de um bloco
+        if (e.target !== colRef.current || !colRef.current) return; // ignora cliques vindos de um bloco (a faixa livre à direita continua clicável)
         if (e.button !== 0) return;
         e.currentTarget.setPointerCapture(e.pointerId);
         setDragCreate({ startY: e.clientY, currentY: e.clientY });
@@ -2096,7 +2106,7 @@ function DayColumn({
       onPointerUp={(e) => {
         if (!dragCreate || !colRef.current) return;
         const deltaPx = Math.abs(e.clientY - dragCreate.startY);
-        const dragThresholdPx = settings.slotMinutes * PX_PER_MIN * 0.6;
+        const dragThresholdPx = 8;
         const startY = Math.min(dragCreate.startY, e.clientY);
         setDragCreate(null);
         const startCandidate = timeFromClientY(colRef.current, startY, day, settings);
@@ -2105,10 +2115,7 @@ function DayColumn({
           return;
         }
         const rawMin = deltaPx / PX_PER_MIN;
-        const snappedMin = Math.max(
-          settings.slotMinutes,
-          Math.round(rawMin / settings.slotMinutes) * settings.slotMinutes,
-        );
+        const snappedMin = Math.max(SNAP_MIN, Math.round(rawMin / SNAP_MIN) * SNAP_MIN);
         onSlotClick(toIsoLocal(startCandidate), snapToDurationOption(snappedMin));
       }}
     >
@@ -2185,7 +2192,6 @@ function EventBlock({
     : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
   const displayHeight =
     resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
-  const widthPct = 100 / totalCols;
   const gutterPx = 2;
 
   return (
@@ -2210,8 +2216,8 @@ function EventBlock({
       style={{
         top,
         height: displayHeight,
-        left: `calc(${col * widthPct}% + ${gutterPx}px)`,
-        width: `calc(${widthPct}% - ${gutterPx * 2}px)`,
+        left: `calc((100% - ${RESERVE_PX}px) * ${col / totalCols} + ${gutterPx}px)`,
+        width: `calc((100% - ${RESERVE_PX}px) / ${totalCols} - ${gutterPx * 2}px)`,
         ...(isBloqueio
           ? {}
           : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${color}` }),
@@ -2253,8 +2259,8 @@ function EventBlock({
             if (resizeDeltaPx === null) return;
             const deltaMin = resizeDeltaPx / PX_PER_MIN;
             const snapped = Math.max(
-              slotMinutes,
-              Math.round((baseDuration + deltaMin) / slotMinutes) * slotMinutes,
+              SNAP_MIN,
+              Math.round((baseDuration + deltaMin) / SNAP_MIN) * SNAP_MIN,
             );
             setResizeDeltaPx(null);
             if (snapped !== baseDuration) onResize(appt.id, snapped);
