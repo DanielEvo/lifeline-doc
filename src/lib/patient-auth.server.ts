@@ -98,6 +98,8 @@ export async function createPatient(input: {
     patientCode: null,
     globalId: registry.globalId,
     createdAt: nowIso(),
+    // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
+    emailVerified: input.provider === "google",
   };
   await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
     rows.push(patient);
