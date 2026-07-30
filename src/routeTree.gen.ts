@@ -9,47 +9,32 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppRouteRouteImport } from './routes/app/route'
-import { Route as DemoRouteImport } from './routes/demo'
-import { Route as EntrarRouteImport } from './routes/entrar'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as SobreRouteImport } from './routes/sobre'
-import { Route as AdminIndexRouteImport } from './routes/admin/index'
-import { Route as AdminLoginRouteImport } from './routes/admin/login'
-import { Route as AppIndexRouteImport } from './routes/app/index'
-import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as DemoRouteImport } from './routes/demo'
+import { Route as AppRouteRouteImport } from './routes/app/route'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssinaturaIndexRouteImport } from './routes/assinatura/index'
-import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
-import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
-import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
-import { Route as PacienteAppRouteImport } from './routes/paciente/app'
-import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as ReceitaCodeRouteImport } from './routes/receita.$code'
-import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
-import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
+import { Route as PacienteLoginRouteImport } from './routes/paciente/login'
+import { Route as PacienteAppRouteImport } from './routes/paciente/app'
+import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-email.$token'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
+import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
+import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AppProdutosIndexRouteImport } from './routes/app/produtos.index'
+import { Route as AppPacientesIndexRouteImport } from './routes/app/pacientes.index'
 import { Route as PacienteAuthCallbackRouteImport } from './routes/paciente/auth.callback'
+import { Route as AppPacientesIdRouteImport } from './routes/app/pacientes.$id'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRouteRoute = AppRouteRouteImport.update({
-  id: '/app',
-  path: '/app',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DemoRoute = DemoRouteImport.update({
-  id: '/demo',
-  path: '/demo',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EntrarRoute = EntrarRouteImport.update({
-  id: '/entrar',
-  path: '/entrar',
+const SobreRoute = SobreRouteImport.update({
+  id: '/sobre',
+  path: '/sobre',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -57,19 +42,29 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SobreRoute = SobreRouteImport.update({
-  id: '/sobre',
-  path: '/sobre',
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminLoginRoute = AdminLoginRouteImport.update({
-  id: '/admin/login',
-  path: '/admin/login',
+const AppRouteRoute = AppRouteRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssinaturaIndexRoute = AssinaturaIndexRouteImport.update({
+  id: '/assinatura/',
+  path: '/assinatura/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -77,39 +72,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppMemedSimulacaoRoute = AppMemedSimulacaoRouteImport.update({
-  id: '/memed-simulacao',
-  path: '/memed-simulacao',
-  getParentRoute: () => AppRouteRoute,
-} as any)
-const AssinaturaIndexRoute = AssinaturaIndexRouteImport.update({
-  id: '/assinatura/',
-  path: '/assinatura/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
-  id: '/assinatura/retorno',
-  path: '/assinatura/retorno',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfirmarEmailTokenRoute = ConfirmarEmailTokenRouteImport.update({
-  id: '/confirmar-email/$token',
-  path: '/confirmar-email/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PacienteAppRoute = PacienteAppRouteImport.update({
-  id: '/paciente/app',
-  path: '/paciente/app',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PacienteLoginRoute = PacienteLoginRouteImport.update({
-  id: '/paciente/login',
-  path: '/paciente/login',
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
@@ -117,25 +82,60 @@ const ReceitaCodeRoute = ReceitaCodeRouteImport.update({
   path: '/receita/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
-  id: '/pacientes/',
-  path: '/pacientes/',
+const PacienteLoginRoute = PacienteLoginRouteImport.update({
+  id: '/paciente/login',
+  path: '/paciente/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PacienteAppRoute = PacienteAppRouteImport.update({
+  id: '/paciente/app',
+  path: '/paciente/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfirmarEmailTokenRoute = ConfirmarEmailTokenRouteImport.update({
+  id: '/confirmar-email/$token',
+  path: '/confirmar-email/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
+  id: '/assinatura/retorno',
+  path: '/assinatura/retorno',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppMemedSimulacaoRoute = AppMemedSimulacaoRouteImport.update({
+  id: '/memed-simulacao',
+  path: '/memed-simulacao',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppPacientesIdRoute = AppPacientesIdRouteImport.update({
-  id: '/pacientes/$id',
-  path: '/pacientes/$id',
-  getParentRoute: () => AppRouteRoute,
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppProdutosIndexRoute = AppProdutosIndexRouteImport.update({
   id: '/produtos/',
   path: '/produtos/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppPacientesIndexRoute = AppPacientesIndexRouteImport.update({
+  id: '/pacientes/',
+  path: '/pacientes/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const PacienteAuthCallbackRoute = PacienteAuthCallbackRouteImport.update({
   id: '/paciente/auth/callback',
   path: '/paciente/auth/callback',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppPacientesIdRoute = AppPacientesIdRouteImport.update({
+  id: '/pacientes/$id',
+  path: '/pacientes/$id',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const ApiPublicPaymentsWebhookRoute =
   ApiPublicPaymentsWebhookRouteImport.update({
@@ -312,32 +312,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/app': {
-      id: '/app'
-      path: '/app'
-      fullPath: '/app'
-      preLoaderRoute: typeof AppRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/demo': {
-      id: '/demo'
-      path: '/demo'
-      fullPath: '/demo'
-      preLoaderRoute: typeof DemoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/entrar': {
-      id: '/entrar'
-      path: '/entrar'
-      fullPath: '/entrar'
-      preLoaderRoute: typeof EntrarRouteImport
+    '/sobre': {
+      id: '/sobre'
+      path: '/sobre'
+      fullPath: '/sobre'
+      preLoaderRoute: typeof SobreRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -347,25 +326,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sobre': {
-      id: '/sobre'
-      path: '/sobre'
-      fullPath: '/sobre'
-      preLoaderRoute: typeof SobreRouteImport
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/': {
-      id: '/admin/'
-      path: '/admin'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/login': {
-      id: '/admin/login'
-      path: '/admin/login'
-      fullPath: '/admin/login'
-      preLoaderRoute: typeof AdminLoginRouteImport
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assinatura/': {
+      id: '/assinatura/'
+      path: '/assinatura'
+      fullPath: '/assinatura/'
+      preLoaderRoute: typeof AssinaturaIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -375,53 +368,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/app/memed-simulacao': {
-      id: '/app/memed-simulacao'
-      path: '/memed-simulacao'
-      fullPath: '/app/memed-simulacao'
-      preLoaderRoute: typeof AppMemedSimulacaoRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/assinatura/': {
-      id: '/assinatura/'
-      path: '/assinatura'
-      fullPath: '/assinatura/'
-      preLoaderRoute: typeof AssinaturaIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assinatura/retorno': {
-      id: '/assinatura/retorno'
-      path: '/assinatura/retorno'
-      fullPath: '/assinatura/retorno'
-      preLoaderRoute: typeof AssinaturaRetornoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/confirmar-email/$token': {
-      id: '/confirmar-email/$token'
-      path: '/confirmar-email/$token'
-      fullPath: '/confirmar-email/$token'
-      preLoaderRoute: typeof ConfirmarEmailTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/paciente/app': {
-      id: '/paciente/app'
-      path: '/paciente/app'
-      fullPath: '/paciente/app'
-      preLoaderRoute: typeof PacienteAppRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/paciente/login': {
-      id: '/paciente/login'
-      path: '/paciente/login'
-      fullPath: '/paciente/login'
-      preLoaderRoute: typeof PacienteLoginRouteImport
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/receita/$code': {
@@ -431,19 +382,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReceitaCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/pacientes/': {
-      id: '/app/pacientes/'
-      path: '/pacientes'
-      fullPath: '/app/pacientes/'
-      preLoaderRoute: typeof AppPacientesIndexRouteImport
+    '/paciente/login': {
+      id: '/paciente/login'
+      path: '/paciente/login'
+      fullPath: '/paciente/login'
+      preLoaderRoute: typeof PacienteLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paciente/app': {
+      id: '/paciente/app'
+      path: '/paciente/app'
+      fullPath: '/paciente/app'
+      preLoaderRoute: typeof PacienteAppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confirmar-email/$token': {
+      id: '/confirmar-email/$token'
+      path: '/confirmar-email/$token'
+      fullPath: '/confirmar-email/$token'
+      preLoaderRoute: typeof ConfirmarEmailTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assinatura/retorno': {
+      id: '/assinatura/retorno'
+      path: '/assinatura/retorno'
+      fullPath: '/assinatura/retorno'
+      preLoaderRoute: typeof AssinaturaRetornoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/memed-simulacao': {
+      id: '/app/memed-simulacao'
+      path: '/memed-simulacao'
+      fullPath: '/app/memed-simulacao'
+      preLoaderRoute: typeof AppMemedSimulacaoRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/app/pacientes/$id': {
-      id: '/app/pacientes/$id'
-      path: '/pacientes/$id'
-      fullPath: '/app/pacientes/$id'
-      preLoaderRoute: typeof AppPacientesIdRouteImport
-      parentRoute: typeof AppRouteRoute
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/produtos/': {
       id: '/app/produtos/'
@@ -452,12 +438,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProdutosIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/pacientes/': {
+      id: '/app/pacientes/'
+      path: '/pacientes'
+      fullPath: '/app/pacientes/'
+      preLoaderRoute: typeof AppPacientesIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/paciente/auth/callback': {
       id: '/paciente/auth/callback'
       path: '/paciente/auth/callback'
       fullPath: '/paciente/auth/callback'
       preLoaderRoute: typeof PacienteAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/app/pacientes/$id': {
+      id: '/app/pacientes/$id'
+      path: '/pacientes/$id'
+      fullPath: '/app/pacientes/$id'
+      preLoaderRoute: typeof AppPacientesIdRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/api/public/payments/webhook': {
       id: '/api/public/payments/webhook'
@@ -511,3 +511,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
