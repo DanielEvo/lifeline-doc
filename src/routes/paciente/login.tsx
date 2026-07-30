@@ -123,6 +123,44 @@ function PatientLoginPage() {
     }
   };
 
+  if (pendingEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
+        <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-7 text-center shadow-xl shadow-primary/5">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+            <MailCheck className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold tracking-tight">Verifique seu e-mail</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Enviamos um link de confirmação para{" "}
+            <span className="font-medium text-foreground">{pendingEmail}</span>. Clique nele para
+            ativar sua conta.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resend}
+            disabled={busy !== null}
+            className="press mt-5 w-full"
+          >
+            {busy === "resend" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            Reenviar e-mail de verificação
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setPendingEmail(null);
+              setMode("login");
+            }}
+            className="mt-4 w-full text-xs text-muted-foreground transition hover:text-foreground"
+          >
+            Voltar para o login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
