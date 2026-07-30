@@ -64,6 +64,7 @@ import {
 import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
+  DEFAULT_CALENDAR_SETTINGS,
   formatBRL,
   formatDateBR,
   formatHourBR,
@@ -533,6 +534,8 @@ function PainelPacientes() {
             token={token}
             patients={ativos}
             appointments={apptsVisiveis}
+            categories={data?.categories ?? []}
+            calendarSettings={data?.doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS}
             onOpenPatient={abrir}
           />
         );

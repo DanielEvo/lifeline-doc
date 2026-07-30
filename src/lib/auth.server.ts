@@ -7,6 +7,7 @@
 import crypto from "node:crypto";
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
+import type { CalendarSettings } from "./clinic-types";
 
 export type Doctor = {
   id: string;
@@ -28,6 +29,9 @@ export type Doctor = {
   // BIOMARKER_CATALOG, não loincCode: o resto do sistema já chaveia
   // Measurement por `name`, então isso evita uma camada de tradução à toa.
   preferredMetrics: string[];
+  // Config da agenda (duração do slot, expediente) — null = usa os
+  // DEFAULT_CALENDAR_SETTINGS; antes vivia só em localStorage por token.
+  calendarSettings: CalendarSettings | null;
 };
 
 type Session = { token: string; doctorId: string; createdAt: string; expiresAt: string };
@@ -68,6 +72,7 @@ export async function createDoctor(input: {
     especialidade: null,
     crmCidade: null,
     preferredMetrics: [],
+    calendarSettings: null,
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
@@ -86,6 +91,20 @@ export async function updateDoctorPreferredMetrics(
     const d = rows.find((r) => r.id === doctorId);
     if (!d) return;
     d.preferredMetrics = metrics;
+    updated = { ...d };
+  });
+  return updated;
+}
+
+export async function updateDoctorCalendarSettings(
+  doctorId: string,
+  settings: CalendarSettings,
+): Promise<Doctor | undefined> {
+  let updated: Doctor | undefined;
+  await mutateRows<Doctor>(DOCTORS, (rows) => {
+    const d = rows.find((r) => r.id === doctorId);
+    if (!d) return;
+    d.calendarSettings = settings;
     updated = { ...d };
   });
   return updated;

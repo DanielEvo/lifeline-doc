@@ -113,12 +113,23 @@ export type Appointment = {
   doctorId: string;
   // null só quando kind === "bloqueio" (horário travado, sem paciente).
   patientId: string | null;
-  dateTime: string; // ISO
+  dateTime: string; // ISO — início
+  // Duração em minutos — null só quando allDay=true. Ausente em dados
+  // antigos = 30 (normalizado em listAppointments, não migra o arquivo).
+  durationMin: number | null;
+  // Dia inteiro — só faz sentido pra kind "bloqueio" (evento pessoal);
+  // consulta nunca é dia inteiro.
+  allDay: boolean;
   status: AppointmentStatus;
-  note: string | null;
+  note: string | null; // só consulta
   kind: "consulta" | "bloqueio"; // ausente em dados antigos = "consulta"
-  label: string | null; // motivo do bloqueio (ex.: "Almoço")
-  recurrenceId: string | null; // agrupa consultas geradas na mesma série semanal
+  label: string | null; // título — motivo do bloqueio (ex.: "Almoço") ou nome do evento pessoal
+  // Campos abaixo só se aplicam a kind === "bloqueio" (evento pessoal):
+  categoriaId: string | null; // referência pro filtro da sidebar — nunca a fonte da cor
+  cor: string | null; // hex resolvido no momento da criação, sobrescrevível — snapshot, não muda se a categoria mudar/for desativada depois
+  descricao: string | null;
+  local: string | null;
+  recurrenceId: string | null; // agrupa eventos gerados na mesma série (consulta ou bloqueio)
   createdAt: string;
   updatedAt: string;
 };
@@ -128,6 +139,53 @@ export type Appointment = {
 export function isConsultaAppointment(a: Appointment): a is Appointment & { patientId: string } {
   return a.kind !== "bloqueio";
 }
+
+export type RecurrenceFreq = "none" | "daily" | "weekly" | "monthly";
+
+// Configuração da agenda (duração do slot, expediente) — antes só em
+// localStorage por token, agora persistida por médico (Doctor.calendarSettings).
+export type CalendarSettings = {
+  slotMinutes: 15 | 20 | 30 | 45 | 60;
+  startHour: number; // 0-23
+  endHour: number; // 1-24
+};
+
+export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = { slotMinutes: 30, startHour: 8, endHour: 19 };
+
+// Categoria/cor de eventos pessoais (agenda, PRO-XX) — nunca se aplica a
+// consultas, que mantêm a cor própria do paciente (Patient.tint).
+export type EventCategory = {
+  id: string;
+  doctorId: string;
+  nome: string;
+  cor: string; // hex
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Swatches sugeridos no color picker de categoria/evento pessoal (paleta
+// inspirada no Material Design) — não são categorias pré-semeadas, só
+// opções rápidas de cor.
+export const EVENT_COLOR_SWATCHES = [
+  "#039be5", // Turquesa
+  "#33b679", // Verde Menta
+  "#f6bf26", // Amarelo
+  "#f4511e", // Laranja
+  "#8e24aa", // Roxo
+  "#e67c73", // Rosa
+] as const;
+
+// Mapeia os 5 gradientes de Patient.tint (patients.server.ts) pra um hex
+// representativo (stop "from-") — usado pra renderizar blocos de consulta
+// no mesmo estilo fundo-suave+borda-esquerda dos eventos pessoais.
+export const TINT_TO_HEX: Record<string, string> = {
+  "from-rose-400 to-pink-500": "#fb7185",
+  "from-cyan-400 to-teal-500": "#22d3ee",
+  "from-amber-400 to-orange-500": "#fbbf24",
+  "from-emerald-400 to-teal-500": "#34d399",
+  "from-violet-400 to-indigo-500": "#a78bfa",
+};
 
 // Catálogo de produtos/serviços do consultório — alimenta os chips de
 // "serviços aplicados" na Evolução (ver Evolution.servicosAplicados).

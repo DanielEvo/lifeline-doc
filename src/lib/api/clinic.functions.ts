@@ -9,7 +9,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireDoctor, updateDoctorMemedProfile, updateDoctorPreferredMetrics } from "../auth.server";
+import {
+  requireDoctor,
+  updateDoctorCalendarSettings,
+  updateDoctorMemedProfile,
+  updateDoctorPreferredMetrics,
+} from "../auth.server";
+import { listCategories } from "../categories.server";
 import {
   bumpExams,
   createPatient,
@@ -47,7 +53,7 @@ import {
   deleteAppointment,
   listAppointments,
   setAppointmentStatus,
-  updateAppointmentDateTime,
+  updateAppointmentTiming,
 } from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
 import {
@@ -74,8 +80,10 @@ import { resolveLoincCode } from "../loinc-mapping.server";
 import {
   ageFrom,
   BIOMARKER_CATALOG,
+  DEFAULT_CALENDAR_SETTINGS,
   resolveBiomarkerName,
   todayIso,
+  type CalendarSettings,
   type Evolution,
   type Patient,
 } from "../clinic-types";
@@ -314,11 +322,12 @@ export const getWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const [patients, columns, appointments, charges] = await Promise.all([
+    const [patients, columns, appointments, charges, categories] = await Promise.all([
       listPatients(doctor.id, { includeArchived: true }),
       getBoardColumns(doctor.id),
       listAppointments(doctor.id),
       listCharges(doctor.id),
+      listCategories(doctor.id),
     ]);
     return {
       ok: true as const,
@@ -327,12 +336,41 @@ export const getWorkspace = createServerFn({ method: "POST" })
         email: doctor.email,
         avatarUrl: doctor.avatarUrl,
         preferredMetrics: doctor.preferredMetrics ?? [],
+        calendarSettings: doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS,
       },
       patients: await withVinculo(doctor.id, patients),
       columns,
       appointments,
       charges,
+      categories,
     };
+  });
+
+// Configuração da agenda (duração do slot, expediente) — antes só em
+// localStorage por token, agora por médico (sincroniza entre dispositivos).
+export const saveMyCalendarSettings = createServerFn({ method: "POST" })
+  .inputValidator(
+    z
+      .object({
+        token,
+        slotMinutes: z.union([z.literal(15), z.literal(20), z.literal(30), z.literal(45), z.literal(60)]),
+        startHour: z.number().int().min(0).max(23),
+        endHour: z.number().int().min(1).max(24),
+      })
+      .refine((v) => v.startHour < v.endHour, { message: "startHour precisa ser antes de endHour" }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const settings: CalendarSettings = {
+      slotMinutes: data.slotMinutes,
+      startHour: data.startHour,
+      endHour: data.endHour,
+    };
+    const updated = await updateDoctorCalendarSettings(doctor.id, settings);
+    return updated
+      ? { ok: true as const, calendarSettings: updated.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS }
+      : { ok: false as const, error: "not_found" as const };
   });
 
 // Métricas principais do header do prontuário (PRO-08) — nomes filtrados
@@ -466,6 +504,14 @@ export const saveMyBoard = createServerFn({ method: "POST" })
 // Agenda
 // ---------------------------------------------------------------------------
 
+const RECURRENCE = z
+  .object({
+    freq: z.enum(["none", "daily", "weekly", "monthly"]),
+    count: z.number().int().min(0).max(23),
+  })
+  .optional();
+const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "cor precisa ser um hex válido (#rrggbb)");
+
 export const scheduleAppointment = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
@@ -475,34 +521,56 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       note: z.string().max(200).nullish(),
       kind: z.enum(["consulta", "bloqueio"]).optional().default("consulta"),
       label: z.string().max(80).nullish(),
-      recurrenceWeeks: z.number().int().min(0).max(11).optional().default(0),
+      durationMin: z.number().int().min(5).max(480).optional().default(30),
+      allDay: z.boolean().optional().default(false),
+      categoriaId: z.string().min(1).nullish(),
+      cor: HEX_COLOR.nullish(),
+      descricao: z.string().max(2000).nullish(),
+      local: z.string().max(160).nullish(),
+      recurrence: RECURRENCE,
     }),
   )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
+    const dateTimeIso = new Date(data.dateTime).toISOString();
+    const recurrence = data.recurrence;
+    const wantsRecurrence = recurrence && recurrence.freq !== "none" && recurrence.count > 0;
 
     if (data.kind === "bloqueio") {
       if (data.patientId) return { ok: false as const, error: "patient_not_allowed" as const };
-      const appointment = await createAppointment(doctor.id, {
-        dateTime: new Date(data.dateTime).toISOString(),
+      const input = {
+        dateTime: dateTimeIso,
         note: data.note,
-        kind: "bloqueio",
+        kind: "bloqueio" as const,
         label: data.label,
-      });
+        durationMin: data.allDay ? null : data.durationMin,
+        allDay: data.allDay,
+        categoriaId: data.categoriaId,
+        cor: data.cor,
+        descricao: data.descricao,
+        local: data.local,
+      };
+      if (wantsRecurrence && recurrence) {
+        const appointments = await createRecurringAppointments(doctor.id, input, {
+          freq: recurrence.freq as "daily" | "weekly" | "monthly",
+          count: recurrence.count,
+        });
+        return { ok: true as const, appointment: appointments[0], appointments };
+      }
+      const appointment = await createAppointment(doctor.id, input);
       return { ok: true as const, appointment };
     }
 
     if (!data.patientId) return { ok: false as const, error: "patient_required" as const };
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
-    const dateTimeIso = new Date(data.dateTime).toISOString();
 
-    if (data.recurrenceWeeks > 0) {
+    if (wantsRecurrence && recurrence) {
       const appointments = await createRecurringAppointments(
         doctor.id,
-        { patientId: data.patientId, dateTime: dateTimeIso, note: data.note },
-        data.recurrenceWeeks,
+        { patientId: data.patientId, dateTime: dateTimeIso, note: data.note, durationMin: data.durationMin },
+        { freq: recurrence.freq as "daily" | "weekly" | "monthly", count: recurrence.count },
       );
       return { ok: true as const, appointment: appointments[0], appointments };
     }
@@ -511,6 +579,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       patientId: data.patientId,
       dateTime: dateTimeIso,
       note: data.note,
+      durationMin: data.durationMin,
     });
     return { ok: true as const, appointment };
   });
@@ -541,22 +610,28 @@ export const setMyAppointmentStatus = createServerFn({ method: "POST" })
       : { ok: false as const, error: "not_found" as const };
   });
 
-export const rescheduleAppointment = createServerFn({ method: "POST" })
+// Usado tanto por mover (drag, só dateTime) quanto por redimensionar (alça
+// na borda do bloco, só durationMin) — cada chamador manda só o que mudou.
+export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
   .inputValidator(
-    z.object({
-      token,
-      id: z.string().min(1),
-      dateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida"),
-    }),
+    z
+      .object({
+        token,
+        id: z.string().min(1),
+        dateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida").optional(),
+        durationMin: z.number().int().min(5).max(480).optional(),
+      })
+      .refine((v) => v.dateTime !== undefined || v.durationMin !== undefined, {
+        message: "informe dateTime e/ou durationMin",
+      }),
   )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const appointment = await updateAppointmentDateTime(
-      doctor.id,
-      data.id,
-      new Date(data.dateTime).toISOString(),
-    );
+    const appointment = await updateAppointmentTiming(doctor.id, data.id, {
+      dateTime: data.dateTime ? new Date(data.dateTime).toISOString() : undefined,
+      durationMin: data.durationMin,
+    });
     return appointment
       ? { ok: true as const, appointment }
       : { ok: false as const, error: "not_found" as const };

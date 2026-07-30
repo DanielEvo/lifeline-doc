@@ -32,6 +32,7 @@ import {
 import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
+  DEFAULT_CALENDAR_SETTINGS,
   formatHourBR,
   initialsOf,
   isConsultaAppointment,
@@ -253,6 +254,8 @@ function PainelDoDia() {
         token={token}
         patients={patients}
         appointments={data?.appointments ?? []}
+        categories={data?.categories ?? []}
+        calendarSettings={data?.doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS}
         onOpenPatient={(p) => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
       />
 

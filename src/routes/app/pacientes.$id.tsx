@@ -80,13 +80,13 @@ import {
   getWorkspace,
   moveMyPatient,
   prescribeForEvolution,
-  rescheduleAppointment,
   saveEvolution,
   saveEvolutionNote,
   saveMemedProfile,
   saveMyPreferredMetrics,
   sealMyEvolution,
   setMyAppointmentStatus,
+  updateMyAppointmentTiming,
   updateMyPatient,
 } from "@/lib/api/clinic.functions";
 import { invalidateWorkspace, ScheduleDialog } from "@/components/clinic/action-dialogs";
@@ -837,7 +837,7 @@ function MiniAgenda({
 
   const reagendar = useMutation({
     mutationFn: (v: { id: string; dateTime: string }) =>
-      rescheduleAppointment({ data: { token, ...v } }),
+      updateMyAppointmentTiming({ data: { token, ...v } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui remarcar.");
       toast.success("Consulta remarcada.");
