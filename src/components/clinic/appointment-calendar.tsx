@@ -2664,7 +2664,16 @@ function DayColumn({
 
   const resolveDrop = (e: React.DragEvent): Date | null => {
     if (!colRef.current) return null;
-    return timeFromClientY(colRef.current, e.clientY, day, settings, pxPerMin);
+    // clientY inválido (0 em alguns navegadores no drop) → usa a última
+    // posição vista no dragover.
+    const rawY = e.clientY > 0 ? e.clientY : (dragState.lastY ?? e.clientY);
+    return timeFromClientY(
+      colRef.current,
+      rawY - dragState.grabOffsetPx,
+      day,
+      settings,
+      pxPerMin,
+    );
   };
 
   // Parte 3, item 6: fora do expediente NUNCA bloqueia — só avisa. O médico
