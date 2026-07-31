@@ -437,17 +437,6 @@ export function KnowledgeDrawer({ open, onOpenChange, token, onWidthChange }: Pr
           )}
         />
 
-        {/* Botão-livro embutido na borda do bloco */}
-        <button
-          type="button"
-          onClick={() => onOpenChange(!open)}
-          aria-label={open ? "Fechar assistente de conhecimento" : "Base de conhecimento"}
-          title="Base de conhecimento"
-          className="absolute -left-9 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background text-muted-foreground shadow-md transition hover:text-foreground"
-        >
-          <BookOpen className="h-4 w-4" />
-        </button>
-
         <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-gradient">
             <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
