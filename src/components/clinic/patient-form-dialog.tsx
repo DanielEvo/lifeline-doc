@@ -243,9 +243,10 @@ export function PatientFormDialog({
   // global (BKL-37) é uma ação à parte, só disponível no modo edição — ver
   // GlobalLinkSearch/AccessActions abaixo.
   const submitNew = form.handleSubmit((v) =>
-    onSubmit(v, isEdit ? undefined : { foundPatient: null, fileNames: doneNames }),
+    onSubmit(v, isEdit ? undefined : { foundPatient: null, fileNames: doneNames, globalId }),
   );
-  const submitFound = () => onSubmit(form.getValues(), { foundPatient, fileNames: doneNames });
+  const submitFound = () =>
+    onSubmit(form.getValues(), { foundPatient, fileNames: doneNames, globalId });
 
   const showForm = isEdit || !foundPatient; // esconde campos quando achou por ID
   const submitLabel = isEdit
@@ -302,11 +303,9 @@ export function PatientFormDialog({
                   </div>
                 )
               ) : (
-                <GlobalLinkSearch
-                  token={token}
-                  patientId={patient.id}
-                  onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
-                />
+                <p className="text-[11px] text-muted-foreground">
+                  Sem identidade LifeLine vinculada.
+                </p>
               )}
             </div>
           </div>
@@ -382,6 +381,40 @@ export function PatientFormDialog({
               </div>
             )}
           </div>
+        )}
+
+        {/* Identidade LifeLine — busca global no cadastro de paciente NOVO.
+            Sem paciente ainda criado, "Vincular" apenas seleciona o globalId,
+            que é aplicado na criação (intake.globalId). */}
+        {!isEdit && !foundPatient && (
+          <>
+            {globalId ? (
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                {vinculo === "com_acesso" ? (
+                  <p className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="h-3 w-3" /> Identidade LifeLine — acesso liberado
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      Identidade LifeLine selecionada — sem acesso aos dados do paciente
+                    </p>
+                    <AccessActions
+                      token={token}
+                      globalId={globalId}
+                      onGranted={() => setLinkOverride({ globalId, vinculo: "com_acesso" })}
+                    />
+                  </>
+                )}
+              </div>
+            ) : (
+              <GlobalLinkSearch
+                token={token}
+                patientId={null}
+                onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
+              />
+            )}
+          </>
         )}
 
         {/* Campos de cadastro — escondidos quando achou paciente por ID.
@@ -836,7 +869,8 @@ function GlobalLinkSearch({
   onLinked,
 }: {
   token: string;
-  patientId: string;
+  /** null no cadastro NOVO: o vínculo é aplicado na criação do paciente. */
+  patientId: string | null;
   onLinked: (globalId: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -862,6 +896,13 @@ function GlobalLinkSearch({
   };
 
   const vincular = async (globalId: string) => {
+    if (!patientId) {
+      // Cadastro novo: só seleciona a identidade; o vínculo real acontece
+      // quando o paciente for criado.
+      setStatusOverride((s) => ({ ...s, [globalId]: "sem_acesso" }));
+      onLinked(globalId);
+      return;
+    }
     setBusyId(globalId);
     try {
       const r = await linkMyPatientToGlobalId({ data: { token, patientId, globalId } });
