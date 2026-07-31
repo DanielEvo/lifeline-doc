@@ -5,10 +5,11 @@
 // drag & drop; criar é clique em área vazia (abre confirmação).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -18,6 +19,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,8 +47,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { createMyCategory } from "@/lib/api/categories.functions";
 import {
   deleteMyAppointment,
+  listMyAppointments,
   saveMyCalendarSettings,
   scheduleAppointment,
+  setMyAppointmentStatus,
   updateMyAppointment,
   updateMyAppointmentTiming,
 } from "@/lib/api/clinic.functions";
@@ -58,6 +62,7 @@ import {
   REMINDER_PRESETS,
   TINT_TO_HEX,
   type Appointment,
+  type AppointmentStatus,
   type CalendarSettings,
   type EventCategory,
   type Patient,
@@ -76,6 +81,9 @@ const FALLBACK_COLOR = "#64748b"; // slate-500 — bloqueio sem cor/categoria ai
 export const DRAG_PATIENT_KEY = "application/x-patient-id";
 const DRAG_KEY = DRAG_PATIENT_KEY;
 const DRAG_APPT = "application/x-appointment-id";
+// BUG-5: precisa da duração do evento arrastado no onDrop pra checar
+// interseção real com bloqueios, não só o instante inicial.
+const DRAG_APPT_DURATION = "application/x-appointment-duration";
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = [
@@ -154,6 +162,11 @@ type Layouted = {
   totalCols: number;
   startMin: number;
   durationMin: number;
+  // BUG-9: agrupa itens do mesmo cluster de sobreposição — usado pra somar
+  // o overflow (">3 colunas") num único chip "+N mais" por cluster, não por
+  // totalCols (dois clusters independentes no mesmo dia podem coincidir em
+  // totalCols sem serem a mesma sobreposição).
+  clusterId: number;
 };
 
 function apptRange(a: Appointment): { startMin: number; durationMin: number } {
@@ -166,6 +179,7 @@ function layoutTimedAppointments(appts: Appointment[]): Layouted[] {
   const result: Layouted[] = [];
   let cluster: { appt: Appointment; startMin: number; durationMin: number }[] = [];
   let clusterEndMin = -Infinity;
+  let clusterId = 0;
 
   const flush = () => {
     if (cluster.length === 0) return;
@@ -185,12 +199,14 @@ function layoutTimedAppointments(appts: Appointment[]): Layouted[] {
         totalCols: -1,
         startMin: item.startMin,
         durationMin: item.durationMin,
+        clusterId,
       });
     }
     // totalCols só é conhecido depois de posicionar todo mundo do cluster
     const totalCols = colEnds.length;
     for (let i = result.length - cluster.length; i < result.length; i++)
       result[i].totalCols = totalCols;
+    clusterId++;
     cluster = [];
   };
 
@@ -207,14 +223,21 @@ function layoutTimedAppointments(appts: Appointment[]): Layouted[] {
   return result;
 }
 
-/** Bloqueio no caminho de um horário candidato — usado pra rejeitar drop
- *  (mover ou criar) que caia dentro do intervalo de um evento pessoal. */
-function bloqueioAt(dayAppts: Appointment[], candidate: Date): Appointment | undefined {
+/** Bloqueio que intersecta o intervalo [candidate, candidate+durationMin) —
+ *  usado pra rejeitar drop (mover ou criar). BUG-5: antes só testava o
+ *  instante inicial do candidato, então um evento de 60min solto 5min antes
+ *  de um bloqueio de 30min atravessava o bloqueio inteiro sem ser barrado. */
+function bloqueioAt(
+  dayAppts: Appointment[],
+  candidate: Date,
+  durationMin: number,
+): Appointment | undefined {
   const startMin = candidate.getHours() * 60 + candidate.getMinutes();
+  const endMin = startMin + durationMin;
   return dayAppts.find((a) => {
     if (a.kind !== "bloqueio") return false;
-    const { startMin: s, durationMin } = apptRange(a);
-    return startMin >= s && startMin < s + durationMin;
+    const { startMin: s, durationMin: d } = apptRange(a);
+    return startMin < s + d && endMin > s;
   });
 }
 
@@ -244,8 +267,19 @@ const SNAP_MIN = 5;
  *  sempre dá pra clicar/soltar em cima de um horário já ocupado e criar um
  *  atendimento em paralelo. */
 const RESERVE_PX = 18;
+// BUG-9: acima disso, colunas viram tiras ilegíveis — a partir da 4ª,
+// agrupa no chip "+N mais" em vez de espremer mais uma coluna.
+const MAX_VISIBLE_COLS = 3;
 
 const REMINDER_CHECK_MS = 30_000;
+// Referência estável pro estado "ainda carregando" da query de agendamentos —
+// evita recriar um array novo a cada render (quebraria memoização a jusante).
+const EMPTY_APPOINTMENTS: Appointment[] = [];
+
+// BUG-14: chaves de persistência de visão/densidade/cursor.
+const VIEW_KEY = "lifeline:agenda-view";
+const CURSOR_KEY = "lifeline:agenda-cursor";
+const CUSTOM_DAYS_KEY = "lifeline:agenda-custom-days";
 
 /** Dispara os lembretes configurados (Appointment.lembretesMin) via toast
  *  enquanto o app está aberto — não existe infra de push/e-mail no projeto,
@@ -280,22 +314,64 @@ function useAppointmentReminders(appointments: Appointment[], byId: Map<string, 
   }, [appointments, byId]);
 }
 
+/** Janela de datas [from, to] a buscar do servidor pra cada visão (BUG-2) —
+ *  generosa o bastante pra cobrir spillover de dias adjacentes (mês/lista),
+ *  sem precisar bater exatamente com o que cada view renderiza. "Lista" é
+ *  aberta pra frente por natureza (mostra "todos os próximos eventos"); em
+ *  vez de buscar o futuro inteiro, limitamos a 180 dias — uma janela grande
+ *  o bastante pra qualquer uso prático, sem virar uma query sem fim. */
+function getViewRange(
+  view: View,
+  cursor: Date,
+  customDayCount: number,
+): { from: string; to: string } {
+  const pad = (d: Date, days: number) => addDays(d, days);
+  let from: Date;
+  let to: Date;
+  if (view === "dia") {
+    from = cursor;
+    to = addDays(cursor, 1);
+  } else if (view === "semana") {
+    from = startOfWeek(cursor);
+    to = addDays(from, 7);
+  } else if (view === "custom") {
+    from = cursor;
+    to = addDays(cursor, customDayCount);
+  } else if (view === "mes") {
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    from = startOfWeek(first);
+    to = addDays(from, 42);
+  } else if (view === "ano") {
+    from = new Date(cursor.getFullYear(), 0, 1);
+    to = new Date(cursor.getFullYear() + 1, 0, 1);
+  } else {
+    // lista
+    from = cursor;
+    to = addDays(cursor, 180);
+  }
+  return { from: pad(from, -3).toISOString(), to: pad(to, 3).toISOString() };
+}
+
 export function AppointmentCalendar({
   token,
   patients,
-  appointments,
   categories,
   calendarSettings,
   onOpenPatient,
 }: {
   token: string;
   patients: Patient[];
-  appointments: Appointment[];
   categories: EventCategory[];
   calendarSettings: CalendarSettings;
   onOpenPatient?: (p: Patient) => void;
 }) {
   const qc = useQueryClient();
+  // BUG-14: visão/densidade/cursor persistem entre visitas (mesmo padrão de
+  // localStorage já usado pela largura do painel de conhecimento) — trocar
+  // de página e voltar não reseta mais pra "semana"/hoje. "Hoje" continua ali
+  // pra voltar rápido se o médico quiser. Lido em useEffect (client-only) em
+  // vez do inicializador do useState — este componente também roda em SSR,
+  // onde `window` não existe.
   const [view, setView] = useState<View>("semana");
   const [cursor, setCursor] = useState<Date>(() => {
     const d = new Date();
@@ -303,8 +379,48 @@ export function AppointmentCalendar({
     return d;
   });
   // Visão "N dias" — quantidade configurável (padrão 4, como o Google
-  // Agenda oferece "3 dias"/"4 dias" fixos); só client-side, não persiste.
+  // Agenda oferece "3 dias"/"4 dias" fixos).
   const [customDayCount, setCustomDayCount] = useState(4);
+
+  useEffect(() => {
+    const savedView = window.localStorage.getItem(VIEW_KEY);
+    const validViews: View[] = ["dia", "semana", "mes", "ano", "lista", "custom"];
+    if (validViews.includes(savedView as View)) setView(savedView as View);
+
+    const savedCursor = window.localStorage.getItem(CURSOR_KEY);
+    if (savedCursor) {
+      const parsed = fromYmd(savedCursor);
+      if (!Number.isNaN(parsed.getTime())) setCursor(parsed);
+    }
+
+    const savedDays = Number(window.localStorage.getItem(CUSTOM_DAYS_KEY));
+    if (savedDays >= 2 && savedDays <= 14) setCustomDayCount(savedDays);
+  }, []);
+
+  useEffect(() => window.localStorage.setItem(VIEW_KEY, view), [view]);
+  useEffect(() => window.localStorage.setItem(CURSOR_KEY, ymd(cursor)), [cursor]);
+  useEffect(
+    () => window.localStorage.setItem(CUSTOM_DAYS_KEY, String(customDayCount)),
+    [customDayCount],
+  );
+
+  // BUG-2: query dedicada, desacoplada de ["workspace"] — o calendário busca
+  // seus próprios agendamentos, escopados à janela visível (evita o N+1 de
+  // withVinculo em getWorkspace só pra desenhar o grid).
+  const range = useMemo(
+    () => getViewRange(view, cursor, customDayCount),
+    [view, cursor, customDayCount],
+  );
+  const apptsKey = ["appointments", range.from, range.to] as const;
+  const apptsQuery = useQuery({
+    queryKey: apptsKey,
+    queryFn: async () => {
+      const r = await listMyAppointments({ data: { token, ...range } });
+      if (!r.ok) throw new Error("Sessão expirada. Recarregue a página.");
+      return r.appointments;
+    },
+  });
+  const appointments = apptsQuery.data ?? EMPTY_APPOINTMENTS;
   const [settings, setSettingsLocal] = useState<CalendarSettings>(calendarSettings);
   // servidor é a fonte da verdade (PRO-XX) — sincroniza se mudar por fora
   // (ex.: outra aba salvando configurações diferentes).
@@ -352,8 +468,12 @@ export function AppointmentCalendar({
 
   const byId = useMemo(() => new Map(patients.map((p) => [p.id, p])), [patients]);
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  // Lembretes disparam pra todos os eventos, independente do filtro da
-  // sidebar (hiddenCategoryIds/showConsultas é só visual do grid).
+  // BUG-12: decisão explícita — hiddenCategoryIds/showConsultas é só um
+  // filtro VISUAL do grid (TimeGrid/MonthGrid/YearGrid/ListView, todos
+  // recebem visibleAppointments abaixo). Lembretes, busca (EventSearch) e o
+  // mini-calendário (CategorySidebar) usam `appointments` cru de propósito —
+  // esconder uma categoria não deveria fazer o médico "esquecer" que aquele
+  // evento existe ou deixar de ser lembrado dele.
   useAppointmentReminders(appointments, byId);
 
   const visibleAppointments = useMemo(
@@ -386,6 +506,12 @@ export function AppointmentCalendar({
     resetDialogFields();
   };
 
+  // BUG-2/4: otimistic update — mesmo padrão já usado pelo `mover` do Kanban
+  // em routes/app/index.tsx (onMutate cancela+snapshot+aplica, onError
+  // restaura, onSettled invalida o prefixo inteiro — cobre todas as janelas).
+  const parallelLimitMsg = () =>
+    `Limite de ${settings.maxParallel} atendimento${settings.maxParallel > 1 ? "s" : ""} em paralelo atingido nesse horário.`;
+
   const agendar = useMutation({
     mutationFn: (v: {
       patientId: string | null;
@@ -401,6 +527,7 @@ export function AppointmentCalendar({
       local: string | null;
       lembretesMin: number[];
       recurrence: { freq: RecurrenceFreq; count: number };
+      requestId: string;
     }) =>
       scheduleAppointment({
         data: {
@@ -418,13 +545,50 @@ export function AppointmentCalendar({
           local: v.local,
           lembretesMin: v.lembretesMin,
           recurrence: v.recurrence,
+          requestId: v.requestId,
         },
       }),
-    onSuccess: (r, v) => {
-      if (!r.ok)
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: apptsKey });
+      const prev = qc.getQueryData<Appointment[]>(apptsKey);
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      const optimistic: Appointment = {
+        id: tempId,
+        doctorId: "",
+        patientId: v.patientId,
+        dateTime: v.dateTime,
+        durationMin: v.allDay ? null : v.durationMin,
+        allDay: v.allDay,
+        status: "agendada",
+        note: v.note,
+        kind: v.kind,
+        label: v.label,
+        categoriaId: v.categoriaId,
+        cor: v.cor,
+        descricao: v.descricao,
+        local: v.local,
+        recurrenceId: null,
+        lembretesMin: v.lembretesMin,
+        createdAt: now,
+        updatedAt: now,
+      };
+      qc.setQueryData<Appointment[]>(apptsKey, (old) => [...(old ?? []), optimistic]);
+      return { prev, tempId };
+    },
+    onSuccess: (r, v, ctx) => {
+      if (!r.ok) {
+        if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+        if (r.error === "parallel_limit") return toast.error(parallelLimitMsg());
         return toast.error(
           v.kind === "bloqueio" ? "Não consegui bloquear o horário." : "Não consegui agendar.",
         );
+      }
+      const created = "appointments" in r ? (r.appointments ?? [r.appointment]) : [r.appointment];
+      qc.setQueryData<Appointment[]>(apptsKey, (old) => [
+        ...(old ?? []).filter((a) => a.id !== ctx?.tempId),
+        ...created,
+      ]);
       if (v.kind === "bloqueio") {
         toast.success("Evento pessoal criado.");
       } else {
@@ -433,7 +597,7 @@ export function AppointmentCalendar({
           byId.get(v.patientId ?? "")?.nome ??
           "Paciente"
         ).split(" ")[0];
-        const criados = "appointments" in r ? (r.appointments?.length ?? 1) : 1;
+        const criados = created.length;
         toast.success(
           criados > 1
             ? `${nome} agendado(a) ${criados}x a partir de ${new Date(v.dateTime).toLocaleDateString("pt-BR")}.`
@@ -441,27 +605,51 @@ export function AppointmentCalendar({
         );
       }
       closeDialog();
-      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+      toast.error("Não consegui agendar. Tente de novo.");
+    },
+    onSettled: () => {
+      submittingRef.current = false;
+      qc.invalidateQueries({ queryKey: ["appointments"] });
     },
   });
 
   // Exclusão só acontece de dentro do editor completo agora (sem X inline no
-  // canvas) — scope importa quando o evento faz parte de uma série.
+  // canvas) — scope importa quando o evento faz parte de uma série. Só o id
+  // clicado some otimisticamente; o resto da série ("following"/"all") só
+  // termina de sumir quando o onSettled invalida e reconcilia com o servidor.
   const excluirEvento = useMutation({
     mutationFn: (v: { id: string; scope: RecurrenceScope }) =>
       deleteMyAppointment({ data: { token, id: v.id, scope: v.scope } }),
-    onSuccess: (r) => {
-      if (!r.ok) return toast.error("Não consegui remover o evento.");
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: apptsKey });
+      const prev = qc.getQueryData<Appointment[]>(apptsKey);
+      qc.setQueryData<Appointment[]>(apptsKey, (old) => (old ?? []).filter((a) => a.id !== v.id));
+      return { prev };
+    },
+    onSuccess: (r, _v, ctx) => {
+      if (!r.ok) {
+        if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+        return toast.error("Não consegui remover o evento.");
+      }
       toast.success(
         r.deletedCount > 1 ? `${r.deletedCount} eventos removidos.` : "Evento removido.",
       );
       setEditingId(null);
-      qc.invalidateQueries({ queryKey: ["workspace"] });
     },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+      toast.error("Não consegui remover o evento.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
   });
 
   // Reabre o editor completo (diferente de atualizarTiming, que só cuida de
-  // dateTime/durationMin via drag/resize).
+  // dateTime/durationMin via drag/resize) — fora do escopo do otimistic
+  // update pedido (BUG-2/4 é só criar/mover/redimensionar/excluir), o modal
+  // já mantém o usuário esperando de qualquer forma.
   const editarEvento = useMutation({
     mutationFn: (v: {
       id: string;
@@ -480,6 +668,20 @@ export function AppointmentCalendar({
       if (!r.ok) return toast.error("Não consegui salvar as alterações.");
       toast.success("Evento atualizado.");
       setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+
+  // BUG-10: status muda na hora (mesmo padrão do apptStatus em
+  // pacientes.index.tsx) — invalida ["workspace"] também porque o Kanban lê
+  // status de lá pras badges "faltou"/reengajamento.
+  const atualizarStatus = useMutation({
+    mutationFn: (v: { id: string; status: AppointmentStatus }) =>
+      setMyAppointmentStatus({ data: { token, ...v } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui atualizar o status.");
+      toast.success("Status atualizado.");
+      qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["workspace"] });
     },
   });
@@ -490,19 +692,41 @@ export function AppointmentCalendar({
   const atualizarTiming = useMutation({
     mutationFn: (v: { id: string; dateTime?: string; durationMin?: number }) =>
       updateMyAppointmentTiming({ data: { token, ...v } }),
-    onSuccess: (r, v) => {
-      if (!r.ok)
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: apptsKey });
+      const prev = qc.getQueryData<Appointment[]>(apptsKey);
+      qc.setQueryData<Appointment[]>(apptsKey, (old) =>
+        (old ?? []).map((a) =>
+          a.id === v.id
+            ? {
+                ...a,
+                dateTime: v.dateTime ?? a.dateTime,
+                durationMin: v.durationMin ?? a.durationMin,
+              }
+            : a,
+        ),
+      );
+      return { prev };
+    },
+    onSuccess: (r, v, ctx) => {
+      if (!r.ok) {
+        if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+        if (r.error === "parallel_limit") return toast.error(parallelLimitMsg());
         return toast.error(
           v.durationMin !== undefined ? "Não consegui redimensionar." : "Não consegui remarcar.",
         );
+      }
       toast.success(
         v.durationMin !== undefined
           ? `Duração ajustada para ${v.durationMin}min.`
           : `Remarcado para ${new Date(r.appointment.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
       );
-      qc.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: () => toast.error("Não consegui atualizar."),
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
+      toast.error("Não consegui atualizar.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
   });
 
   const shift = (dir: -1 | 1) => {
@@ -538,15 +762,23 @@ export function AppointmentCalendar({
     return cursor.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }, [view, cursor, customDayCount]);
 
+  // BUG-13: requestId estável por abertura do dialog — duplo clique em
+  // "Confirmar" reenvia o MESMO id, e o servidor devolve o agendamento já
+  // criado em vez de duplicar (unique index em doctor_id+request_id).
+  const requestIdRef = useRef<string>(crypto.randomUUID());
+  const submittingRef = useRef(false);
+
   const openConfirm = (patientId: string, dateTime: string) => {
     const p = byId.get(patientId);
     if (!p) return;
     resetDialogFields();
+    requestIdRef.current = crypto.randomUUID();
     setPending({ patient: p, dateTime });
   };
 
   const openEmptySlot = (dateTime: string, durationMin?: number) => {
     resetDialogFields();
+    requestIdRef.current = crypto.randomUUID();
     if (durationMin) setDuracaoMin(durationMin);
     setPending({ patient: null, dateTime });
   };
@@ -557,8 +789,14 @@ export function AppointmentCalendar({
     corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
 
   const confirmar = () => {
+    // BUG-13: guard síncrono — não depende de agendar.isPending (que só
+    // atualiza no próximo render; um duplo clique real pode disparar as
+    // duas chamadas antes da primeira re-renderização).
+    if (submittingRef.current) return;
     if (!pending) return;
+    submittingRef.current = true;
     const recurrence = { freq: recorrenciaFreq, count: recorrenciaFreq === "none" ? 0 : vezes };
+    const requestId = requestIdRef.current;
     if (isBloqueio) {
       agendar.mutate({
         patientId: null,
@@ -574,10 +812,14 @@ export function AppointmentCalendar({
         local: local.trim() || null,
         lembretesMin,
         recurrence,
+        requestId,
       });
       return;
     }
-    if (!chosenPatientId) return;
+    if (!chosenPatientId) {
+      submittingRef.current = false;
+      return;
+    }
     agendar.mutate({
       patientId: chosenPatientId,
       dateTime: pending.dateTime,
@@ -585,13 +827,14 @@ export function AppointmentCalendar({
       kind: "consulta",
       label: null,
       durationMin: duracaoMin,
-      allDay: false,
+      allDay,
       categoriaId: null,
       cor: null,
       descricao: null,
       local: null,
       lembretesMin,
       recurrence,
+      requestId,
     });
   };
 
@@ -900,10 +1143,17 @@ export function AppointmentCalendar({
                 </>
               ) : (
                 <>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Duração</Label>
-                    <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
-                  </div>
+                  {/* BUG-8: allDay deixa de ser exclusivo de evento pessoal */}
+                  <label className="flex items-center justify-between gap-2 text-xs">
+                    <span>Dia inteiro</span>
+                    <Switch checked={allDay} onCheckedChange={setAllDay} />
+                  </label>
+                  {!allDay && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Duração</Label>
+                      <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <Label htmlFor="ap-nota" className="text-xs">
                       Observação (opcional)
@@ -955,6 +1205,7 @@ export function AppointmentCalendar({
             onOpenPatient={onOpenPatient}
             onSave={(patch, scope) => editarEvento.mutate({ id: editingAppt.id, scope, ...patch })}
             onDelete={(scope) => excluirEvento.mutate({ id: editingAppt.id, scope })}
+            onStatusChange={(status) => atualizarStatus.mutate({ id: editingAppt.id, status })}
             saving={editarEvento.isPending}
             deleting={excluirEvento.isPending}
           />
@@ -1112,6 +1363,7 @@ function EventEditorDialog({
   onOpenPatient,
   onSave,
   onDelete,
+  onStatusChange,
   saving,
   deleting,
 }: {
@@ -1122,6 +1374,7 @@ function EventEditorDialog({
   onOpenPatient?: (p: Patient) => void;
   onSave: (patch: EditPatch, scope: RecurrenceScope) => void;
   onDelete: (scope: RecurrenceScope) => void;
+  onStatusChange: (status: AppointmentStatus) => void;
   saving: boolean;
   deleting: boolean;
 }) {
@@ -1158,7 +1411,8 @@ function EventEditorDialog({
         }
       : {
           note: note.trim() || null,
-          durationMin: duracaoMin,
+          allDay,
+          durationMin: allDay ? null : duracaoMin,
           lembretesMin,
         };
     onSave(patch, scope);
@@ -1297,10 +1551,35 @@ function EventEditorDialog({
             </>
           ) : (
             <>
+              {/* BUG-10: status muda na hora, sem passar pelo "Salvar" */}
               <div className="space-y-1">
-                <Label className="text-xs">Duração</Label>
-                <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
+                <Label className="text-xs">Status</Label>
+                <Select
+                  value={appt.status}
+                  onValueChange={(v) => onStatusChange(v as AppointmentStatus)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agendada">Agendada</SelectItem>
+                    <SelectItem value="confirmada">Confirmada</SelectItem>
+                    <SelectItem value="realizada">Realizada</SelectItem>
+                    <SelectItem value="faltou">Faltou</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              {/* BUG-8: allDay deixa de ser exclusivo de evento pessoal */}
+              <label className="flex items-center justify-between gap-2 text-xs">
+                <span>Dia inteiro</span>
+                <Switch checked={allDay} onCheckedChange={setAllDay} />
+              </label>
+              {!allDay && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Duração</Label>
+                  <DurationSelect value={duracaoMin} onChange={setDuracaoMin} />
+                </div>
+              )}
               <div className="space-y-1">
                 <Label htmlFor="edit-nota" className="text-xs">
                   Observação (opcional)
@@ -1829,6 +2108,26 @@ function SettingsPopover({
           </div>
         </div>
         <div className="space-y-1">
+          <Label className="text-[11px]">Consultas em paralelo (mesmo horário)</Label>
+          <Select
+            value={String(settings.maxParallel)}
+            onValueChange={(v) =>
+              onChange({ ...settings, maxParallel: Number(v) as CalendarSettings["maxParallel"] })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3].map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  até {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
           <Label className="text-[11px]">Dias exibidos (visão "N dias")</Label>
           <Input
             type="number"
@@ -1918,6 +2217,51 @@ function TimeGrid({
   const hasAllDay = days.some((d) => (allDayByDay.get(ymd(d))?.length ?? 0) > 0);
   const todayKey = ymd(new Date());
 
+  // BUG-15: o canvas vira uma região com scroll próprio (em vez da página
+  // inteira rolar) — assim dá pra ancorar o scroll inicial em "agora" (ou no
+  // primeiro evento do dia, se "agora" estiver fora do expediente) e fazer
+  // auto-scroll ao arrastar perto da borda de cima/baixo.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const daysKey = days.map(ymd).join(",");
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const withinHours =
+      days.some((d) => ymd(d) === todayKey) &&
+      nowMin >= gridSettings.startHour * 60 &&
+      nowMin < gridSettings.endHour * 60;
+    let anchorMin: number | null = withinHours ? nowMin : null;
+    if (anchorMin === null) {
+      const allTimed = [...timedByDay.values()].flat();
+      if (allTimed.length > 0) {
+        const earliest = allTimed.reduce(
+          (min, a) => Math.min(min, apptRange(a).startMin),
+          Infinity,
+        );
+        anchorMin = Number.isFinite(earliest) ? earliest : null;
+      }
+    }
+    if (anchorMin === null) return;
+    const anchorPx = (anchorMin - gridSettings.startHour * 60) * PX_PER_MIN;
+    el.scrollTop = Math.max(0, anchorPx - el.clientHeight / 3);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reancora quando o conjunto de dias exibidos muda, não a cada tick/re-render
+  }, [daysKey]);
+
+  const AUTOSCROLL_EDGE_PX = 40;
+  const AUTOSCROLL_STEP_PX = 12;
+  const autoScrollNearEdge = (clientY: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (clientY - rect.top < AUTOSCROLL_EDGE_PX) {
+      el.scrollTop = Math.max(0, el.scrollTop - AUTOSCROLL_STEP_PX);
+    } else if (rect.bottom - clientY < AUTOSCROLL_EDGE_PX) {
+      el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + AUTOSCROLL_STEP_PX);
+    }
+  };
+
   return (
     <div className="overflow-x-auto">
       <div className="flex min-w-[560px]">
@@ -1946,15 +2290,22 @@ function TimeGrid({
           {days.map((d) => (
             <AllDayCell
               key={ymd(d)}
+              day={d}
               appts={allDayByDay.get(ymd(d)) ?? []}
               byId={byId}
               onOpenEditor={onOpenEditor}
+              onMoveAppointment={onMoveAppointment}
             />
           ))}
         </div>
       )}
 
-      <div className="flex min-w-[560px] border-t border-border">
+      <div
+        ref={scrollRef}
+        className="flex max-h-[70vh] min-w-[560px] overflow-y-auto border-t border-border"
+        onDragOver={(e) => autoScrollNearEdge(e.clientY)}
+        onPointerMove={(e) => autoScrollNearEdge(e.clientY)}
+      >
         <TimeGutter ticks={ticks} settings={gridSettings} />
         {days.map((d) => (
           <DayColumn
@@ -1997,16 +2348,40 @@ function TimeGutter({ ticks, settings }: { ticks: Tick[]; settings: CalendarSett
 }
 
 function AllDayCell({
+  day,
   appts,
   byId,
   onOpenEditor,
+  onMoveAppointment,
 }: {
+  day: Date;
   appts: Appointment[];
   byId: Map<string, Patient>;
   onOpenEditor: (id: string) => void;
+  onMoveAppointment: (appointmentId: string, dateTime: string) => void;
 }) {
+  // BUG-8: blocos "dia inteiro" agora podem ser arrastados pra outro dia
+  // (o horário não importa pra allDay, só a data — meia-noite local do dia
+  // alvo é suficiente). Redimensionar pra abranger vários dias exigiria um
+  // campo de data-fim que o modelo não tem hoje; fica fora desta rodada.
+  const [hover, setHover] = useState(false);
   return (
-    <div className="min-w-[120px] flex-1 space-y-0.5 border-l border-border p-0.5">
+    <div
+      className={`min-w-[120px] flex-1 space-y-0.5 border-l border-border p-0.5 transition ${hover ? "bg-primary/5" : ""}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_APPT)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setHover(true);
+      }}
+      onDragLeave={() => setHover(false)}
+      onDrop={(e) => {
+        setHover(false);
+        const apptId = e.dataTransfer.getData(DRAG_APPT);
+        if (!apptId) return;
+        onMoveAppointment(apptId, toIsoLocal(day));
+      }}
+    >
       {appts.map((a) => {
         const patient = a.patientId ? byId.get(a.patientId) : undefined;
         const color =
@@ -2016,13 +2391,18 @@ function AllDayCell({
         return (
           <div
             key={a.id}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(DRAG_APPT, a.id);
+              e.dataTransfer.effectAllowed = "move";
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onOpenEditor(a.id);
             }}
-            className={`flex cursor-pointer items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${isPastAppt(a) ? "opacity-50" : ""}`}
+            className={`flex cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white active:cursor-grabbing ${isPastAppt(a) ? "opacity-50" : ""}`}
             style={{ backgroundColor: color }}
-            title={a.label ?? patient?.nome ?? ""}
+            title={`${a.label ?? patient?.nome ?? ""} — arraste pra mover de dia`}
           >
             {a.kind === "bloqueio" && <Lock className="h-2.5 w-2.5 shrink-0" />}
             <span className="truncate">{a.label || patient?.nome || "Evento"}</span>
@@ -2067,6 +2447,28 @@ function DayColumn({
   const [dragCreate, setDragCreate] = useState<{ startY: number; currentY: number } | null>(null);
   const layouted = useMemo(() => layoutTimedAppointments(timedAppts), [timedAppts]);
 
+  // BUG-9: separa o que renderiza como bloco normal do que vira overflow
+  // ("+N mais"), agrupado por cluster de sobreposição.
+  const { visibleBlocks, overflowGroups } = useMemo(() => {
+    const visible: Layouted[] = [];
+    const overflowByCluster = new Map<number, Layouted[]>();
+    for (const item of layouted) {
+      if (item.totalCols <= MAX_VISIBLE_COLS || item.col < MAX_VISIBLE_COLS - 1) {
+        visible.push(item);
+      } else {
+        const arr = overflowByCluster.get(item.clusterId) ?? [];
+        arr.push(item);
+        overflowByCluster.set(item.clusterId, arr);
+      }
+    }
+    const groups = [...overflowByCluster.values()].map((items) => ({
+      items,
+      startMin: Math.min(...items.map((i) => i.startMin)),
+      endMin: Math.max(...items.map((i) => i.startMin + i.durationMin)),
+    }));
+    return { visibleBlocks: visible, overflowGroups: groups };
+  }, [layouted]);
+
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nowWithinHours =
@@ -2092,8 +2494,11 @@ function DayColumn({
       className={`relative min-w-[120px] flex-1 border-l border-border transition ${hover ? "bg-primary/5" : ""}`}
       style={{ height: canvasHeightPx }}
       onDragOver={(e) => {
+        // Preview otimista: dataTransfer.getData() não é legível durante
+        // dragover (só no drop), então usamos SNAP_MIN como duração — o
+        // destaque visual é só indicativo, quem decide de verdade é o onDrop.
         const candidate = resolveDrop(e);
-        if (!candidate || bloqueioAt(timedAppts, candidate)) return;
+        if (!candidate || bloqueioAt(timedAppts, candidate, SNAP_MIN)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setHover(true);
@@ -2102,9 +2507,18 @@ function DayColumn({
       onDrop={(e) => {
         setHover(false);
         const candidate = resolveDrop(e);
-        if (!candidate || bloqueioAt(timedAppts, candidate)) return;
-        const iso = toIsoLocal(candidate);
+        if (!candidate) return;
         const apptId = e.dataTransfer.getData(DRAG_APPT);
+        const durationMin = apptId
+          ? Number(e.dataTransfer.getData(DRAG_APPT_DURATION)) || 30
+          : settings.slotMinutes;
+        const blocking = bloqueioAt(timedAppts, candidate, durationMin);
+        if (blocking) {
+          // BUG-6: drop rejeitado deixa de ser silencioso.
+          toast.error(`Esse horário está bloqueado por "${blocking.label || "Bloqueado"}".`);
+          return;
+        }
+        const iso = toIsoLocal(candidate);
         if (apptId) {
           onMoveAppointment(apptId, iso);
           return;
@@ -2137,6 +2551,15 @@ function DayColumn({
         const snappedMin = Math.max(SNAP_MIN, Math.round(rawMin / SNAP_MIN) * SNAP_MIN);
         onSlotClick(toIsoLocal(startCandidate), snapToDurationOption(snappedMin));
       }}
+      onContextMenu={(e) => {
+        // BUG-3: "+ paralelo" — botão direito na coluna abre a criação nesse
+        // horário mesmo em cima de um bloco já ocupado (RESERVE_PX deixa de
+        // ser o único jeito de agendar em paralelo).
+        e.preventDefault();
+        if (!colRef.current) return;
+        const candidate = timeFromClientY(colRef.current, e.clientY, day, settings);
+        onSlotClick(toIsoLocal(candidate));
+      }}
     >
       {ticks.map((t, i) => (
         <div
@@ -2163,7 +2586,7 @@ function DayColumn({
         />
       )}
 
-      {layouted.map(({ appt, col, totalCols, startMin, durationMin }) => (
+      {visibleBlocks.map(({ appt, col, totalCols, startMin, durationMin }) => (
         <EventBlock
           key={appt.id}
           appt={appt}
@@ -2171,12 +2594,85 @@ function DayColumn({
           top={(startMin - settings.startHour * 60) * PX_PER_MIN}
           height={Math.max(durationMin * PX_PER_MIN, MIN_BLOCK_PX)}
           col={col}
-          totalCols={totalCols}
+          totalCols={Math.min(totalCols, MAX_VISIBLE_COLS)}
           onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
+          onAddParallel={onSlotClick}
+        />
+      ))}
+
+      {overflowGroups.map((group) => (
+        <OverflowChip
+          key={group.items[0].clusterId}
+          top={(group.startMin - settings.startHour * 60) * PX_PER_MIN}
+          height={Math.max((group.endMin - group.startMin) * PX_PER_MIN, MIN_BLOCK_PX)}
+          col={MAX_VISIBLE_COLS - 1}
+          totalCols={MAX_VISIBLE_COLS}
+          items={group.items.map((i) => i.appt)}
+          byId={byId}
+          onOpenEditor={onOpenEditor}
         />
       ))}
     </div>
+  );
+}
+
+function OverflowChip({
+  top,
+  height,
+  col,
+  totalCols,
+  items,
+  byId,
+  onOpenEditor,
+}: {
+  top: number;
+  height: number;
+  col: number;
+  totalCols: number;
+  items: Appointment[];
+  byId: Map<string, Patient>;
+  onOpenEditor: (id: string) => void;
+}) {
+  const gutterPx = 2;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="absolute overflow-hidden rounded-md border border-dashed border-border bg-muted px-1.5 py-1 text-left text-[10px] font-medium text-muted-foreground transition hover:bg-muted/70"
+          style={{
+            top,
+            height,
+            left: `calc((100% - ${RESERVE_PX}px) * ${col / totalCols} + ${gutterPx}px)`,
+            width: `calc((100% - ${RESERVE_PX}px) / ${totalCols} - ${gutterPx * 2}px)`,
+          }}
+        >
+          +{items.length} mais
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1.5" align="start">
+        <div className="space-y-0.5">
+          {items.map((a) => {
+            const patient = a.patientId ? byId.get(a.patientId) : undefined;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => onOpenEditor(a.id)}
+                className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-accent"
+              >
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {formatHourBR(a.dateTime)}
+                </span>
+                <span className="truncate">{a.label || patient?.nome || "Evento"}</span>
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -2187,6 +2683,7 @@ function EventBlock({
   height,
   col,
   totalCols,
+  onAddParallel,
   onOpenEditor,
   onResize,
 }: {
@@ -2196,6 +2693,7 @@ function EventBlock({
   height: number;
   col: number;
   totalCols: number;
+  onAddParallel: (dateTime: string, durationMin?: number) => void;
   onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
 }) {
@@ -2210,16 +2708,38 @@ function EventBlock({
     resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
   const gutterPx = 2;
 
+  // BUG-10: status vira sinal visual — "faltou" sobrepõe a cor do paciente
+  // (mais importante que o tint pra identificar de relance), "confirmada"
+  // ganha um contorno, "realizada" ganha um check. Bloqueio não tem status
+  // que importe.
+  const borderColor = !isBloqueio && appt.status === "faltou" ? "#ef4444" : color;
+  const StatusIcon =
+    !isBloqueio && appt.status === "realizada"
+      ? CheckCircle2
+      : !isBloqueio && appt.status === "faltou"
+        ? XCircle
+        : null;
+
   return (
     <div
       draggable={!isBloqueio}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_APPT, appt.id);
+        e.dataTransfer.setData(DRAG_APPT_DURATION, String(appt.durationMin ?? 30));
         e.dataTransfer.effectAllowed = "move";
       }}
       onClick={(e) => {
         e.stopPropagation();
         onOpenEditor(appt.id);
+      }}
+      onContextMenu={(e) => {
+        // BUG-3: "+ paralelo" — botão direito no próprio bloco também abre a
+        // criação nesse mesmo horário/duração, sem precisar mirar a faixa
+        // livre (RESERVE_PX).
+        if (isBloqueio) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onAddParallel(appt.dateTime, appt.durationMin ?? undefined);
       }}
       title={
         isBloqueio
@@ -2228,7 +2748,9 @@ function EventBlock({
       }
       className={`group absolute cursor-pointer overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition ${
         isBloqueio ? "bg-slate-200 dark:bg-slate-800/70" : "active:cursor-grabbing"
-      } ${isPastAppt(appt) ? "opacity-50" : ""}`}
+      } ${isPastAppt(appt) ? "opacity-50" : ""} ${
+        !isBloqueio && appt.status === "confirmada" ? "ring-1 ring-inset ring-primary/50" : ""
+      }`}
       style={{
         top,
         height: displayHeight,
@@ -2236,7 +2758,7 @@ function EventBlock({
         width: `calc((100% - ${RESERVE_PX}px) / ${totalCols} - ${gutterPx * 2}px)`,
         ...(isBloqueio
           ? {}
-          : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${color}` }),
+          : { backgroundColor: hexToRgba(color, 0.14), borderLeft: `3px solid ${borderColor}` }),
       }}
     >
       {isBloqueio ? (
@@ -2249,6 +2771,11 @@ function EventBlock({
       ) : (
         patient && (
           <div className="flex items-center gap-1 font-medium text-foreground">
+            {StatusIcon && (
+              <StatusIcon
+                className={`h-2.5 w-2.5 shrink-0 ${appt.status === "faltou" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}
+              />
+            )}
             <span className="shrink-0 text-[9px] opacity-70">{initialsOf(patient.nome)}</span>
             <span className="truncate">{patient.nome.split(" ")[0]}</span>
             <span className="ml-auto shrink-0 text-[9px] font-normal text-muted-foreground">
@@ -2256,6 +2783,21 @@ function EventBlock({
             </span>
           </div>
         )
+      )}
+
+      {!isBloqueio && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddParallel(appt.dateTime, appt.durationMin ?? undefined);
+          }}
+          title="Agendar em paralelo neste horário"
+          aria-label="Agendar em paralelo neste horário"
+          className="absolute right-0.5 top-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-background/80 text-foreground opacity-0 shadow-sm transition group-hover:opacity-100 hover:bg-background"
+        >
+          <Plus className="h-2.5 w-2.5" />
+        </button>
       )}
 
       {!isBloqueio && (

@@ -48,10 +48,13 @@ import {
 import { simulateExamExtraction } from "../triage.server";
 import { getBoardColumns, resolveColumn, saveBoardColumns } from "../board.server";
 import {
+  countOverlappingConsultas,
   createAppointment,
   createRecurringAppointments,
   deleteAppointment,
+  getAppointment,
   listAppointments,
+  listAppointmentsInRange,
   setAppointmentStatus,
   updateAppointment,
   updateAppointmentTiming,
@@ -363,6 +366,10 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
         ]),
         startHour: z.number().int().min(0).max(23),
         endHour: z.number().int().min(1).max(24),
+        maxParallel: z
+          .union([z.literal(1), z.literal(2), z.literal(3)])
+          .optional()
+          .default(1),
       })
       .refine((v) => v.startHour < v.endHour, {
         message: "startHour precisa ser antes de endHour",
@@ -375,6 +382,7 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
       slotMinutes: data.slotMinutes,
       startHour: data.startHour,
       endHour: data.endHour,
+      maxParallel: data.maxParallel,
     };
     const updated = await updateDoctorCalendarSettings(doctor.id, settings);
     return updated
@@ -383,6 +391,24 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
           calendarSettings: updated.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS,
         }
       : { ok: false as const, error: "not_found" as const };
+  });
+
+// BUG-2: query dedicada pro calendário, sem passar pelo workspace inteiro
+// (getWorkspace roda withVinculo, N+1 por paciente — caro só pra pegar
+// agendamentos da janela visível).
+export const listMyAppointments = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      from: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data inválida"),
+      to: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "data inválida"),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const appointments = await listAppointmentsInRange(doctor.id, data.from, data.to);
+    return { ok: true as const, appointments };
   });
 
 // Métricas principais do header do prontuário (PRO-08) — nomes filtrados
@@ -570,6 +596,9 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       local: z.string().max(160).nullish(),
       lembretesMin: LEMBRETES_MIN.optional().default([]),
       recurrence: RECURRENCE,
+      // BUG-13: chave de idempotência gerada uma vez no client por abertura
+      // do dialog — duplo clique/retry com o mesmo requestId não duplica.
+      requestId: z.string().min(1).max(100).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -595,19 +624,30 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
         lembretesMin: data.lembretesMin,
       };
       if (wantsRecurrence && recurrence) {
-        const appointments = await createRecurringAppointments(doctor.id, input, {
-          freq: recurrence.freq as "daily" | "weekly" | "monthly",
-          count: recurrence.count,
-        });
+        const appointments = await createRecurringAppointments(
+          doctor.id,
+          input,
+          { freq: recurrence.freq as "daily" | "weekly" | "monthly", count: recurrence.count },
+          data.requestId,
+        );
         return { ok: true as const, appointment: appointments[0], appointments };
       }
-      const appointment = await createAppointment(doctor.id, input);
+      const appointment = await createAppointment(doctor.id, input, data.requestId);
       return { ok: true as const, appointment };
     }
 
     if (!data.patientId) return { ok: false as const, error: "patient_required" as const };
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
+
+    // BUG-3: limite de consultas em paralelo no mesmo horário — bloqueio não
+    // passa por aqui (kind "bloqueio" já retornou acima).
+    const maxParallel =
+      doctor.calendarSettings?.maxParallel ?? DEFAULT_CALENDAR_SETTINGS.maxParallel;
+    const overlapping = await countOverlappingConsultas(doctor.id, dateTimeIso, data.durationMin);
+    if (overlapping + 1 > maxParallel) {
+      return { ok: false as const, error: "parallel_limit" as const };
+    }
 
     if (wantsRecurrence && recurrence) {
       const appointments = await createRecurringAppointments(
@@ -616,21 +656,28 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
           patientId: data.patientId,
           dateTime: dateTimeIso,
           note: data.note,
-          durationMin: data.durationMin,
+          durationMin: data.allDay ? null : data.durationMin,
+          allDay: data.allDay,
           lembretesMin: data.lembretesMin,
         },
         { freq: recurrence.freq as "daily" | "weekly" | "monthly", count: recurrence.count },
+        data.requestId,
       );
       return { ok: true as const, appointment: appointments[0], appointments };
     }
 
-    const appointment = await createAppointment(doctor.id, {
-      patientId: data.patientId,
-      dateTime: dateTimeIso,
-      note: data.note,
-      durationMin: data.durationMin,
-      lembretesMin: data.lembretesMin,
-    });
+    const appointment = await createAppointment(
+      doctor.id,
+      {
+        patientId: data.patientId,
+        dateTime: dateTimeIso,
+        note: data.note,
+        durationMin: data.allDay ? null : data.durationMin,
+        allDay: data.allDay,
+        lembretesMin: data.lembretesMin,
+      },
+      data.requestId,
+    );
     return { ok: true as const, appointment };
   });
 
@@ -714,8 +761,34 @@ export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
+
+    const dateTimeIso = data.dateTime ? new Date(data.dateTime).toISOString() : undefined;
+
+    // BUG-3: mover/redimensionar uma consulta também precisa respeitar
+    // maxParallel — o resultado final (novo horário e/ou nova duração)
+    // não pode ultrapassar o limite do médico.
+    if (dateTimeIso !== undefined || data.durationMin !== undefined) {
+      const current = await getAppointment(doctor.id, data.id);
+      if (!current) return { ok: false as const, error: "not_found" as const };
+      if (current.kind === "consulta") {
+        const finalDateTime = dateTimeIso ?? current.dateTime;
+        const finalDuration = data.durationMin ?? current.durationMin ?? 30;
+        const maxParallel =
+          doctor.calendarSettings?.maxParallel ?? DEFAULT_CALENDAR_SETTINGS.maxParallel;
+        const overlapping = await countOverlappingConsultas(
+          doctor.id,
+          finalDateTime,
+          finalDuration,
+          data.id,
+        );
+        if (overlapping + 1 > maxParallel) {
+          return { ok: false as const, error: "parallel_limit" as const };
+        }
+      }
+    }
+
     const appointment = await updateAppointmentTiming(doctor.id, data.id, {
-      dateTime: data.dateTime ? new Date(data.dateTime).toISOString() : undefined,
+      dateTime: dateTimeIso,
       durationMin: data.durationMin,
     });
     return appointment

@@ -157,12 +157,16 @@ export type CalendarSettings = {
   slotMinutes: 15 | 20 | 30 | 45 | 60;
   startHour: number; // 0-23
   endHour: number; // 1-24
+  // Quantas consultas (kind="consulta") podem se sobrepor no mesmo horário
+  // antes do servidor recusar o agendamento (BUG-3) — bloqueio não conta.
+  maxParallel: 1 | 2 | 3;
 };
 
 export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
   slotMinutes: 30,
   startHour: 8,
   endHour: 19,
+  maxParallel: 1,
 };
 
 // Categoria/cor de eventos pessoais (agenda, PRO-XX) — nunca se aplica a

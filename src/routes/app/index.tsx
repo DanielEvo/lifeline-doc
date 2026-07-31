@@ -24,11 +24,7 @@ import { PatientFormDialog } from "@/components/clinic/patient-form-dialog";
 import { BoardDialog } from "@/components/clinic/board-dialog";
 import { PageHeader } from "@/components/clinic/page-header";
 import { AppointmentCalendar, DRAG_PATIENT_KEY } from "@/components/clinic/appointment-calendar";
-import {
-  getWorkspace,
-  importSamplePatients,
-  moveMyPatient,
-} from "@/lib/api/clinic.functions";
+import { getWorkspace, importSamplePatients, moveMyPatient } from "@/lib/api/clinic.functions";
 import { runPatientIntake, type PatientIntakePayload } from "@/lib/patient-intake";
 import {
   ageFrom,
@@ -78,7 +74,10 @@ function PainelDoDia() {
       const prev = qc.getQueryData<typeof ws.data>(["workspace"]);
       qc.setQueryData<typeof ws.data>(["workspace"], (old) =>
         old && old.ok
-          ? { ...old, patients: old.patients.map((p) => (p.id === v.id ? { ...p, column: v.to } : p)) }
+          ? {
+              ...old,
+              patients: old.patients.map((p) => (p.id === v.id ? { ...p, column: v.to } : p)),
+            }
           : old,
       );
       return { prev };
@@ -145,7 +144,11 @@ function PainelDoDia() {
 
   const criticos = patients.filter((p) => p.criticalFlag).length;
   const consultasHoje = apptHoje.size;
-  const hojeLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const hojeLabel = new Date().toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   const onDrop = (col: string) => {
     if (draggingId) {
@@ -157,7 +160,11 @@ function PainelDoDia() {
   };
 
   const gridCols =
-    columns.length <= 3 ? "lg:grid-cols-3" : columns.length === 4 ? "lg:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3 xl:grid-cols-5";
+    columns.length <= 3
+      ? "lg:grid-cols-3"
+      : columns.length === 4
+        ? "lg:grid-cols-2 xl:grid-cols-4"
+        : "lg:grid-cols-3 xl:grid-cols-5";
 
   return (
     <div className="mx-auto max-w-[1400px] p-3 lg:p-5">
@@ -166,8 +173,13 @@ function PainelDoDia() {
         title="Painel do dia"
         subtitle={
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span><strong className="text-foreground">{patients.length}</strong> pacientes ativos</span>
-            <span><strong className="text-foreground">{consultasHoje}</strong> consulta{consultasHoje === 1 ? "" : "s"} hoje</span>
+            <span>
+              <strong className="text-foreground">{patients.length}</strong> pacientes ativos
+            </span>
+            <span>
+              <strong className="text-foreground">{consultasHoje}</strong> consulta
+              {consultasHoje === 1 ? "" : "s"} hoje
+            </span>
             {criticos > 0 && (
               <span className="text-red-600 dark:text-red-400">
                 <strong>{criticos}</strong> com parâmetro crítico
@@ -182,7 +194,10 @@ function PainelDoDia() {
           </Button>
         }
         primaryAction={
-          <Button onClick={() => setNovoOpen(true)} className="brand-gradient text-primary-foreground">
+          <Button
+            onClick={() => setNovoOpen(true)}
+            className="brand-gradient text-primary-foreground"
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             Novo paciente
           </Button>
@@ -216,7 +231,9 @@ function PainelDoDia() {
                 <div className="mb-2.5 flex items-center justify-between px-1">
                   <div>
                     <div className="text-sm font-semibold leading-tight">{col.title}</div>
-                    {col.hint && <div className="text-[11px] text-muted-foreground">{col.hint}</div>}
+                    {col.hint && (
+                      <div className="text-[11px] text-muted-foreground">{col.hint}</div>
+                    )}
                   </div>
                   <div className="flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
                     {cards.length}
@@ -253,7 +270,6 @@ function PainelDoDia() {
       <AppointmentCalendar
         token={token}
         patients={patients}
-        appointments={data?.appointments ?? []}
         categories={data?.categories ?? []}
         calendarSettings={data?.doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS}
         onOpenPatient={(p) => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
@@ -349,11 +365,17 @@ export function PatientKanbanCard({
             {idade !== null ? `${idade} anos` : "idade não informada"}
             {p.convenio ? ` · ${p.convenio}` : ""}
           </div>
-          {p.queixa && <div className="mt-0.5 line-clamp-2 text-xs text-foreground/80">{p.queixa}</div>}
+          {p.queixa && (
+            <div className="mt-0.5 line-clamp-2 text-xs text-foreground/80">{p.queixa}</div>
+          )}
         </div>
       </div>
 
-      {(appt || p.briefing || p.criticalFlag || p.examsCount > 0 || typeof p.adherence === "number") && (
+      {(appt ||
+        p.briefing ||
+        p.criticalFlag ||
+        p.examsCount > 0 ||
+        typeof p.adherence === "number") && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {appt && (
             <span
