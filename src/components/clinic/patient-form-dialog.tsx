@@ -896,6 +896,13 @@ function GlobalLinkSearch({
   };
 
   const vincular = async (globalId: string) => {
+    if (!patientId) {
+      // Cadastro novo: só seleciona a identidade; o vínculo real acontece
+      // quando o paciente for criado.
+      setStatusOverride((s) => ({ ...s, [globalId]: "sem_acesso" }));
+      onLinked(globalId);
+      return;
+    }
     setBusyId(globalId);
     try {
       const r = await linkMyPatientToGlobalId({ data: { token, patientId, globalId } });
