@@ -177,12 +177,44 @@ export async function prescribeEvolutionMemed(
   await mutateRows<Evolution>(FILE, (rows) => {
     const e = rows.find((r) => r.id === id && r.doctorId === doctorId);
     if (!e) return;
+    // Idempotência: o widget pode reemitir prescricaoImpressa (listener
+    // remontado, clique duplo no imprimir). Mesmo id = não regrava.
+    if (e.prescription && e.prescription.code === memedPrescricaoId) {
+      updated = { ...e };
+      return;
+    }
     e.prescription = {
       code: memedPrescricaoId,
       meds: medsResumo.map((name) => ({ name, dosage: "", duration: "" })),
       url: pdfUrl ?? `/receita/${memedPrescricaoId}`,
       createdAt: nowIso(),
+      canceledAt: null,
     };
+    e.updatedAt = nowIso();
+    updated = { ...e };
+  });
+  return updated ?? { error: "not_found" };
+}
+
+/**
+ * Marca a receita como cancelada quando a Memed emite prescricaoExcluida.
+ * Não apaga o registro — o prontuário precisa manter o rastro do que foi
+ * emitido e depois anulado.
+ */
+export async function cancelEvolutionPrescription(
+  doctorId: string,
+  id: string,
+  memedPrescricaoId: string,
+): Promise<Evolution | { error: "not_found" }> {
+  let updated: Evolution | null = null;
+  await mutateRows<Evolution>(FILE, (rows) => {
+    const e = rows.find((r) => r.id === id && r.doctorId === doctorId);
+    if (!e || !e.prescription || e.prescription.code !== memedPrescricaoId) return;
+    if (e.prescription.canceledAt) {
+      updated = { ...e };
+      return;
+    }
+    e.prescription.canceledAt = nowIso();
     e.updatedAt = nowIso();
     updated = { ...e };
   });
