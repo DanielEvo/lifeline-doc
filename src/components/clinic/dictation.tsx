@@ -81,7 +81,13 @@ export function Dictation({
       const blob = new Blob(chunks, { type: mimeType });
       const audioBase64 = await blobToBase64(blob);
       return transcribeConsult({
-        data: { audioBase64, mimeType, durationSec: seconds, templateSections: sections },
+        data: {
+          audioBase64,
+          mimeType,
+          durationSec: seconds,
+          templateSections: sections,
+          templateContent: templateContent.slice(0, 4000),
+        },
       });
     },
     onSuccess: (r) => {
