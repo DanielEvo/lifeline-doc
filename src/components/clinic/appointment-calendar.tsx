@@ -91,6 +91,16 @@ const DRAG_APPT = "application/x-appointment-id";
 // BUG-5: precisa da duração do evento arrastado no onDrop pra checar
 // interseção real com bloqueios, não só o instante inicial.
 const DRAG_APPT_DURATION = "application/x-appointment-duration";
+/** Estado efêmero do arrasto HTML5 (dataTransfer não é legível no dragover).
+ *  - grabOffsetPx: onde dentro do card o médico "pegou" — o topo do evento
+ *    deve cair nessa mesma distância acima do cursor, senão o horário salta.
+ *  - lastY: alguns navegadores entregam clientY = 0 no evento de drop; sem
+ *    esse fallback o cálculo vira minuto negativo e o card ia parar no início
+ *    do expediente (ex.: soltar às 11h e o card aparecer às 5h). */
+const dragState: { grabOffsetPx: number; lastY: number | null } = {
+  grabOffsetPx: 0,
+  lastY: null,
+};
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = [
