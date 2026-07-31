@@ -8,6 +8,7 @@ import {
   Activity,
   BookOpen,
   FlaskConical,
+  IdCard,
   KanbanSquare,
   Loader2,
   LogOut,
