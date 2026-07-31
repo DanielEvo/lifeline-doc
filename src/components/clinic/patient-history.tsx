@@ -348,8 +348,8 @@ function TimelineCard({
   return (
     <button
       onClick={onClick}
-      className={`w-48 shrink-0 rounded-xl border p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
-        active ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border bg-card"
+      className={`relative z-10 w-48 shrink-0 rounded-xl border bg-card p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+        active ? "border-primary shadow-md ring-1 ring-primary/30" : "border-border"
       }`}
     >
       <div className="flex items-center gap-2">
