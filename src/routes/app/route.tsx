@@ -241,7 +241,7 @@ function Shell({ clinic }: { clinic: Clinic }) {
 
         {/* Barra de ícones compartilhada: acompanha a borda do painel aberto */}
         <div
-          style={{ right: Math.min(larguraAberta, window.innerWidth * 0.95) }}
+          style={{ right: `min(${larguraAberta}px, 95vw)` }}
           className="fixed top-4 z-50 hidden flex-col gap-1 transition-[right] duration-300 md:flex"
         >
           <button
