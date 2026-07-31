@@ -2567,6 +2567,12 @@ function AllDayCell({
             onDragStart={(e) => {
               e.dataTransfer.setData(DRAG_APPT, a.id);
               e.dataTransfer.effectAllowed = "move";
+              dragState.grabOffsetPx = 0;
+              dragState.lastY = e.clientY || null;
+            }}
+            onDragEnd={() => {
+              dragState.grabOffsetPx = 0;
+              dragState.lastY = null;
             }}
             onClick={(e) => {
               e.stopPropagation();
