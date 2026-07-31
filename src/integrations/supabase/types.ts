@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          all_day: boolean
+          categoria_id: string | null
+          cor: string | null
+          created_at: string
+          date_time: string
+          descricao: string | null
+          doctor_id: string
+          duration_min: number | null
+          id: string
+          kind: string
+          label: string | null
+          lembretes_min: number[]
+          local: string | null
+          note: string | null
+          patient_id: string | null
+          recurrence_id: string | null
+          request_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          categoria_id?: string | null
+          cor?: string | null
+          created_at?: string
+          date_time: string
+          descricao?: string | null
+          doctor_id: string
+          duration_min?: number | null
+          id: string
+          kind?: string
+          label?: string | null
+          lembretes_min?: number[]
+          local?: string | null
+          note?: string | null
+          patient_id?: string | null
+          recurrence_id?: string | null
+          request_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          categoria_id?: string | null
+          cor?: string | null
+          created_at?: string
+          date_time?: string
+          descricao?: string | null
+          doctor_id?: string
+          duration_min?: number | null
+          id?: string
+          kind?: string
+          label?: string | null
+          lembretes_min?: number[]
+          local?: string | null
+          note?: string | null
+          patient_id?: string | null
+          recurrence_id?: string | null
+          request_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       criterios: {
         Row: {
           created_at: string
