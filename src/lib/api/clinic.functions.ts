@@ -1512,3 +1512,27 @@ export const confirmExtractedMeasurements = createServerFn({ method: "POST" })
     await bumpExams(doctor.id, data.patientId, added);
     return { ok: true as const, added, skipped };
   });
+
+// Perfil do prescritor para a tela /app/perfil — devolve os campos já
+// salvos para pré-preencher o formulário e o cabeçalho da receita.
+export const getDoctorProfile = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    return {
+      ok: true as const,
+      profile: {
+        nome: doctor.nome,
+        email: doctor.email,
+        crm: doctor.crm ?? "",
+        crmUf: doctor.crmUf ?? "",
+        cpfMedico: doctor.cpfMedico ?? "",
+        especialidade: doctor.especialidade ?? "",
+        crmCidade: doctor.crmCidade ?? "",
+        telefoneMedico: doctor.telefoneMedico ?? "",
+        localAtendimento: doctor.localAtendimento ?? "",
+      },
+      memedConfigurada: isMemedConfigured(),
+    };
+  });

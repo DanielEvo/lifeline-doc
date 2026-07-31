@@ -77,6 +77,7 @@ import {
   cancelMemedPrescriptionFn,
   confirmMemedPrescription,
   extractExamDocument,
+  getDoctorProfile,
   getMemedWidgetConfig,
   getPatientRecord,
   getWorkspace,
@@ -2741,6 +2742,28 @@ function ReceitaDialog({
     telefoneMedico: "",
     localAtendimento: "",
   });
+
+  // Pré-preenche com o que já está no cadastro do médico (/app/perfil).
+  const doctorProfile = useQuery({
+    queryKey: ["doctor-profile"],
+    queryFn: () => getDoctorProfile({ data: { token } }),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    if (doctorProfile.data?.ok) {
+      const p = doctorProfile.data.profile;
+      setCrmForm({
+        crm: p.crm,
+        crmUf: p.crmUf,
+        cpfMedico: p.cpfMedico,
+        especialidade: p.especialidade,
+        crmCidade: p.crmCidade,
+        telefoneMedico: p.telefoneMedico,
+        localAtendimento: p.localAtendimento,
+      });
+    }
+  }, [doctorProfile.data]);
   const saveMemed = useMutation({
     mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
     onSuccess: (r) => {
@@ -2848,7 +2871,11 @@ function ReceitaDialog({
         {widgetConfig.data?.ok === false && widgetConfig.data.error === "missing_profile" && (
           <div className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
             <p className="text-[11px] text-amber-800 dark:text-amber-300">
-              Memed configurada — falta seu CRM para emitir prescrição digital real.
+              Memed configurada — falta seu CRM para emitir prescrição digital real. Complete tudo em{" "}
+              <Link to="/app/perfil" className="font-medium underline">
+                Meu perfil
+              </Link>
+              .
             </p>
             <div className="flex gap-1.5">
               <input

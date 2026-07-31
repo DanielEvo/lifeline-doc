@@ -28,6 +28,7 @@ import { Route as ConfirmarEmailTokenRouteImport } from './routes/confirmar-emai
 import { Route as ConfirmarCadastroTokenRouteImport } from './routes/confirmar-cadastro.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AssinaturaRetornoRouteImport } from './routes/assinatura/retorno'
+import { Route as AppPerfilRouteImport } from './routes/app/perfil'
 import { Route as AppMemedSimulacaoRouteImport } from './routes/app/memed-simulacao'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AppProdutosIndexRouteImport } from './routes/app/produtos.index'
@@ -133,6 +134,11 @@ const AssinaturaRetornoRoute = AssinaturaRetornoRouteImport.update({
   path: '/assinatura/retorno',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppPerfilRoute = AppPerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppMemedSimulacaoRoute = AppMemedSimulacaoRouteImport.update({
   id: '/memed-simulacao',
   path: '/memed-simulacao',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
+  '/app/perfil': typeof AppPerfilRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
@@ -221,6 +228,7 @@ export interface FileRoutesByTo {
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
+  '/app/perfil': typeof AppPerfilRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/sobre': typeof SobreRoute
   '/admin/login': typeof AdminLoginRoute
   '/app/memed-simulacao': typeof AppMemedSimulacaoRoute
+  '/app/perfil': typeof AppPerfilRoute
   '/assinatura/retorno': typeof AssinaturaRetornoRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/confirmar-cadastro/$token': typeof ConfirmarCadastroTokenRoute
@@ -284,6 +293,7 @@ export interface FileRouteTypes {
     | '/sobre'
     | '/admin/login'
     | '/app/memed-simulacao'
+    | '/app/perfil'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-cadastro/$token'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/sobre'
     | '/admin/login'
     | '/app/memed-simulacao'
+    | '/app/perfil'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-cadastro/$token'
@@ -343,6 +354,7 @@ export interface FileRouteTypes {
     | '/sobre'
     | '/admin/login'
     | '/app/memed-simulacao'
+    | '/app/perfil'
     | '/assinatura/retorno'
     | '/auth/callback'
     | '/confirmar-cadastro/$token'
@@ -525,6 +537,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssinaturaRetornoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/perfil': {
+      id: '/app/perfil'
+      path: '/perfil'
+      fullPath: '/app/perfil'
+      preLoaderRoute: typeof AppPerfilRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/memed-simulacao': {
       id: '/app/memed-simulacao'
       path: '/memed-simulacao'
@@ -593,6 +612,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteRouteChildren {
   AppMemedSimulacaoRoute: typeof AppMemedSimulacaoRoute
+  AppPerfilRoute: typeof AppPerfilRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPacientesIdRoute: typeof AppPacientesIdRoute
   AppPacientesIndexRoute: typeof AppPacientesIndexRoute
@@ -601,6 +621,7 @@ interface AppRouteRouteChildren {
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppMemedSimulacaoRoute: AppMemedSimulacaoRoute,
+  AppPerfilRoute: AppPerfilRoute,
   AppIndexRoute: AppIndexRoute,
   AppPacientesIdRoute: AppPacientesIdRoute,
   AppPacientesIndexRoute: AppPacientesIndexRoute,
