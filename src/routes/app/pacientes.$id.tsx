@@ -2884,6 +2884,23 @@ function ReceitaDialog({
                 placeholder="Cidade do CRM"
                 className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
               />
+            </div>
+            {/* Telefone e local de atendimento saem impressos no cabeçalho da
+                receita (exigência do CFM) — opcionais aqui para não travar o
+                cadastro mínimo do prescritor. */}
+            <div className="flex gap-1.5">
+              <input
+                value={crmForm.telefoneMedico}
+                onChange={(e) => setCrmForm((f) => ({ ...f, telefoneMedico: e.target.value }))}
+                placeholder="Telefone do consultório"
+                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
+              <input
+                value={crmForm.localAtendimento}
+                onChange={(e) => setCrmForm((f) => ({ ...f, localAtendimento: e.target.value }))}
+                placeholder="Local de atendimento"
+                className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
               <Button
                 size="sm"
                 className="text-xs"
