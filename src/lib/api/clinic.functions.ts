@@ -886,6 +886,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       cpfMedico: z.string().min(11).max(14),
       especialidade: z.string().min(2).max(80),
       crmCidade: z.string().min(2).max(80),
+      telefoneMedico: z.string().max(20).nullish(),
+      localAtendimento: z.string().max(120).nullish(),
     }),
   )
   .handler(async ({ data }) => {
@@ -897,6 +899,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       cpfMedico: data.cpfMedico,
       especialidade: data.especialidade,
       crmCidade: data.crmCidade,
+      telefoneMedico: data.telefoneMedico ?? undefined,
+      localAtendimento: data.localAtendimento ?? undefined,
     });
     // Perfil do prescritor mudou → o JWT em cache não vale mais.
     invalidateMemedToken(doctor.id);
