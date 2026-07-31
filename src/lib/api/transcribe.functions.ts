@@ -60,6 +60,9 @@ export const transcribeConsult = createServerFn({ method: "POST" })
       // Cabeçalhos de seção do template ativo no front (parseTemplateSections)
       // — vazio quando o médico está em modo "Texto livre".
       templateSections: z.array(z.string().max(40)).max(8).optional().default([]),
+      // Template ativo por inteiro — orienta a IA a encaixar a transcrição
+      // nos campos do template (inclusive instruções escritas nele).
+      templateContent: z.string().max(4000).optional().default(""),
     }),
   )
   .handler(async ({ data }) => {
