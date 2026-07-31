@@ -93,5 +93,13 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
+  },
+  "overrides": {
+    "seroval": "^1.6.0",
+    "seroval-plugins": "^1.6.0"
+  },
+  "resolutions": {
+    "seroval": "^1.6.0",
+    "seroval-plugins": "^1.6.0"
   }
 }
