@@ -5,15 +5,23 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IdCard, Loader2, Save, Stethoscope } from "lucide-react";
+import { IdCard, Loader2, MapPin, Save, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getDoctorProfile, saveMemedProfile } from "@/lib/api/clinic.functions";
 import { useClinic } from "@/lib/clinic-context";
+import {
+  ESPECIALIDADES,
+  UFS,
+  buscarCep,
+  formatarCep,
+  municipiosDaUf,
+} from "@/lib/br-locations";
 
 export const Route = createFileRoute("/app/perfil")({
   head: () => ({
@@ -36,10 +44,6 @@ export const Route = createFileRoute("/app/perfil")({
   component: PerfilPage,
 });
 
-const UFS = [
-  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
-];
-
 const VAZIO = {
   crm: "",
   crmUf: "",
@@ -49,6 +53,7 @@ const VAZIO = {
   telefoneMedico: "",
   localAtendimento: "",
 };
+
 
 function PerfilPage() {
   const { token, nome, email } = useClinic();
