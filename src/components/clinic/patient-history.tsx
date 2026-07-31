@@ -294,11 +294,12 @@ export function ClinicalTimeline({
       ) : (
         <div className="relative mt-3">
           <div ref={scrollerRef} className="overflow-x-auto pb-1">
-            {/* Alinhada ao centro vertical do nó circular de cada card (ver
-                TimelineCard: p-2.5 + border + ícone h-6 ⇒ centro a 23px do topo).
-                Gradiente fica mais vivo à direita — o presente puxa o olhar. */}
-            <div className="absolute left-0 right-0 top-[23px] h-0.5 bg-gradient-to-r from-border via-primary/30 to-primary/70" />
             <div className="relative flex gap-3">
+              {/* Fio condutor: fica ATRÁS dos cards, na altura média deles, então
+                  só aparece nos vãos entre um card e outro — conectando, não
+                  sustentando. Cards são opacos, logo o card ativo nunca é
+                  cortado pela linha. */}
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-border to-primary/50" />
               {events.map((ev, i) => (
                 <TimelineCard
                   key={ev.key}
@@ -310,6 +311,7 @@ export function ClinicalTimeline({
               ))}
             </div>
           </div>
+
           {canScrollLeft && (
             <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent" />
           )}
