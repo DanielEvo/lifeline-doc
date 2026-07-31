@@ -299,7 +299,9 @@ export function ClinicalTimeline({
                   só aparece nos vãos entre um card e outro — conectando, não
                   sustentando. Cards são opacos, logo o card ativo nunca é
                   cortado pela linha. */}
-              <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-border to-primary/50" />
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0 h-[3px] -translate-y-1/2 rounded-full bg-gradient-to-r from-transparent via-emerald-500/25 to-emerald-500/45" />
+              {/* Seta no fim da linha */}
+              <div className="pointer-events-none absolute right-0 top-1/2 z-0 h-0 w-0 -translate-y-1/2 border-y-[6px] border-l-[9px] border-y-transparent border-l-emerald-500/45" />
               {events.map((ev, i) => (
                 <TimelineCard
                   key={ev.key}
