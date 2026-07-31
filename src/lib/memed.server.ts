@@ -98,9 +98,8 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   const cached = tokenCache.get(doctor.id);
   if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token };
 
-  const apiKey = process.env.MEMED_API_KEY!;
-  const secretKey = process.env.MEMED_SECRET_KEY!;
-  const qs = `api-key=${encodeURIComponent(apiKey)}&secret-key=${encodeURIComponent(secretKey)}`;
+  const { apiKey, secretKey } = memedKeys();
+  const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
   const [nome, ...resto] = doctor.nome.trim().split(/\s+/);
   const sobrenome = resto.join(" ") || nome;
 
