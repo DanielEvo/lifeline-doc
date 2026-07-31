@@ -243,9 +243,10 @@ export function PatientFormDialog({
   // global (BKL-37) é uma ação à parte, só disponível no modo edição — ver
   // GlobalLinkSearch/AccessActions abaixo.
   const submitNew = form.handleSubmit((v) =>
-    onSubmit(v, isEdit ? undefined : { foundPatient: null, fileNames: doneNames }),
+    onSubmit(v, isEdit ? undefined : { foundPatient: null, fileNames: doneNames, globalId }),
   );
-  const submitFound = () => onSubmit(form.getValues(), { foundPatient, fileNames: doneNames });
+  const submitFound = () =>
+    onSubmit(form.getValues(), { foundPatient, fileNames: doneNames, globalId });
 
   const showForm = isEdit || !foundPatient; // esconde campos quando achou por ID
   const submitLabel = isEdit
