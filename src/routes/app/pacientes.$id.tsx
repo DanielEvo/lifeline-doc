@@ -2208,7 +2208,7 @@ function CreateTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-lg flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{seeded ? "Salvar como template" : "Criar template de evolução"}</DialogTitle>
           <DialogDescription>
