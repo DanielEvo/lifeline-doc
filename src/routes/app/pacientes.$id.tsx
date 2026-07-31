@@ -77,6 +77,7 @@ import {
   cancelMemedPrescriptionFn,
   confirmMemedPrescription,
   extractExamDocument,
+  getDoctorProfile,
   getMemedWidgetConfig,
   getPatientRecord,
   getWorkspace,
