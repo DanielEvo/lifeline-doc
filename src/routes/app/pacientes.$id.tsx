@@ -2050,6 +2050,7 @@ function NovaEvolucao({
           <div className="mt-2">
             <Dictation
               sections={activeSections}
+              templateContent={activeTemplateContent}
               onAcceptToSection={(label, t) =>
                 setTexto((prev) => inserirNaSecao(label, t, prev, activeSections))
               }
