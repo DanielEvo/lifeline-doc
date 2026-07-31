@@ -58,9 +58,22 @@ export function MemedPrescriptionWidget({
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const errorMsgRef = useRef<string>("Não consegui carregar o módulo da Memed.");
   const containerRef = useRef<HTMLDivElement>(null);
+  // Callbacks sempre atualizados sem re-montar o embed.
+  const impressaRef = useRef(onPrescricaoImpressa);
+  const excluidaRef = useRef(onPrescricaoExcluida);
+  const readyRef = useRef(onReady);
+  impressaRef.current = onPrescricaoImpressa;
+  excluidaRef.current = onPrescricaoExcluida;
+  readyRef.current = onReady;
+  // Evita despachar duas vezes o mesmo evento quando a Memed reemite.
+  const handledRef = useRef<Set<string>>(new Set());
+
+  const patientKey = patient.idExterno;
 
   useEffect(() => {
     let cancelled = false;
+    handledRef.current = new Set();
+    setStatus("loading");
     const prevScript = document.getElementById("memed-sinapse-script");
     prevScript?.remove(); // widget não suporta duas instâncias simultâneas na página
 
@@ -78,6 +91,25 @@ export function MemedPrescriptionWidget({
     };
     document.body.appendChild(script);
 
+    const eventKey = (name: string, data: unknown) => {
+      const d = data as { prescricao?: { id?: string | number } };
+      return `${name}:${d?.prescricao?.id ?? JSON.stringify(data)?.slice(0, 80)}`;
+    };
+    const onImpressa = (data: unknown) => {
+      if (cancelled) return;
+      const k = eventKey("impressa", data);
+      if (handledRef.current.has(k)) return;
+      handledRef.current.add(k);
+      impressaRef.current(data);
+    };
+    const onExcluida = (data: unknown) => {
+      if (cancelled) return;
+      const k = eventKey("excluida", data);
+      if (handledRef.current.has(k)) return;
+      handledRef.current.add(k);
+      excluidaRef.current?.(data);
+    };
+
     let pollId: ReturnType<typeof setInterval> | null = null;
     const attachModuleInit = () => {
       if (!window.MdSinapsePrescricao) return false;
@@ -88,10 +120,10 @@ export function MemedPrescriptionWidget({
           if (workplace) {
             await window.MdHub!.command.send("plataforma.prescricao", "setWorkplace", workplace);
           }
-          window.MdHub!.event.add("prescricaoImpressa", onPrescricaoImpressa);
+          window.MdHub!.event.add("prescricaoImpressa", onImpressa);
           // Evento marcado como obrigatório pela Memed para autorização das
           // credenciais de produção — precisa estar sempre registrado.
-          window.MdHub!.event.add("prescricaoExcluida", (data) => onPrescricaoExcluida?.(data));
+          window.MdHub!.event.add("prescricaoExcluida", onExcluida);
           await window.MdHub!.module.show("plataforma.prescricao");
           try {
             await window.MdHub!.command.send("plataforma.prescricao", "setFeatureToggle", {
@@ -106,7 +138,7 @@ export function MemedPrescriptionWidget({
           }
           if (!cancelled) {
             setStatus("ready");
-            onReady?.({
+            readyRef.current?.({
               addItem: (payload) =>
                 window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
               newPrescription: () =>
@@ -130,11 +162,17 @@ export function MemedPrescriptionWidget({
     }
 
     return () => {
+      // cancelled corta qualquer callback tardio: o MdHub não expõe remoção de
+      // listener, então o guard é o que impede evento duplicado depois de
+      // fechar o dialog ou trocar de paciente.
       cancelled = true;
       if (pollId) clearInterval(pollId);
+      document.getElementById("memed-sinapse-script")?.remove();
     };
+    // Remonta quando muda o prescritor (token) ou o paciente — antes o embed
+    // ficava preso ao primeiro paciente montado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token, scriptUrl, patientKey]);
 
 
   if (status === "error") {
@@ -154,9 +192,11 @@ export function MemedPrescriptionWidget({
         </div>
       )}
       {/* min-width 820px é exigência conhecida do embed Memed — não reduzir.
-          NÃO CONFIRMADO no /docs/primeiros-passos fornecido; validar contra
-          a doc completa de frontend antes de remover esta nota. */}
-      <div ref={containerRef} style={{ minWidth: 820, minHeight: 700 }} className="w-full" />
+          O wrapper rola horizontalmente para não estourar o dialog em telas
+          menores que 900px (notebook), em vez de cortar o módulo. */}
+      <div className="w-full overflow-x-auto">
+        <div ref={containerRef} style={{ minWidth: 820, minHeight: 700 }} className="w-full" />
+      </div>
     </div>
   );
 }
