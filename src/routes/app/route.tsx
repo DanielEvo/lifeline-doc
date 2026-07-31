@@ -89,6 +89,7 @@ const NAV = [
   { to: "/app" as const, label: "Painel do dia", icon: KanbanSquare, exact: true },
   { to: "/app/pacientes" as const, label: "Pacientes", icon: Users, exact: false },
   { to: "/app/produtos" as const, label: "Produtos e Serviços", icon: Package, exact: false },
+  { to: "/app/perfil" as const, label: "Meu perfil", icon: IdCard, exact: false },
   { to: "/assinatura" as const, label: "Assinatura", icon: Sparkles, exact: false },
 ];
 
