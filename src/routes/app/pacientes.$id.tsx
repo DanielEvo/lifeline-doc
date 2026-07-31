@@ -2218,63 +2218,78 @@ function CreateTemplateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {rascunho === null ? (
-          <div className="space-y-2">
-            <Textarea
-              autoFocus
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex.: retorno de paciente com hipertensão"
-              rows={3}
-              className="text-sm"
-            />
-            <Button
-              className="w-full brand-gradient text-primary-foreground"
-              disabled={descricao.trim().length < 3 || gerar.isPending}
-              onClick={() => gerar.mutate()}
-            >
-              {gerar.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-1.5 h-4 w-4" />
-              )}
-              Gerar com IA
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label className="text-xs">Estrutura do template</Label>
-            <Textarea
-              value={rascunho}
-              onChange={(e) => setRascunho(e.target.value)}
-              rows={8}
-              className="font-mono text-xs"
-            />
-            <Label className="text-xs">Nome do template</Label>
-            <Input
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex.: Retorno HAS"
-              maxLength={60}
-            />
-          </div>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto px-0.5">
+          {rascunho === null ? (
+            <div className="space-y-2">
+              <Textarea
+                autoFocus
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Ex.: retorno de paciente com hipertensão"
+                rows={3}
+                className="w-full resize-none text-sm"
+              />
+              <Button
+                className="w-full brand-gradient text-primary-foreground"
+                disabled={descricao.trim().length < 3 || gerar.isPending}
+                onClick={() => gerar.mutate()}
+              >
+                {gerar.isPending ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                )}
+                Gerar com IA
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-xs">Estrutura do template</Label>
+              <Textarea
+                value={rascunho}
+                onChange={(e) => setRascunho(e.target.value)}
+                rows={8}
+                className="w-full font-mono text-xs"
+              />
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Estas seções guiam o ditado: ao transcrever a consulta, o texto é
+                distribuído automaticamente nestes cabeçalhos.
+              </p>
+              <Label className="text-xs">Nome do template</Label>
+              <Input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="Ex.: Retorno HAS"
+                maxLength={60}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+        <DialogFooter className="mt-2 flex flex-wrap gap-2 sm:flex-wrap sm:justify-end sm:space-x-0">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
           {rascunho !== null && !seeded && (
-            <Button variant="outline" onClick={() => setRascunho(null)}>
+            <Button variant="outline" size="sm" onClick={() => setRascunho(null)}>
               Recomeçar
             </Button>
           )}
           {rascunho !== null && (
             <>
               {!seeded && (
-                <Button variant="outline" onClick={usarSemSalvar} disabled={rascunho.trim().length === 0}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={usarSemSalvar}
+                  disabled={rascunho.trim().length === 0}
+                >
                   Usar sem salvar
                 </Button>
               )}
               <Button
+                size="sm"
                 disabled={nome.trim().length < 2 || rascunho.trim().length === 0 || salvar.isPending}
                 onClick={() => salvar.mutate()}
                 className="brand-gradient text-primary-foreground"
