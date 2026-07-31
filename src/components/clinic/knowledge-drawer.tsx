@@ -136,6 +136,8 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   token: string;
+  /** Reporta a largura atual para a barra de ícones compartilhada. */
+  onWidthChange?: (w: number) => void;
 };
 
 const LARGURA_PADRAO = 380;
@@ -143,7 +145,7 @@ const LARGURA_MIN = 300;
 const LARGURA_MAX = 900;
 const LARGURA_KEY = "lifeline:kb-largura";
 
-export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
+export function KnowledgeDrawer({ open, onOpenChange, token, onWidthChange }: Props) {
   const [tab, setTab] = useState<TabId>("chat");
 
   // largura ajustável do painel (persistida por médico/navegador)
@@ -154,6 +156,11 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
     const salvo = Number(window.localStorage.getItem(LARGURA_KEY));
     if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
   }, []);
+
+  useEffect(() => {
+    onWidthChange?.(largura);
+  }, [largura, onWidthChange]);
+
 
   const iniciarResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
