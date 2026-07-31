@@ -2581,8 +2581,16 @@ function EvolucaoCard({
       </div>
 
       {e.prescription && (
-        <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-xs ring-1 ring-violet-200 dark:bg-violet-950/40 dark:ring-violet-900">
-          <div className="font-medium text-violet-900 dark:text-violet-300">Receita digital</div>
+        <div
+          className={`mt-2 rounded-lg px-3 py-2 text-xs ring-1 ${
+            e.prescription.canceledAt
+              ? "bg-muted text-muted-foreground ring-border line-through decoration-1"
+              : "bg-violet-50 ring-violet-200 dark:bg-violet-950/40 dark:ring-violet-900"
+          }`}
+        >
+          <div className="font-medium text-violet-900 dark:text-violet-300">
+            Receita digital{e.prescription.canceledAt ? " · cancelada" : ""}
+          </div>
           <ul className="mt-1 space-y-0.5 text-violet-900 dark:text-violet-300">
             {e.prescription.meds.map((m, i) =>
               typeof m === "string" ? (
