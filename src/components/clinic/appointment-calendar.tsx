@@ -3003,6 +3003,15 @@ function EventBlock({
         e.dataTransfer.setData(DRAG_APPT, appt.id);
         e.dataTransfer.setData(DRAG_APPT_DURATION, String(appt.durationMin ?? 30));
         e.dataTransfer.effectAllowed = "move";
+        // Guarda onde dentro do card o arrasto começou: o horário final é o
+        // topo do card, não a posição do cursor.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        dragState.grabOffsetPx = Math.max(0, e.clientY - rect.top);
+        dragState.lastY = e.clientY || null;
+      }}
+      onDragEnd={() => {
+        dragState.grabOffsetPx = 0;
+        dragState.lastY = null;
       }}
       onClick={(e) => {
         e.stopPropagation();
