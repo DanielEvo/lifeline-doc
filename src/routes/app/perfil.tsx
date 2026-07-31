@@ -119,6 +119,40 @@ function PerfilPage() {
       setForm((f) => ({ ...f, [k]: e.target.value })),
   });
 
+  // Municípios da UF escolhida (IBGE) para a busca de cidade.
+  const municipios = useQuery({
+    queryKey: ["ibge-municipios", form.crmUf],
+    queryFn: () => municipiosDaUf(form.crmUf),
+    enabled: form.crmUf.length === 2,
+    staleTime: 24 * 60 * 60_000,
+  });
+
+  // Busca do local de atendimento por CEP.
+  const [cep, setCep] = useState("");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  async function procurarCep() {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return toast.error("Informe um CEP com 8 dígitos.");
+    setBuscandoCep(true);
+    try {
+      const end = await buscarCep(digits);
+      if (!end) return toast.error("CEP não encontrado.");
+      const endereco = [end.logradouro, end.bairro].filter(Boolean).join(", ");
+      setForm((f) => ({
+        ...f,
+        localAtendimento: [endereco, `${end.cidade}/${end.uf}`].filter(Boolean).join(" — "),
+        crmCidade: f.crmCidade || end.cidade,
+        crmUf: f.crmUf || end.uf,
+      }));
+      toast.success("Endereço preenchido pelo CEP — complete o número e a sala.");
+    } catch {
+      toast.error("Não consegui consultar o CEP agora.");
+    } finally {
+      setBuscandoCep(false);
+    }
+  }
+
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       <header className="space-y-1">
