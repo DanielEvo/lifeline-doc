@@ -869,7 +869,8 @@ function GlobalLinkSearch({
   onLinked,
 }: {
   token: string;
-  patientId: string;
+  /** null no cadastro NOVO: o vínculo é aplicado na criação do paciente. */
+  patientId: string | null;
   onLinked: (globalId: string) => void;
 }) {
   const [query, setQuery] = useState("");
