@@ -2730,6 +2730,7 @@ function DayColumn({
         // Preview otimista: dataTransfer.getData() não é legível durante
         // dragover (só no drop), então usamos SNAP_MIN como duração — o
         // destaque visual é só indicativo, quem decide de verdade é o onDrop.
+        if (e.clientY > 0) dragState.lastY = e.clientY;
         const candidate = resolveDrop(e);
         if (!candidate || bloqueioAt(timedAppts, candidate, SNAP_MIN)) return;
         e.preventDefault();
