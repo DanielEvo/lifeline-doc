@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { resetPatientPassword } from "@/lib/api/patient-auth.functions";
 
@@ -85,9 +86,8 @@ function RedefinirSenhaPacientePage() {
                 </Label>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
+                  <PasswordInput
                     id="senha"
-                    type="password"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     placeholder="Mínimo 6 caracteres"
@@ -102,9 +102,8 @@ function RedefinirSenhaPacientePage() {
                 </Label>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
+                  <PasswordInput
                     id="confirma"
-                    type="password"
                     value={confirma}
                     onChange={(e) => setConfirma(e.target.value)}
                     placeholder="Repita a nova senha"

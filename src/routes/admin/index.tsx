@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { adminChangeCredentials, adminGetMe, adminLogout } from "@/lib/api/admin-auth.functions";
 import { googleLogin } from "@/lib/api/auth.functions";
@@ -422,9 +423,8 @@ function CredentialsSection({ token, onChanged }: { token: string; onChanged: ()
           <Label htmlFor="senhaAtual" className="text-xs">
             Senha atual
           </Label>
-          <Input
+          <PasswordInput
             id="senhaAtual"
-            type="password"
             value={senhaAtual}
             onChange={(e) => setSenhaAtual(e.target.value)}
             maxLength={120}
@@ -434,9 +434,8 @@ function CredentialsSection({ token, onChanged }: { token: string; onChanged: ()
           <Label htmlFor="novaSenha" className="text-xs">
             Nova senha
           </Label>
-          <Input
+          <PasswordInput
             id="novaSenha"
-            type="password"
             value={novaSenha}
             onChange={(e) => setNovaSenha(e.target.value)}
             maxLength={120}
@@ -446,9 +445,8 @@ function CredentialsSection({ token, onChanged }: { token: string; onChanged: ()
           <Label htmlFor="confirmar" className="text-xs">
             Confirmar nova senha
           </Label>
-          <Input
+          <PasswordInput
             id="confirmar"
-            type="password"
             value={confirmar}
             onChange={(e) => setConfirmar(e.target.value)}
             maxLength={120}
