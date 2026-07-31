@@ -103,7 +103,6 @@ import type { EvolutionTemplate } from "@/lib/templates.server";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
-import { SimilarCases } from "@/components/clinic/similar-cases";
 import { MemedPrescriptionWidget } from "@/components/clinic/memed-prescription-widget";
 import {
   ageFrom,
@@ -514,11 +513,6 @@ function Prontuario() {
           onChanged={invalidate}
         />
       </div>
-
-      {/* Casos históricos: só faz sentido durante o atendimento deste
-          paciente (comparação de perfil clínico) — vive aqui, não num
-          drawer global. */}
-      <SimilarCases />
 
       <PatientFormDialog
         open={editOpen}
