@@ -23,10 +23,6 @@ const MEMED_TIMEOUT_MS = 8_000;
 /** JWT do prescritor vale bem mais que isso; 50min dá folga de renovação. */
 const TOKEN_TTL_MS = 50 * 60 * 1000;
 
-export function isMemedConfigured(): boolean {
-  return !!(process.env.MEMED_API_KEY && process.env.MEMED_SECRET_KEY);
-}
-
 /**
  * Ambiente em uso. As chaves de homologação são compartilhadas entre
  * parceiros e o ambiente cai fora do horário comercial — a UI usa isso para
@@ -34,6 +30,27 @@ export function isMemedConfigured(): boolean {
  */
 export function memedEnvironment(): "sandbox" | "live" {
   return (process.env.MEMED_ENV || "sandbox") === "live" ? "live" : "sandbox";
+}
+
+/**
+ * Chaves por ambiente (mesmo padrão do Stripe): MEMED_LIVE_* / MEMED_SANDBOX_*
+ * quando existirem, com fallback para o par legado MEMED_API_KEY/SECRET_KEY.
+ * Evita emitir receita de teste com chave de produção e vice-versa.
+ */
+function memedKeys(): { apiKey?: string; secretKey?: string } {
+  const live = memedEnvironment() === "live";
+  const apiKey =
+    (live ? process.env.MEMED_LIVE_API_KEY : process.env.MEMED_SANDBOX_API_KEY) ||
+    process.env.MEMED_API_KEY;
+  const secretKey =
+    (live ? process.env.MEMED_LIVE_SECRET_KEY : process.env.MEMED_SANDBOX_SECRET_KEY) ||
+    process.env.MEMED_SECRET_KEY;
+  return { apiKey, secretKey };
+}
+
+export function isMemedConfigured(): boolean {
+  const { apiKey, secretKey } = memedKeys();
+  return !!(apiKey && secretKey);
 }
 
 /**
