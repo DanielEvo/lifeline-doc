@@ -1949,6 +1949,13 @@ function NovaEvolucao({
     return parseTemplateSections(contentForTemplate(template, myTemplates, ephemeralConteudo));
   }, [template, texto, myTemplates, ephemeralConteudo]);
 
+  // Template ativo por inteiro (cabeçalhos + instruções que o médico tenha
+  // escrito nele) — vira o "prompt" que orienta a distribuição do ditado.
+  const activeTemplateContent = useMemo(() => {
+    if (template === "historico" || template === "texto_livre") return "";
+    return contentForTemplate(template, myTemplates, ephemeralConteudo);
+  }, [template, myTemplates, ephemeralConteudo]);
+
   const consultaSelecionada = historicoId
     ? evolutions.find((e) => e.id === historicoId) ?? null
     : null;
