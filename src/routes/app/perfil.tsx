@@ -179,20 +179,18 @@ function PerfilPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="crmUf">UF do CRM</Label>
-            <select
+            <SearchableSelect
               id="crmUf"
               value={form.crmUf}
-              onChange={(e) => setForm((f) => ({ ...f, crmUf: e.target.value }))}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Selecione…</option>
-              {UFS.map((uf) => (
-                <option key={uf} value={uf}>
-                  {uf}
-                </option>
-              ))}
-            </select>
+              onChange={(uf) => setForm((f) => ({ ...f, crmUf: uf, crmCidade: "" }))}
+              options={UFS}
+              allowCustom={false}
+              placeholder="Selecione a UF…"
+              searchPlaceholder="Buscar UF…"
+              emptyText="UF não encontrada."
+            />
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="cpf">CPF</Label>
             <Input
