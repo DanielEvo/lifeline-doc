@@ -117,7 +117,7 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
             cpf: doctor.cpfMedico.replace(/\D/g, ""),
             board: { board_code: "CRM", board_number: doctor.crm, board_state: doctor.crmUf },
             email: doctor.email,
-            telefone: "",
+            telefone: (doctor.telefoneMedico ?? "").replace(/\D/g, ""),
             especialidade: doctor.especialidade,
             cidade: doctor.crmCidade,
           },
