@@ -895,6 +895,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       especialidade: data.especialidade,
       crmCidade: data.crmCidade,
     });
+    // Perfil do prescritor mudou → o JWT em cache não vale mais.
+    invalidateMemedToken(doctor.id);
     return updated ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
   });
 
