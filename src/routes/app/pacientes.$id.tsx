@@ -2871,7 +2871,11 @@ function ReceitaDialog({
         {widgetConfig.data?.ok === false && widgetConfig.data.error === "missing_profile" && (
           <div className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
             <p className="text-[11px] text-amber-800 dark:text-amber-300">
-              Memed configurada — falta seu CRM para emitir prescrição digital real.
+              Memed configurada — falta seu CRM para emitir prescrição digital real. Complete tudo em{" "}
+              <Link to="/app/perfil" className="font-medium underline">
+                Meu perfil
+              </Link>
+              .
             </p>
             <div className="flex gap-1.5">
               <input
