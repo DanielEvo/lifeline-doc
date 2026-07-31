@@ -153,6 +153,8 @@ export async function updateDoctorMemedProfile(
     cpfMedico: string;
     especialidade: string;
     crmCidade: string;
+    telefoneMedico?: string | null;
+    localAtendimento?: string | null;
   },
 ): Promise<Doctor | undefined> {
   let updated: Doctor | undefined;
@@ -164,6 +166,10 @@ export async function updateDoctorMemedProfile(
     d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
     d.especialidade = input.especialidade.trim();
     d.crmCidade = input.crmCidade.trim();
+    if (input.telefoneMedico !== undefined)
+      d.telefoneMedico = input.telefoneMedico?.trim() || null;
+    if (input.localAtendimento !== undefined)
+      d.localAtendimento = input.localAtendimento?.trim() || null;
     updated = { ...d };
   });
   return updated;
