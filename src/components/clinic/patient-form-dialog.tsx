@@ -383,6 +383,40 @@ export function PatientFormDialog({
           </div>
         )}
 
+        {/* Identidade LifeLine — busca global no cadastro de paciente NOVO.
+            Sem paciente ainda criado, "Vincular" apenas seleciona o globalId,
+            que é aplicado na criação (intake.globalId). */}
+        {!isEdit && !foundPatient && (
+          <>
+            {globalId ? (
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                {vinculo === "com_acesso" ? (
+                  <p className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="h-3 w-3" /> Identidade LifeLine — acesso liberado
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      Identidade LifeLine selecionada — sem acesso aos dados do paciente
+                    </p>
+                    <AccessActions
+                      token={token}
+                      globalId={globalId}
+                      onGranted={() => setLinkOverride({ globalId, vinculo: "com_acesso" })}
+                    />
+                  </>
+                )}
+              </div>
+            ) : (
+              <GlobalLinkSearch
+                token={token}
+                patientId={null}
+                onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
+              />
+            )}
+          </>
+        )}
+
         {/* Campos de cadastro — escondidos quando achou paciente por ID.
             Nome/nascimento/sexo/CPF só aparecem no cadastro NOVO — no modo
             edição são fixos e já foram mostrados no card de identidade acima. */}
