@@ -14,6 +14,7 @@ import {
   Package,
   Sparkles,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +24,7 @@ import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context"
 import { ThemeToggle } from "@/components/theme-toggle";
 
 import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
+import { SimilarCasesDrawer } from "@/components/clinic/similar-cases";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -93,6 +95,7 @@ const NAV = [
 function Shell({ clinic }: { clinic: Clinic }) {
   const navigate = useNavigate();
   const [kbOpen, setKbOpen] = useState(false);
+  const [perfisOpen, setPerfisOpen] = useState(false);
 
   const sair = async () => {
     const s = getSession();
@@ -197,6 +200,13 @@ function Shell({ clinic }: { clinic: Clinic }) {
               <BookOpen className="h-4 w-4" />
             </button>
             <button
+              onClick={() => setPerfisOpen(true)}
+              aria-label="Perfis similares"
+              className="rounded-md px-2 py-1 text-muted-foreground"
+            >
+              <UsersRound className="h-4 w-4" />
+            </button>
+            <button
               onClick={sair}
               aria-label="Sair"
               className="rounded-md px-2 py-1 text-muted-foreground"
@@ -211,6 +221,7 @@ function Shell({ clinic }: { clinic: Clinic }) {
       <main className="relative flex-1 overflow-x-hidden">
         <Outlet />
         <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} token={clinic.token} />
+        <SimilarCasesDrawer open={perfisOpen} onOpenChange={setPerfisOpen} />
       </main>
     </div>
   );
