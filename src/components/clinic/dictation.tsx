@@ -41,10 +41,13 @@ function pickMimeType(): string {
 
 export function Dictation({
   sections,
+  templateContent = "",
   onAcceptToSection,
 }: {
   /** Cabeçalhos de seção do template ativo — vazio em modo "Texto livre". */
   sections: string[];
+  /** Template ativo por inteiro — serve de instrução pra IA distribuir o texto. */
+  templateContent?: string;
   onAcceptToSection: (label: string, text: string) => void;
 }) {
   const [recording, setRecording] = useState(false);
