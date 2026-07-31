@@ -226,9 +226,11 @@ const LARGURA_KEY = "lifeline:perfis-largura";
 export function SimilarCasesDrawer({
   open,
   onOpenChange,
+  onWidthChange,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onWidthChange?: (w: number) => void;
 }) {
   const [largura, setLargura] = useState(LARGURA_PADRAO);
   const [redimensionando, setRedimensionando] = useState(false);
@@ -237,6 +239,10 @@ export function SimilarCasesDrawer({
     const salvo = Number(window.localStorage.getItem(LARGURA_KEY));
     if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
   }, []);
+
+  useEffect(() => {
+    onWidthChange?.(largura);
+  }, [largura, onWidthChange]);
 
   const iniciarResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -280,16 +286,6 @@ export function SimilarCasesDrawer({
           redimensionando && "bg-primary/60",
         )}
       />
-
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        aria-label={open ? "Fechar perfis similares" : "Perfis similares"}
-        title="Perfis similares"
-        className="absolute -left-9 top-[4.25rem] z-10 flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background text-muted-foreground shadow-md transition hover:text-foreground"
-      >
-        <UsersRound className="h-4 w-4" />
-      </button>
 
       <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">

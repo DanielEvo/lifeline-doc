@@ -94,8 +94,15 @@ const NAV = [
 
 function Shell({ clinic }: { clinic: Clinic }) {
   const navigate = useNavigate();
-  const [kbOpen, setKbOpen] = useState(false);
-  const [perfisOpen, setPerfisOpen] = useState(false);
+  // Só um painel lateral por vez — abrir um fecha o outro.
+  const [painel, setPainel] = useState<"kb" | "perfis" | null>(null);
+  const [larguraKb, setLarguraKb] = useState(380);
+  const [larguraPerfis, setLarguraPerfis] = useState(380);
+  const kbOpen = painel === "kb";
+  const perfisOpen = painel === "perfis";
+  const setKbOpen = (v: boolean) => setPainel(v ? "kb" : null);
+  const setPerfisOpen = (v: boolean) => setPainel(v ? "perfis" : null);
+  const larguraAberta = kbOpen ? larguraKb : perfisOpen ? larguraPerfis : 0;
 
   const sair = async () => {
     const s = getSession();
@@ -220,8 +227,46 @@ function Shell({ clinic }: { clinic: Clinic }) {
 
       <main className="relative flex-1 overflow-x-hidden">
         <Outlet />
-        <KnowledgeDrawer open={kbOpen} onOpenChange={setKbOpen} token={clinic.token} />
-        <SimilarCasesDrawer open={perfisOpen} onOpenChange={setPerfisOpen} />
+        <KnowledgeDrawer
+          open={kbOpen}
+          onOpenChange={setKbOpen}
+          token={clinic.token}
+          onWidthChange={setLarguraKb}
+        />
+        <SimilarCasesDrawer
+          open={perfisOpen}
+          onOpenChange={setPerfisOpen}
+          onWidthChange={setLarguraPerfis}
+        />
+
+        {/* Barra de ícones compartilhada: acompanha a borda do painel aberto */}
+        <div
+          style={{ right: `min(${larguraAberta}px, 95vw)` }}
+          className="fixed top-4 z-50 hidden flex-col gap-1 transition-[right] duration-300 md:flex"
+        >
+          <button
+            type="button"
+            onClick={() => setKbOpen(!kbOpen)}
+            aria-label={kbOpen ? "Fechar assistente de conhecimento" : "Base de conhecimento"}
+            title="Base de conhecimento"
+            className={`flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background shadow-md transition ${
+              kbOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPerfisOpen(!perfisOpen)}
+            aria-label={perfisOpen ? "Fechar perfis similares" : "Perfis similares"}
+            title="Perfis similares"
+            className={`flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background shadow-md transition ${
+              perfisOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <UsersRound className="h-4 w-4" />
+          </button>
+        </div>
       </main>
     </div>
   );

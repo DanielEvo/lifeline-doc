@@ -136,6 +136,8 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   token: string;
+  /** Reporta a largura atual para a barra de ícones compartilhada. */
+  onWidthChange?: (w: number) => void;
 };
 
 const LARGURA_PADRAO = 380;
@@ -143,7 +145,7 @@ const LARGURA_MIN = 300;
 const LARGURA_MAX = 900;
 const LARGURA_KEY = "lifeline:kb-largura";
 
-export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
+export function KnowledgeDrawer({ open, onOpenChange, token, onWidthChange }: Props) {
   const [tab, setTab] = useState<TabId>("chat");
 
   // largura ajustável do painel (persistida por médico/navegador)
@@ -154,6 +156,11 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
     const salvo = Number(window.localStorage.getItem(LARGURA_KEY));
     if (salvo >= LARGURA_MIN && salvo <= LARGURA_MAX) setLargura(salvo);
   }, []);
+
+  useEffect(() => {
+    onWidthChange?.(largura);
+  }, [largura, onWidthChange]);
+
 
   const iniciarResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -429,17 +436,6 @@ export function KnowledgeDrawer({ open, onOpenChange, token }: Props) {
             redimensionando && "bg-primary/60",
           )}
         />
-
-        {/* Botão-livro embutido na borda do bloco */}
-        <button
-          type="button"
-          onClick={() => onOpenChange(!open)}
-          aria-label={open ? "Fechar assistente de conhecimento" : "Base de conhecimento"}
-          title="Base de conhecimento"
-          className="absolute -left-9 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-l-xl border border-r-0 border-border bg-background text-muted-foreground shadow-md transition hover:text-foreground"
-        >
-          <BookOpen className="h-4 w-4" />
-        </button>
 
         <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-gradient">
