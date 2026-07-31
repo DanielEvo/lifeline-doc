@@ -42,6 +42,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createMyCategory } from "@/lib/api/categories.functions";
@@ -73,8 +75,13 @@ import {
 type View = "dia" | "semana" | "mes" | "ano" | "lista" | "custom";
 
 // px por minuto do canvas contínuo — 30min ≈ 48px, altura na mesma ordem de
-// grandeza do grid antigo de linha fixa (36px por slot).
-const PX_PER_MIN = 1.6;
+// grandeza do grid antigo de linha fixa (36px por slot). Zoom de densidade
+// (Parte 3, item 4) multiplica essa base por um fator 0,8x-2x escolhido pelo
+// médico — 0,8x deixa o dia inteiro mais compacto na tela, 2x amplia detalhe.
+const PX_PER_MIN_BASE = 1.6;
+const ZOOM_MIN = 0.8;
+const ZOOM_MAX = 2;
+const ZOOM_DEFAULT = 1;
 const MIN_BLOCK_PX = 22; // clamp mínimo — consulta de 15min não vira lasca ilegível
 const FALLBACK_COLOR = "#64748b"; // slate-500 — bloqueio sem cor/categoria ainda
 
@@ -241,14 +248,33 @@ function bloqueioAt(
   });
 }
 
+/** Parte 3, item 8: mesma lógica de countOverlappingConsultas (agenda.server.ts),
+ *  só que client-side e sobre o que já está carregado na tela — dá feedback
+ *  visual imediato (antes do submit); quem decide de verdade continua sendo
+ *  o servidor, que vê a agenda inteira, não só o dia renderizado. */
+function countOverlappingConsultasLocal(
+  dayAppts: Appointment[],
+  candidateStartMin: number,
+  durationMin: number,
+  excludeId?: string,
+): number {
+  const candidateEndMin = candidateStartMin + durationMin;
+  return dayAppts.filter((a) => {
+    if (a.kind !== "consulta" || a.id === excludeId) return false;
+    const { startMin, durationMin: d } = apptRange(a);
+    return startMin < candidateEndMin && startMin + d > candidateStartMin;
+  }).length;
+}
+
 function timeFromClientY(
   columnEl: HTMLElement,
   clientY: number,
   day: Date,
   settings: CalendarSettings,
+  pxPerMin: number,
 ): Date {
   const rect = columnEl.getBoundingClientRect();
-  const rawMin = (clientY - rect.top) / PX_PER_MIN;
+  const rawMin = (clientY - rect.top) / pxPerMin;
   // Movimentação é sempre livre num grid fino de SNAP_MIN — a duração de slot
   // configurada é só um default "soft" pra novos eventos, nunca uma trava.
   const snapped = Math.round(rawMin / SNAP_MIN) * SNAP_MIN;
@@ -280,6 +306,7 @@ const EMPTY_APPOINTMENTS: Appointment[] = [];
 const VIEW_KEY = "lifeline:agenda-view";
 const CURSOR_KEY = "lifeline:agenda-cursor";
 const CUSTOM_DAYS_KEY = "lifeline:agenda-custom-days";
+const ZOOM_KEY = "lifeline:agenda-zoom";
 
 /** Dispara os lembretes configurados (Appointment.lembretesMin) via toast
  *  enquanto o app está aberto — não existe infra de push/e-mail no projeto,
@@ -381,6 +408,9 @@ export function AppointmentCalendar({
   // Visão "N dias" — quantidade configurável (padrão 4, como o Google
   // Agenda oferece "3 dias"/"4 dias" fixos).
   const [customDayCount, setCustomDayCount] = useState(4);
+  // Parte 3, item 4: zoom de densidade — multiplica PX_PER_MIN_BASE.
+  const [zoom, setZoom] = useState(ZOOM_DEFAULT);
+  const pxPerMin = PX_PER_MIN_BASE * zoom;
 
   useEffect(() => {
     const savedView = window.localStorage.getItem(VIEW_KEY);
@@ -395,6 +425,9 @@ export function AppointmentCalendar({
 
     const savedDays = Number(window.localStorage.getItem(CUSTOM_DAYS_KEY));
     if (savedDays >= 2 && savedDays <= 14) setCustomDayCount(savedDays);
+
+    const savedZoom = Number(window.localStorage.getItem(ZOOM_KEY));
+    if (savedZoom >= ZOOM_MIN && savedZoom <= ZOOM_MAX) setZoom(savedZoom);
   }, []);
 
   useEffect(() => window.localStorage.setItem(VIEW_KEY, view), [view]);
@@ -403,6 +436,7 @@ export function AppointmentCalendar({
     () => window.localStorage.setItem(CUSTOM_DAYS_KEY, String(customDayCount)),
     [customDayCount],
   );
+  useEffect(() => window.localStorage.setItem(ZOOM_KEY, String(zoom)), [zoom]);
 
   // BUG-2: query dedicada, desacoplada de ["workspace"] — o calendário busca
   // seus próprios agendamentos, escopados à janela visível (evita o N+1 de
@@ -630,21 +664,53 @@ export function AppointmentCalendar({
       return { prev };
     },
     onSuccess: (r, _v, ctx) => {
+      // Sucesso já foi comunicado na hora do clique (excluirComDesfazer) —
+      // aqui só corrige se a exclusão de verdade (pós-janela de desfazer)
+      // falhar depois de já ter dito "removido" pro médico.
       if (!r.ok) {
         if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
-        return toast.error("Não consegui remover o evento.");
+        toast.error("Não consegui remover o evento — ele voltou pra agenda.");
       }
-      toast.success(
-        r.deletedCount > 1 ? `${r.deletedCount} eventos removidos.` : "Evento removido.",
-      );
-      setEditingId(null);
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
-      toast.error("Não consegui remover o evento.");
+      toast.error("Não consegui remover o evento — ele voltou pra agenda.");
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
   });
+
+  // Parte 3, item 1: "desfazer" de verdade pra exclusão — em vez de excluir
+  // na hora, remove otimisticamente da tela e só chama o servidor depois da
+  // janela de 5s (se o médico não desfizer). Diferente de mover/redimensionar
+  // (que já efetivaram e só "desfazem" invertendo a mutação): aqui a ação
+  // destrutiva ainda nem aconteceu quando o toast aparece.
+  const pendingDeleteRef = useRef<{
+    timeoutId: ReturnType<typeof setTimeout>;
+    prev: Appointment[] | undefined;
+  } | null>(null);
+
+  const excluirComDesfazer = (id: string, scope: RecurrenceScope) => {
+    const prev = qc.getQueryData<Appointment[]>(apptsKey);
+    qc.setQueryData<Appointment[]>(apptsKey, (old) => (old ?? []).filter((a) => a.id !== id));
+    setEditingId(null);
+    const timeoutId = setTimeout(() => {
+      pendingDeleteRef.current = null;
+      excluirEvento.mutate({ id, scope });
+    }, 5000);
+    pendingDeleteRef.current = { timeoutId, prev };
+    toast.success("Evento removido.", {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          if (!pendingDeleteRef.current) return;
+          clearTimeout(pendingDeleteRef.current.timeoutId);
+          qc.setQueryData(apptsKey, pendingDeleteRef.current.prev);
+          pendingDeleteRef.current = null;
+        },
+      },
+      duration: 5000,
+    });
+  };
 
   // Reabre o editor completo (diferente de atualizarTiming, que só cuida de
   // dateTime/durationMin via drag/resize) — fora do escopo do otimistic
@@ -716,10 +782,40 @@ export function AppointmentCalendar({
           v.durationMin !== undefined ? "Não consegui redimensionar." : "Não consegui remarcar.",
         );
       }
+      // Desfazer (Parte 3, item 1): mover/redimensionar já efetiva na hora
+      // (nada é destruído), então desfazer é só chamar a mesma mutação de
+      // volta com o valor original, capturado no snapshot do onMutate.
+      const original = ctx?.prev?.find((a) => a.id === v.id);
+      const undoAction = original
+        ? {
+            label: "Desfazer",
+            onClick: () =>
+              atualizarTiming.mutate(
+                v.durationMin !== undefined
+                  ? { id: v.id, durationMin: original.durationMin ?? 30 }
+                  : { id: v.id, dateTime: original.dateTime },
+              ),
+          }
+        : undefined;
+
+      // Parte 3, item 7: mover um evento que já passou não é bloqueado (o
+      // médico pode ter um motivo real), mas ganha um aviso mais visível e
+      // uma janela maior de "desfazer" — evita que um arrasto sem querer em
+      // cima de uma consulta antiga passe despercebido.
+      if (v.dateTime !== undefined && original && isPastAppt(original)) {
+        toast.warning("Você moveu um evento que já tinha passado.", {
+          description: "Se foi sem querer, dá pra desfazer.",
+          action: undoAction,
+          duration: 8000,
+        });
+        return;
+      }
+
       toast.success(
         v.durationMin !== undefined
           ? `Duração ajustada para ${v.durationMin}min.`
           : `Remarcado para ${new Date(r.appointment.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+        undoAction ? { action: undoAction, duration: 5000 } : undefined,
       );
     },
     onError: (_e, _v, ctx) => {
@@ -909,83 +1005,100 @@ export function AppointmentCalendar({
               onChange={persistSettings}
               customDayCount={customDayCount}
               onCustomDayCountChange={setCustomDayCount}
+              zoom={zoom}
+              onZoomChange={setZoom}
             />
           </div>
         </div>
 
         {/* Corpo */}
         <div className="p-2">
-          {view === "dia" && (
-            <TimeGrid
-              days={[cursor]}
-              settings={settings}
-              appointments={visibleAppointments}
-              byId={byId}
-              onDropPatient={openConfirm}
-              onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
-              onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
-              onOpenEditor={setEditingId}
-              onSlotClick={openEmptySlot}
-            />
-          )}
-          {view === "semana" && (
-            <TimeGrid
-              days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
-              settings={settings}
-              appointments={visibleAppointments}
-              byId={byId}
-              onDropPatient={openConfirm}
-              onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
-              onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
-              onOpenEditor={setEditingId}
-              onSlotClick={openEmptySlot}
-            />
-          )}
-          {view === "custom" && (
-            <TimeGrid
-              days={Array.from({ length: customDayCount }, (_, i) => addDays(cursor, i))}
-              settings={settings}
-              appointments={visibleAppointments}
-              byId={byId}
-              onDropPatient={openConfirm}
-              onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
-              onResizeAppointment={(id, durationMin) => atualizarTiming.mutate({ id, durationMin })}
-              onOpenEditor={setEditingId}
-              onSlotClick={openEmptySlot}
-            />
-          )}
-          {view === "mes" && (
-            <MonthGrid
-              cursor={cursor}
-              appointments={visibleAppointments}
-              byId={byId}
-              onPickDay={(d) => {
-                setCursor(d);
-                setView("dia");
-              }}
-            />
-          )}
-          {view === "ano" && (
-            <YearGrid
-              cursor={cursor}
-              appointments={visibleAppointments}
-              onPickDay={(d) => {
-                setCursor(d);
-                setView("dia");
-              }}
-              onPickMonth={(d) => {
-                setCursor(d);
-                setView("mes");
-              }}
-            />
-          )}
-          {view === "lista" && (
-            <ListView
-              cursor={cursor}
-              appointments={visibleAppointments}
-              byId={byId}
-              onOpenEditor={setEditingId}
-            />
+          {apptsQuery.isLoading && !apptsQuery.data ? (
+            <AgendaSkeleton />
+          ) : (
+            <>
+              {view === "dia" && (
+                <TimeGrid
+                  days={[cursor]}
+                  settings={settings}
+                  appointments={visibleAppointments}
+                  byId={byId}
+                  pxPerMin={pxPerMin}
+                  onDropPatient={openConfirm}
+                  onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
+                  onResizeAppointment={(id, durationMin) =>
+                    atualizarTiming.mutate({ id, durationMin })
+                  }
+                  onOpenEditor={setEditingId}
+                  onSlotClick={openEmptySlot}
+                />
+              )}
+              {view === "semana" && (
+                <TimeGrid
+                  days={Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(cursor), i))}
+                  settings={settings}
+                  appointments={visibleAppointments}
+                  byId={byId}
+                  pxPerMin={pxPerMin}
+                  onDropPatient={openConfirm}
+                  onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
+                  onResizeAppointment={(id, durationMin) =>
+                    atualizarTiming.mutate({ id, durationMin })
+                  }
+                  onOpenEditor={setEditingId}
+                  onSlotClick={openEmptySlot}
+                />
+              )}
+              {view === "custom" && (
+                <TimeGrid
+                  days={Array.from({ length: customDayCount }, (_, i) => addDays(cursor, i))}
+                  settings={settings}
+                  appointments={visibleAppointments}
+                  byId={byId}
+                  pxPerMin={pxPerMin}
+                  onDropPatient={openConfirm}
+                  onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
+                  onResizeAppointment={(id, durationMin) =>
+                    atualizarTiming.mutate({ id, durationMin })
+                  }
+                  onOpenEditor={setEditingId}
+                  onSlotClick={openEmptySlot}
+                />
+              )}
+              {view === "mes" && (
+                <MonthGrid
+                  cursor={cursor}
+                  appointments={visibleAppointments}
+                  byId={byId}
+                  onPickDay={(d) => {
+                    setCursor(d);
+                    setView("dia");
+                  }}
+                />
+              )}
+              {view === "ano" && (
+                <YearGrid
+                  cursor={cursor}
+                  appointments={visibleAppointments}
+                  onPickDay={(d) => {
+                    setCursor(d);
+                    setView("dia");
+                  }}
+                  onPickMonth={(d) => {
+                    setCursor(d);
+                    setView("mes");
+                  }}
+                />
+              )}
+              {view === "lista" && (
+                <ListView
+                  cursor={cursor}
+                  appointments={visibleAppointments}
+                  byId={byId}
+                  onOpenEditor={setEditingId}
+                />
+              )}
+            </>
           )}
         </div>
 
@@ -1204,7 +1317,7 @@ export function AppointmentCalendar({
             onClose={() => setEditingId(null)}
             onOpenPatient={onOpenPatient}
             onSave={(patch, scope) => editarEvento.mutate({ id: editingAppt.id, scope, ...patch })}
-            onDelete={(scope) => excluirEvento.mutate({ id: editingAppt.id, scope })}
+            onDelete={(scope) => excluirComDesfazer(editingAppt.id, scope)}
             onStatusChange={(status) => atualizarStatus.mutate({ id: editingAppt.id, status })}
             saving={editarEvento.isPending}
             deleting={excluirEvento.isPending}
@@ -2041,11 +2154,15 @@ function SettingsPopover({
   onChange,
   customDayCount,
   onCustomDayCountChange,
+  zoom,
+  onZoomChange,
 }: {
   settings: CalendarSettings;
   onChange: (s: CalendarSettings) => void;
   customDayCount: number;
   onCustomDayCountChange: (n: number) => void;
+  zoom: number;
+  onZoomChange: (n: number) => void;
 }) {
   return (
     <Popover>
@@ -2140,6 +2257,21 @@ function SettingsPopover({
             className="h-8 text-xs"
           />
         </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Zoom (densidade)</Label>
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {zoom.toFixed(1)}x
+            </span>
+          </div>
+          <Slider
+            value={[zoom]}
+            onValueChange={([v]) => onZoomChange(v)}
+            min={ZOOM_MIN}
+            max={ZOOM_MAX}
+            step={0.1}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -2152,11 +2284,28 @@ function SettingsPopover({
 
 type Tick = { hour: number; minute: number; isHour: boolean };
 
+/** Parte 3, item 12: só aparece no primeiro carregamento (sem cache ainda) —
+ *  evita que "sem eventos ainda" pareça igual a "carregando" e evita salto
+ *  de layout (altura parecida com a do grid real, max-h-[70vh]). */
+function AgendaSkeleton() {
+  return (
+    <div className="max-h-[70vh] space-y-2 overflow-hidden p-2">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Skeleton className="h-3 w-10 shrink-0" />
+          <Skeleton className="h-8 flex-1" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TimeGrid({
   days,
   settings,
   appointments,
   byId,
+  pxPerMin,
   onDropPatient,
   onMoveAppointment,
   onResizeAppointment,
@@ -2167,6 +2316,7 @@ function TimeGrid({
   settings: CalendarSettings;
   appointments: Appointment[];
   byId: Map<string, Patient>;
+  pxPerMin: number;
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
@@ -2201,7 +2351,7 @@ function TimeGrid({
     return arr;
   }, [gridSettings.startHour, gridSettings.endHour, gridSettings.slotMinutes]);
 
-  const canvasHeightPx = (gridSettings.endHour - gridSettings.startHour) * 60 * PX_PER_MIN;
+  const canvasHeightPx = (gridSettings.endHour - gridSettings.startHour) * 60 * pxPerMin;
 
   const { timedByDay, allDayByDay } = useMemo(() => {
     const timed = new Map<string, Appointment[]>();
@@ -2244,10 +2394,10 @@ function TimeGrid({
       }
     }
     if (anchorMin === null) return;
-    const anchorPx = (anchorMin - gridSettings.startHour * 60) * PX_PER_MIN;
+    const anchorPx = (anchorMin - gridSettings.startHour * 60) * pxPerMin;
     el.scrollTop = Math.max(0, anchorPx - el.clientHeight / 3);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reancora quando o conjunto de dias exibidos muda, não a cada tick/re-render
-  }, [daysKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reancora quando o conjunto de dias exibidos ou o zoom mudam, não a cada tick/re-render
+  }, [daysKey, pxPerMin]);
 
   const AUTOSCROLL_EDGE_PX = 40;
   const AUTOSCROLL_STEP_PX = 12;
@@ -2306,17 +2456,19 @@ function TimeGrid({
         onDragOver={(e) => autoScrollNearEdge(e.clientY)}
         onPointerMove={(e) => autoScrollNearEdge(e.clientY)}
       >
-        <TimeGutter ticks={ticks} settings={gridSettings} />
+        <TimeGutter ticks={ticks} settings={gridSettings} pxPerMin={pxPerMin} />
         {days.map((d) => (
           <DayColumn
             key={ymd(d)}
             day={d}
             isToday={ymd(d) === todayKey}
             settings={gridSettings}
+            officeHours={settings}
             timedAppts={timedByDay.get(ymd(d)) ?? []}
             byId={byId}
             ticks={ticks}
             canvasHeightPx={canvasHeightPx}
+            pxPerMin={pxPerMin}
             onDropPatient={onDropPatient}
             onMoveAppointment={onMoveAppointment}
             onResizeAppointment={onResizeAppointment}
@@ -2329,7 +2481,15 @@ function TimeGrid({
   );
 }
 
-function TimeGutter({ ticks, settings }: { ticks: Tick[]; settings: CalendarSettings }) {
+function TimeGutter({
+  ticks,
+  settings,
+  pxPerMin,
+}: {
+  ticks: Tick[];
+  settings: CalendarSettings;
+  pxPerMin: number;
+}) {
   return (
     <div className="relative w-14 shrink-0">
       {ticks
@@ -2338,7 +2498,7 @@ function TimeGutter({ ticks, settings }: { ticks: Tick[]; settings: CalendarSett
           <div
             key={t.hour}
             className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground"
-            style={{ top: (t.hour - settings.startHour) * 60 * PX_PER_MIN }}
+            style={{ top: (t.hour - settings.startHour) * 60 * pxPerMin }}
           >
             {String(t.hour).padStart(2, "0")}:00
           </div>
@@ -2392,6 +2552,8 @@ function AllDayCell({
           <div
             key={a.id}
             draggable
+            role="button"
+            tabIndex={0}
             onDragStart={(e) => {
               e.dataTransfer.setData(DRAG_APPT, a.id);
               e.dataTransfer.effectAllowed = "move";
@@ -2400,7 +2562,13 @@ function AllDayCell({
               e.stopPropagation();
               onOpenEditor(a.id);
             }}
-            className={`flex cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white active:cursor-grabbing ${isPastAppt(a) ? "opacity-50" : ""}`}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenEditor(a.id);
+              }
+            }}
+            className={`flex cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing ${isPastAppt(a) ? "opacity-50" : ""}`}
             style={{ backgroundColor: color }}
             title={`${a.label ?? patient?.nome ?? ""} — arraste pra mover de dia`}
           >
@@ -2417,10 +2585,12 @@ function DayColumn({
   day,
   isToday,
   settings,
+  officeHours,
   timedAppts,
   byId,
   ticks,
   canvasHeightPx,
+  pxPerMin,
   onDropPatient,
   onMoveAppointment,
   onResizeAppointment,
@@ -2430,10 +2600,14 @@ function DayColumn({
   day: Date;
   isToday: boolean;
   settings: CalendarSettings;
+  // Parte 3, item 6: expediente configurado de verdade (antes do grid
+  // esticar pra caber evento fora de hora) — usado só pra sombrear/avisar.
+  officeHours: CalendarSettings;
   timedAppts: Appointment[];
   byId: Map<string, Patient>;
   ticks: Tick[];
   canvasHeightPx: number;
+  pxPerMin: number;
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
@@ -2442,6 +2616,9 @@ function DayColumn({
 }) {
   const colRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
+  // Parte 3, item 8: preview de conflito de paralelismo (borda âmbar) antes
+  // do submit — cálculo local, só um indicativo rápido.
+  const [hoverConflict, setHoverConflict] = useState(false);
   // Criar arrastando: clique simples (delta abaixo do limiar) cria com
   // duração default; arrastar desenha a duração ao vivo, snapada ao slot.
   const [dragCreate, setDragCreate] = useState<{ startY: number; currentY: number } | null>(null);
@@ -2473,11 +2650,22 @@ function DayColumn({
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nowWithinHours =
     isToday && nowMin >= settings.startHour * 60 && nowMin < settings.endHour * 60;
-  const nowTop = (nowMin - settings.startHour * 60) * PX_PER_MIN;
+  const nowTop = (nowMin - settings.startHour * 60) * pxPerMin;
 
   const resolveDrop = (e: React.DragEvent): Date | null => {
     if (!colRef.current) return null;
-    return timeFromClientY(colRef.current, e.clientY, day, settings);
+    return timeFromClientY(colRef.current, e.clientY, day, settings, pxPerMin);
+  };
+
+  // Parte 3, item 6: fora do expediente NUNCA bloqueia — só avisa. O médico
+  // decide; o sistema só sinaliza que aquele horário não é o "normal" dele.
+  const warnIfOutsideOfficeHours = (candidate: Date) => {
+    const candidateMin = candidate.getHours() * 60 + candidate.getMinutes();
+    if (candidateMin < officeHours.startHour * 60 || candidateMin >= officeHours.endHour * 60) {
+      toast.warning(
+        `Fora do seu expediente configurado (${officeHours.startHour}h–${officeHours.endHour}h) — agendado mesmo assim.`,
+      );
+    }
   };
 
   const dragPreview = useMemo(() => {
@@ -2485,13 +2673,39 @@ function DayColumn({
     const rect = colRef.current.getBoundingClientRect();
     const top = Math.min(dragCreate.startY, dragCreate.currentY) - rect.top;
     const height = Math.max(Math.abs(dragCreate.currentY - dragCreate.startY), MIN_BLOCK_PX);
-    return { top: Math.max(0, top), height };
-  }, [dragCreate]);
+    const startCandidate = timeFromClientY(
+      colRef.current,
+      Math.min(dragCreate.startY, dragCreate.currentY),
+      day,
+      settings,
+      pxPerMin,
+    );
+    const candidateStartMin = startCandidate.getHours() * 60 + startCandidate.getMinutes();
+    const durationMin = Math.max(SNAP_MIN, height / pxPerMin);
+    const conflict =
+      countOverlappingConsultasLocal(timedAppts, candidateStartMin, durationMin) + 1 >
+      settings.maxParallel;
+    return { top: Math.max(0, top), height, conflict };
+  }, [dragCreate, day, settings, pxPerMin, timedAppts]);
+
+  // Parte 3, item 6: sombrear as horas fora do expediente configurado que só
+  // aparecem porque um evento fora de hora esticou o grid (settings aqui já
+  // vem esticado; officeHours é o valor original do médico).
+  const beforeHoursPx =
+    officeHours.startHour > settings.startHour
+      ? (officeHours.startHour - settings.startHour) * 60 * pxPerMin
+      : 0;
+  const afterHoursPx =
+    officeHours.endHour < settings.endHour
+      ? (settings.endHour - officeHours.endHour) * 60 * pxPerMin
+      : 0;
 
   return (
     <div
       ref={colRef}
-      className={`relative min-w-[120px] flex-1 border-l border-border transition ${hover ? "bg-primary/5" : ""}`}
+      className={`relative min-w-[120px] flex-1 border-l border-border transition ${
+        hoverConflict ? "bg-amber-500/10" : hover ? "bg-primary/5" : ""
+      }`}
       style={{ height: canvasHeightPx }}
       onDragOver={(e) => {
         // Preview otimista: dataTransfer.getData() não é legível durante
@@ -2502,10 +2716,19 @@ function DayColumn({
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setHover(true);
+        const candidateMin = candidate.getHours() * 60 + candidate.getMinutes();
+        setHoverConflict(
+          countOverlappingConsultasLocal(timedAppts, candidateMin, SNAP_MIN) + 1 >
+            settings.maxParallel,
+        );
       }}
-      onDragLeave={() => setHover(false)}
+      onDragLeave={() => {
+        setHover(false);
+        setHoverConflict(false);
+      }}
       onDrop={(e) => {
         setHover(false);
+        setHoverConflict(false);
         const candidate = resolveDrop(e);
         if (!candidate) return;
         const apptId = e.dataTransfer.getData(DRAG_APPT);
@@ -2518,6 +2741,7 @@ function DayColumn({
           toast.error(`Esse horário está bloqueado por "${blocking.label || "Bloqueado"}".`);
           return;
         }
+        warnIfOutsideOfficeHours(candidate);
         const iso = toIsoLocal(candidate);
         if (apptId) {
           onMoveAppointment(apptId, iso);
@@ -2542,12 +2766,13 @@ function DayColumn({
         const dragThresholdPx = 8;
         const startY = Math.min(dragCreate.startY, e.clientY);
         setDragCreate(null);
-        const startCandidate = timeFromClientY(colRef.current, startY, day, settings);
+        const startCandidate = timeFromClientY(colRef.current, startY, day, settings, pxPerMin);
+        warnIfOutsideOfficeHours(startCandidate);
         if (deltaPx < dragThresholdPx) {
           onSlotClick(toIsoLocal(startCandidate)); // clique simples — duração default
           return;
         }
-        const rawMin = deltaPx / PX_PER_MIN;
+        const rawMin = deltaPx / pxPerMin;
         const snappedMin = Math.max(SNAP_MIN, Math.round(rawMin / SNAP_MIN) * SNAP_MIN);
         onSlotClick(toIsoLocal(startCandidate), snapToDurationOption(snappedMin));
       }}
@@ -2557,15 +2782,28 @@ function DayColumn({
         // ser o único jeito de agendar em paralelo).
         e.preventDefault();
         if (!colRef.current) return;
-        const candidate = timeFromClientY(colRef.current, e.clientY, day, settings);
+        const candidate = timeFromClientY(colRef.current, e.clientY, day, settings, pxPerMin);
         onSlotClick(toIsoLocal(candidate));
       }}
     >
+      {beforeHoursPx > 0 && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 bg-muted/50"
+          style={{ height: beforeHoursPx }}
+        />
+      )}
+      {afterHoursPx > 0 && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 bg-muted/50"
+          style={{ height: afterHoursPx }}
+        />
+      )}
+
       {ticks.map((t, i) => (
         <div
           key={i}
           className={`pointer-events-none absolute inset-x-0 border-t ${t.isHour ? "border-border" : "border-border/40"}`}
-          style={{ top: (t.hour - settings.startHour) * 60 * PX_PER_MIN + t.minute * PX_PER_MIN }}
+          style={{ top: (t.hour - settings.startHour) * 60 * pxPerMin + t.minute * pxPerMin }}
         />
       ))}
 
@@ -2581,7 +2819,11 @@ function DayColumn({
 
       {dragPreview && (
         <div
-          className="pointer-events-none absolute inset-x-1 z-10 rounded-md border-2 border-dashed border-primary bg-primary/10"
+          className={`pointer-events-none absolute inset-x-1 z-10 rounded-md border-2 border-dashed ${
+            dragPreview.conflict
+              ? "border-amber-500 bg-amber-500/10"
+              : "border-primary bg-primary/10"
+          }`}
           style={{ top: dragPreview.top, height: dragPreview.height }}
         />
       )}
@@ -2591,21 +2833,23 @@ function DayColumn({
           key={appt.id}
           appt={appt}
           patient={appt.patientId ? byId.get(appt.patientId) : undefined}
-          top={(startMin - settings.startHour * 60) * PX_PER_MIN}
-          height={Math.max(durationMin * PX_PER_MIN, MIN_BLOCK_PX)}
+          top={(startMin - settings.startHour * 60) * pxPerMin}
+          height={Math.max(durationMin * pxPerMin, MIN_BLOCK_PX)}
           col={col}
           totalCols={Math.min(totalCols, MAX_VISIBLE_COLS)}
+          pxPerMin={pxPerMin}
           onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
           onAddParallel={onSlotClick}
+          onMove={onMoveAppointment}
         />
       ))}
 
       {overflowGroups.map((group) => (
         <OverflowChip
           key={group.items[0].clusterId}
-          top={(group.startMin - settings.startHour * 60) * PX_PER_MIN}
-          height={Math.max((group.endMin - group.startMin) * PX_PER_MIN, MIN_BLOCK_PX)}
+          top={(group.startMin - settings.startHour * 60) * pxPerMin}
+          height={Math.max((group.endMin - group.startMin) * pxPerMin, MIN_BLOCK_PX)}
           col={MAX_VISIBLE_COLS - 1}
           totalCols={MAX_VISIBLE_COLS}
           items={group.items.map((i) => i.appt)}
@@ -2683,9 +2927,11 @@ function EventBlock({
   height,
   col,
   totalCols,
+  pxPerMin,
   onAddParallel,
   onOpenEditor,
   onResize,
+  onMove,
 }: {
   appt: Appointment;
   patient: Patient | undefined;
@@ -2693,9 +2939,11 @@ function EventBlock({
   height: number;
   col: number;
   totalCols: number;
+  pxPerMin: number;
   onAddParallel: (dateTime: string, durationMin?: number) => void;
   onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
+  onMove: (id: string, dateTime: string) => void;
 }) {
   const [resizeDeltaPx, setResizeDeltaPx] = useState<number | null>(null);
   const startYRef = useRef(0);
@@ -2723,6 +2971,8 @@ function EventBlock({
   return (
     <div
       draggable={!isBloqueio}
+      role="button"
+      tabIndex={0}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_APPT, appt.id);
         e.dataTransfer.setData(DRAG_APPT_DURATION, String(appt.durationMin ?? 30));
@@ -2731,6 +2981,22 @@ function EventBlock({
       onClick={(e) => {
         e.stopPropagation();
         onOpenEditor(appt.id);
+      }}
+      onKeyDown={(e) => {
+        // Parte 3, item 13: teclado — Enter/Espaço abre o editor, Shift+Seta
+        // move em passos de SNAP_MIN (mesma granularidade fina do drag).
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenEditor(appt.id);
+          return;
+        }
+        if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && !isBloqueio) {
+          e.preventDefault();
+          const deltaMin = e.key === "ArrowUp" ? -SNAP_MIN : SNAP_MIN;
+          const next = new Date(appt.dateTime);
+          next.setMinutes(next.getMinutes() + deltaMin);
+          onMove(appt.id, toIsoLocal(next));
+        }
       }}
       onContextMenu={(e) => {
         // BUG-3: "+ paralelo" — botão direito no próprio bloco também abre a
@@ -2744,9 +3010,9 @@ function EventBlock({
       title={
         isBloqueio
           ? `${appt.label || "Bloqueado"} — clique pra editar`
-          : `${patient?.nome ?? ""} · ${formatHourBR(appt.dateTime)}${appt.note ? ` · ${appt.note}` : ""} — clique pra editar, arraste pra remarcar, puxe a borda de baixo pra mudar a duração`
+          : `${patient?.nome ?? ""} · ${formatHourBR(appt.dateTime)}${appt.note ? ` · ${appt.note}` : ""} — clique pra editar, arraste pra remarcar, puxe a borda de baixo pra mudar a duração, Shift+seta pra mover`
       }
-      className={`group absolute cursor-pointer overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition ${
+      className={`group absolute cursor-pointer overflow-hidden rounded-md px-1.5 py-1 text-[10px] leading-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         isBloqueio ? "bg-slate-200 dark:bg-slate-800/70" : "active:cursor-grabbing"
       } ${isPastAppt(appt) ? "opacity-50" : ""} ${
         !isBloqueio && appt.status === "confirmada" ? "ring-1 ring-inset ring-primary/50" : ""
@@ -2815,7 +3081,7 @@ function EventBlock({
           }}
           onPointerUp={() => {
             if (resizeDeltaPx === null) return;
-            const deltaMin = resizeDeltaPx / PX_PER_MIN;
+            const deltaMin = resizeDeltaPx / pxPerMin;
             const snapped = Math.max(
               SNAP_MIN,
               Math.round((baseDuration + deltaMin) / SNAP_MIN) * SNAP_MIN,
