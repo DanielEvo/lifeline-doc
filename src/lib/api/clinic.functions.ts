@@ -75,6 +75,7 @@ import {
   listEvolutions,
   prescribeEvolution,
   prescribeEvolutionMemed,
+  cancelEvolutionPrescription,
   sealEvolution,
   updateEvolution,
   updateEvolutionNote,
