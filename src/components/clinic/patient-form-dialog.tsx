@@ -303,11 +303,9 @@ export function PatientFormDialog({
                   </div>
                 )
               ) : (
-                <GlobalLinkSearch
-                  token={token}
-                  patientId={patient.id}
-                  onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
-                />
+                <p className="text-[11px] text-muted-foreground">
+                  Sem identidade LifeLine vinculada.
+                </p>
               )}
             </div>
           </div>
