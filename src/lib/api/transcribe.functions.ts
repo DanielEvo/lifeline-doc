@@ -18,14 +18,17 @@ import { callLovableChat } from "../knowledge-chat.functions";
 /** Monta o system prompt pedindo um JSON com uma chave por seção — índice
  *  numérico ("s0", "s1", …) como chave interna pra não depender de
  *  acento/case do label; o label original é reanexado depois em `blocks`. */
-function buildSectionsSystem(sections: string[]): string {
+function buildSectionsSystem(sections: string[], templateContent: string): string {
   const keys = sections.map((_, i) => `s${i}`);
   const mapping = sections.map((label, i) => `${keys[i]} = "${label}"`).join("; ");
+  const templateBlock = templateContent.trim()
+    ? `\n\nO médico escolheu este template — use-o como instrução de estrutura e de estilo, respeitando qualquer orientação escrita nele:\n"""\n${templateContent.trim()}\n"""`
+    : "";
   return `Você resume transcrições de consultas médicas em português do Brasil, organizando o conteúdo nas seções de um template escolhido pelo médico.
 Devolva SOMENTE um JSON válido (sem markdown, sem texto fora do JSON) com exatamente estas chaves, nesta ordem: ${keys.join(", ")}.
 Cada chave corresponde a uma seção do template: ${mapping}.
 Para cada seção, extraia da transcrição só o que foi efetivamente dito e é relevante para aquele cabeçalho.
-Se uma seção não tiver informação correspondente na transcrição, devolva string vazia "" — nunca invente conteúdo.`;
+Se uma seção não tiver informação correspondente na transcrição, devolva string vazia "" — nunca invente conteúdo.${templateBlock}`;
 }
 
 function extractSectionsJson(
