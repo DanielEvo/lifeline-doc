@@ -5,15 +5,23 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IdCard, Loader2, Save, Stethoscope } from "lucide-react";
+import { IdCard, Loader2, MapPin, Save, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getDoctorProfile, saveMemedProfile } from "@/lib/api/clinic.functions";
 import { useClinic } from "@/lib/clinic-context";
+import {
+  ESPECIALIDADES,
+  UFS,
+  buscarCep,
+  formatarCep,
+  municipiosDaUf,
+} from "@/lib/br-locations";
 
 export const Route = createFileRoute("/app/perfil")({
   head: () => ({
@@ -36,10 +44,6 @@ export const Route = createFileRoute("/app/perfil")({
   component: PerfilPage,
 });
 
-const UFS = [
-  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
-];
-
 const VAZIO = {
   crm: "",
   crmUf: "",
@@ -49,6 +53,7 @@ const VAZIO = {
   telefoneMedico: "",
   localAtendimento: "",
 };
+
 
 function PerfilPage() {
   const { token, nome, email } = useClinic();
@@ -114,6 +119,40 @@ function PerfilPage() {
       setForm((f) => ({ ...f, [k]: e.target.value })),
   });
 
+  // Municípios da UF escolhida (IBGE) para a busca de cidade.
+  const municipios = useQuery({
+    queryKey: ["ibge-municipios", form.crmUf],
+    queryFn: () => municipiosDaUf(form.crmUf),
+    enabled: form.crmUf.length === 2,
+    staleTime: 24 * 60 * 60_000,
+  });
+
+  // Busca do local de atendimento por CEP.
+  const [cep, setCep] = useState("");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  async function procurarCep() {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return toast.error("Informe um CEP com 8 dígitos.");
+    setBuscandoCep(true);
+    try {
+      const end = await buscarCep(digits);
+      if (!end) return toast.error("CEP não encontrado.");
+      const endereco = [end.logradouro, end.bairro].filter(Boolean).join(", ");
+      setForm((f) => ({
+        ...f,
+        localAtendimento: [endereco, `${end.cidade}/${end.uf}`].filter(Boolean).join(" — "),
+        crmCidade: f.crmCidade || end.cidade,
+        crmUf: f.crmUf || end.uf,
+      }));
+      toast.success("Endereço preenchido pelo CEP — complete o número e a sala.");
+    } catch {
+      toast.error("Não consegui consultar o CEP agora.");
+    } finally {
+      setBuscandoCep(false);
+    }
+  }
+
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       <header className="space-y-1">
@@ -140,20 +179,18 @@ function PerfilPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="crmUf">UF do CRM</Label>
-            <select
+            <SearchableSelect
               id="crmUf"
               value={form.crmUf}
-              onChange={(e) => setForm((f) => ({ ...f, crmUf: e.target.value }))}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Selecione…</option>
-              {UFS.map((uf) => (
-                <option key={uf} value={uf}>
-                  {uf}
-                </option>
-              ))}
-            </select>
+              onChange={(uf) => setForm((f) => ({ ...f, crmUf: uf, crmCidade: "" }))}
+              options={UFS}
+              allowCustom={false}
+              placeholder="Selecione a UF…"
+              searchPlaceholder="Buscar UF…"
+              emptyText="UF não encontrada."
+            />
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="cpf">CPF</Label>
             <Input
@@ -166,11 +203,14 @@ function PerfilPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="especialidade">Especialidade</Label>
-            <Input
+            <SearchableSelect
               id="especialidade"
-              placeholder="Clínica médica"
-              maxLength={80}
-              {...campo("especialidade")}
+              value={form.especialidade}
+              onChange={(v) => setForm((f) => ({ ...f, especialidade: v }))}
+              options={ESPECIALIDADES}
+              placeholder="Selecione a especialidade…"
+              searchPlaceholder="Buscar especialidade…"
+              emptyText="Digite para usar uma especialidade própria."
             />
           </div>
         </CardContent>
@@ -187,7 +227,19 @@ function PerfilPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="cidade">Cidade de atuação</Label>
-            <Input id="cidade" placeholder="São Paulo" maxLength={80} {...campo("crmCidade")} />
+            <SearchableSelect
+              id="cidade"
+              value={form.crmCidade}
+              onChange={(v) => setForm((f) => ({ ...f, crmCidade: v }))}
+              options={municipios.data ?? []}
+              loading={municipios.isFetching}
+              disabled={form.crmUf.length !== 2}
+              placeholder={
+                form.crmUf.length === 2 ? "Selecione a cidade…" : "Escolha a UF primeiro"
+              }
+              searchPlaceholder="Buscar cidade…"
+              emptyText="Digite para usar outra cidade."
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="telefone">Telefone do consultório</Label>
@@ -199,6 +251,38 @@ function PerfilPage() {
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="cep">CEP do consultório</Label>
+            <div className="flex gap-2">
+              <Input
+                id="cep"
+                placeholder="00000-000"
+                inputMode="numeric"
+                value={cep}
+                onChange={(e) => setCep(formatarCep(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void procurarCep();
+                  }
+                }}
+                className="max-w-[160px]"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void procurarCep()}
+                disabled={buscandoCep}
+              >
+                {buscandoCep ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <MapPin className="mr-2 h-4 w-4" />
+                )}
+                Buscar endereço
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="local">Local de atendimento</Label>
             <Input
               id="local"
@@ -207,9 +291,11 @@ function PerfilPage() {
               {...campo("localAtendimento")}
             />
             <p className="text-[11px] text-muted-foreground">
-              Sem preenchimento, a receita usa "Consultório {nome}".
+              Busque pelo CEP para preencher o endereço e complete com número e sala. Sem
+              preenchimento, a receita usa "Consultório {nome}".
             </p>
           </div>
+
         </CardContent>
       </Card>
 
