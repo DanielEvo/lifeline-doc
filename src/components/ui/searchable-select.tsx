@@ -89,7 +89,7 @@ export function SearchableSelect({
             value={query}
             onValueChange={setQuery}
           />
-          <CommandList className="max-h-60">
+          <CommandList className="max-h-[150px]">
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
               {custom && (
