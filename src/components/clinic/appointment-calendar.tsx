@@ -91,6 +91,16 @@ const DRAG_APPT = "application/x-appointment-id";
 // BUG-5: precisa da duração do evento arrastado no onDrop pra checar
 // interseção real com bloqueios, não só o instante inicial.
 const DRAG_APPT_DURATION = "application/x-appointment-duration";
+/** Estado efêmero do arrasto HTML5 (dataTransfer não é legível no dragover).
+ *  - grabOffsetPx: onde dentro do card o médico "pegou" — o topo do evento
+ *    deve cair nessa mesma distância acima do cursor, senão o horário salta.
+ *  - lastY: alguns navegadores entregam clientY = 0 no evento de drop; sem
+ *    esse fallback o cálculo vira minuto negativo e o card ia parar no início
+ *    do expediente (ex.: soltar às 11h e o card aparecer às 5h). */
+const dragState: { grabOffsetPx: number; lastY: number | null } = {
+  grabOffsetPx: 0,
+  lastY: null,
+};
 
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = [
@@ -2557,6 +2567,12 @@ function AllDayCell({
             onDragStart={(e) => {
               e.dataTransfer.setData(DRAG_APPT, a.id);
               e.dataTransfer.effectAllowed = "move";
+              dragState.grabOffsetPx = 0;
+              dragState.lastY = e.clientY || null;
+            }}
+            onDragEnd={() => {
+              dragState.grabOffsetPx = 0;
+              dragState.lastY = null;
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -2654,7 +2670,16 @@ function DayColumn({
 
   const resolveDrop = (e: React.DragEvent): Date | null => {
     if (!colRef.current) return null;
-    return timeFromClientY(colRef.current, e.clientY, day, settings, pxPerMin);
+    // clientY inválido (0 em alguns navegadores no drop) → usa a última
+    // posição vista no dragover.
+    const rawY = e.clientY > 0 ? e.clientY : (dragState.lastY ?? e.clientY);
+    return timeFromClientY(
+      colRef.current,
+      rawY - dragState.grabOffsetPx,
+      day,
+      settings,
+      pxPerMin,
+    );
   };
 
   // Parte 3, item 6: fora do expediente NUNCA bloqueia — só avisa. O médico
@@ -2711,6 +2736,7 @@ function DayColumn({
         // Preview otimista: dataTransfer.getData() não é legível durante
         // dragover (só no drop), então usamos SNAP_MIN como duração — o
         // destaque visual é só indicativo, quem decide de verdade é o onDrop.
+        if (e.clientY > 0) dragState.lastY = e.clientY;
         const candidate = resolveDrop(e);
         if (!candidate || bloqueioAt(timedAppts, candidate, SNAP_MIN)) return;
         e.preventDefault();
@@ -2977,6 +3003,15 @@ function EventBlock({
         e.dataTransfer.setData(DRAG_APPT, appt.id);
         e.dataTransfer.setData(DRAG_APPT_DURATION, String(appt.durationMin ?? 30));
         e.dataTransfer.effectAllowed = "move";
+        // Guarda onde dentro do card o arrasto começou: o horário final é o
+        // topo do card, não a posição do cursor.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        dragState.grabOffsetPx = Math.max(0, e.clientY - rect.top);
+        dragState.lastY = e.clientY || null;
+      }}
+      onDragEnd={() => {
+        dragState.grabOffsetPx = 0;
+        dragState.lastY = null;
       }}
       onClick={(e) => {
         e.stopPropagation();
