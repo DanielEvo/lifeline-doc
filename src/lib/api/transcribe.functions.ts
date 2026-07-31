@@ -109,7 +109,7 @@ export const transcribeConsult = createServerFn({ method: "POST" })
     } else {
       const summaryReply = await callLovableChat(
         [{ role: "user", content: transcript }],
-        { system: buildSectionsSystem(sections) },
+        { system: buildSectionsSystem(sections, data.templateContent) },
       );
       blocks = extractSectionsJson(summaryReply, sections);
     }
