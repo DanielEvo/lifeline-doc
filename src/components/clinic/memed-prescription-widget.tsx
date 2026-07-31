@@ -33,18 +33,27 @@ declare global {
   }
 }
 
+export type MemedWidgetApi = {
+  addItem: (payload: Record<string, unknown>) => Promise<unknown>;
+  newPrescription: () => Promise<unknown>;
+};
+
 export function MemedPrescriptionWidget({
   token,
   scriptUrl,
   patient,
   workplace,
   onPrescricaoImpressa,
+  onPrescricaoExcluida,
+  onReady,
 }: {
   token: string;
   scriptUrl: string;
   patient: MemedPatientPayload;
   workplace?: MemedWorkplacePayload;
   onPrescricaoImpressa: (data: unknown) => void;
+  onPrescricaoExcluida?: (data: unknown) => void;
+  onReady?: (api: MemedWidgetApi) => void;
 }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const errorMsgRef = useRef<string>("Não consegui carregar o módulo da Memed.");
@@ -80,8 +89,30 @@ export function MemedPrescriptionWidget({
             await window.MdHub!.command.send("plataforma.prescricao", "setWorkplace", workplace);
           }
           window.MdHub!.event.add("prescricaoImpressa", onPrescricaoImpressa);
+          // Evento marcado como obrigatório pela Memed para autorização das
+          // credenciais de produção — precisa estar sempre registrado.
+          window.MdHub!.event.add("prescricaoExcluida", (data) => onPrescricaoExcluida?.(data));
           await window.MdHub!.module.show("plataforma.prescricao");
-          if (!cancelled) setStatus("ready");
+          try {
+            await window.MdHub!.command.send("plataforma.prescricao", "setFeatureToggle", {
+              historyPrescription: false,
+              dropdownSync: false,
+              guidesOnboarding: false,
+              enableAlerts: true,
+              setPatientAllergy: true,
+            });
+          } catch {
+            // toggles são um ajuste fino: falha aqui não invalida o módulo
+          }
+          if (!cancelled) {
+            setStatus("ready");
+            onReady?.({
+              addItem: (payload) =>
+                window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
+              newPrescription: () =>
+                window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+            });
+          }
         } catch {
           if (!cancelled) {
             errorMsgRef.current = "Falha ao inicializar a prescrição com os dados do paciente.";
@@ -104,6 +135,7 @@ export function MemedPrescriptionWidget({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   if (status === "error") {
     return (
