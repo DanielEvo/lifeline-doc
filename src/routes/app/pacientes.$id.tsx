@@ -74,6 +74,7 @@ import { PatientFormDialog, type PatientFormValues } from "@/components/clinic/p
 import {
   archiveMyPatient,
   confirmExtractedMeasurements,
+  cancelMemedPrescriptionFn,
   confirmMemedPrescription,
   extractExamDocument,
   getMemedWidgetConfig,
@@ -2580,8 +2581,16 @@ function EvolucaoCard({
       </div>
 
       {e.prescription && (
-        <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-xs ring-1 ring-violet-200 dark:bg-violet-950/40 dark:ring-violet-900">
-          <div className="font-medium text-violet-900 dark:text-violet-300">Receita digital</div>
+        <div
+          className={`mt-2 rounded-lg px-3 py-2 text-xs ring-1 ${
+            e.prescription.canceledAt
+              ? "bg-muted text-muted-foreground ring-border line-through decoration-1"
+              : "bg-violet-50 ring-violet-200 dark:bg-violet-950/40 dark:ring-violet-900"
+          }`}
+        >
+          <div className="font-medium text-violet-900 dark:text-violet-300">
+            Receita digital{e.prescription.canceledAt ? " · cancelada" : ""}
+          </div>
           <ul className="mt-1 space-y-0.5 text-violet-900 dark:text-violet-300">
             {e.prescription.meds.map((m, i) =>
               typeof m === "string" ? (
@@ -2751,6 +2760,23 @@ function ReceitaDialog({
     },
   });
 
+  const cancelMemed = useMutation({
+    mutationFn: (vars: { memedPrescricaoId: string }) =>
+      cancelMemedPrescriptionFn({ data: { token, evolutionId, ...vars } }),
+    onSuccess: (r) => {
+      if (!r.ok) return;
+      toast.message("Receita excluída na Memed — marcada como cancelada no prontuário.");
+      onDone();
+    },
+  });
+
+  const handlePrescricaoExcluida = (raw: unknown) => {
+    const data = raw as { prescricao?: { id?: string | number } };
+    const id = data?.prescricao?.id != null ? String(data.prescricao.id) : null;
+    if (!id) return;
+    cancelMemed.mutate({ memedPrescricaoId: id });
+  };
+
   const handlePrescricaoImpressa = (raw: unknown) => {
     const data = raw as {
       prescricao?: { id?: string | number; url?: string };
@@ -2779,12 +2805,20 @@ function ReceitaDialog({
               Prescreva pelo módulo oficial da Memed — a assinatura digital sai direto daqui.
             </DialogDescription>
           </DialogHeader>
+          {widgetConfig.data.likelyOffline && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900">
+              Fora do horário de atendimento do ambiente de prescrição — se o módulo não abrir, use a
+              receita local.
+            </p>
+          )}
           <MemedPrescriptionWidget
+            key={`${patientId}-${widgetConfig.data.token.slice(-12)}`}
             token={widgetConfig.data.token}
             scriptUrl={widgetConfig.data.scriptUrl}
             patient={widgetConfig.data.patient}
             workplace={widgetConfig.data.workplace}
             onPrescricaoImpressa={handlePrescricaoImpressa}
+            onPrescricaoExcluida={handlePrescricaoExcluida}
           />
         </DialogContent>
       </Dialog>

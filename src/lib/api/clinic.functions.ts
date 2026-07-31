@@ -63,7 +63,9 @@ import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from 
 import {
   getMemedPrescriberToken,
   getMemedSandboxToken,
+  invalidateMemedToken,
   isMemedConfigured,
+  isMemedLikelyOffline,
   MEMED_SCRIPT_URL,
 } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
@@ -73,6 +75,7 @@ import {
   listEvolutions,
   prescribeEvolution,
   prescribeEvolutionMemed,
+  cancelEvolutionPrescription,
   sealEvolution,
   updateEvolution,
   updateEvolutionNote,
@@ -895,6 +898,8 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       especialidade: data.especialidade,
       crmCidade: data.crmCidade,
     });
+    // Perfil do prescritor mudou → o JWT em cache não vale mais.
+    invalidateMemedToken(doctor.id);
     return updated ? { ok: true as const } : { ok: false as const, error: "not_found" as const };
   });
 
@@ -912,10 +917,14 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
     if (!isMemedConfigured()) return { ok: false as const, error: "not_configured" as const };
     const result = await getMemedPrescriberToken(doctor);
     if (!result.ok) return { ok: false as const, error: result.error, detail: result.detail };
+    // CPF inválido/incompleto quebra o setPaciente silenciosamente — sem 11
+    // dígitos, envia withoutCpf em vez de mandar lixo para a Memed.
+    const cpfDigits = (patient.cpf ?? "").replace(/\D/g, "");
     return {
       ok: true as const,
       token: result.token,
       scriptUrl: MEMED_SCRIPT_URL,
+      likelyOffline: isMemedLikelyOffline(),
       patient: {
         idExterno: patient.id,
         nome: patient.nome,
@@ -925,18 +934,43 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
             : patient.sexo === "masculino"
               ? ("Masculino" as const)
               : undefined,
-        ...(patient.cpf ? { cpf: patient.cpf.replace(/\D/g, "") } : { withoutCpf: true as const }),
+        ...(cpfDigits.length === 11 ? { cpf: cpfDigits } : { withoutCpf: true as const }),
         data_nascimento: patient.nascimento
           ? patient.nascimento.split("-").reverse().join("/")
           : undefined,
         telefone: patient.telefone ?? undefined,
         email: patient.email ?? undefined,
       },
+      // Local de atendimento sai impresso na receita (exigência do CFM) —
+      // além de cidade/UF, manda o nome do consultório do prescritor.
       workplace: {
         city: doctor.crmCidade ?? undefined,
         state: doctor.crmUf ?? undefined,
+        local_name: `Consultório ${doctor.nome}`,
       },
     };
+  });
+
+// Marca a receita como cancelada no prontuário quando a Memed emite
+// prescricaoExcluida — antes o registro ficava listado como válido.
+export const cancelMemedPrescriptionFn = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      token,
+      evolutionId: z.string().min(1),
+      memedPrescricaoId: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const result = await cancelEvolutionPrescription(
+      doctor.id,
+      data.evolutionId,
+      data.memedPrescricaoId,
+    );
+    if ("error" in result) return { ok: false as const, error: result.error };
+    return { ok: true as const, evolution: result };
   });
 
 // Grava no prontuário a referência da receita depois que a Memed assina

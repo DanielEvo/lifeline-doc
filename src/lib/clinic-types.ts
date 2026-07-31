@@ -738,7 +738,14 @@ export type Evolution = {
   planoTerapeutico: string;
   soap: Soap;
   sealed: { protocol: string; signature: string; sealedAt: string } | null;
-  prescription: { code: string; meds: PrescriptionMed[]; url: string; createdAt: string } | null;
+  prescription: {
+    code: string;
+    meds: PrescriptionMed[];
+    url: string;
+    createdAt: string;
+    /** Preenchido quando a Memed emite o evento prescricaoExcluida. */
+    canceledAt?: string | null;
+  } | null;
   // Snapshot de nome/preço no momento do registro — se o serviço mudar ou for
   // desativado depois, a evolução já salva não muda (mesma lógica do selo).
   servicosAplicados: { serviceId: string; nome: string; preco: number }[];
