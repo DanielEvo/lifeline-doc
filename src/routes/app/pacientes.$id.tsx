@@ -2741,6 +2741,28 @@ function ReceitaDialog({
     telefoneMedico: "",
     localAtendimento: "",
   });
+
+  // Pré-preenche com o que já está no cadastro do médico (/app/perfil).
+  const doctorProfile = useQuery({
+    queryKey: ["doctor-profile"],
+    queryFn: () => getDoctorProfile({ data: { token } }),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    if (doctorProfile.data?.ok) {
+      const p = doctorProfile.data.profile;
+      setCrmForm({
+        crm: p.crm,
+        crmUf: p.crmUf,
+        cpfMedico: p.cpfMedico,
+        especialidade: p.especialidade,
+        crmCidade: p.crmCidade,
+        telefoneMedico: p.telefoneMedico,
+        localAtendimento: p.localAtendimento,
+      });
+    }
+  }, [doctorProfile.data]);
   const saveMemed = useMutation({
     mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
     onSuccess: (r) => {
