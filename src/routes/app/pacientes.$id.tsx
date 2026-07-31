@@ -2738,6 +2738,8 @@ function ReceitaDialog({
     cpfMedico: "",
     especialidade: "",
     crmCidade: "",
+    telefoneMedico: "",
+    localAtendimento: "",
   });
   const saveMemed = useMutation({
     mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
