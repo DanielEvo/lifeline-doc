@@ -946,11 +946,12 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
         email: patient.email ?? undefined,
       },
       // Local de atendimento sai impresso na receita (exigência do CFM) —
-      // além de cidade/UF, manda o nome do consultório do prescritor.
+      // usa o nome cadastrado pelo médico; sem ele, cai no fallback.
       workplace: {
         city: doctor.crmCidade ?? undefined,
         state: doctor.crmUf ?? undefined,
-        local_name: `Consultório ${doctor.nome}`,
+        local_name: doctor.localAtendimento || `Consultório ${doctor.nome}`,
+        phone: doctor.telefoneMedico || undefined,
       },
     };
   });
