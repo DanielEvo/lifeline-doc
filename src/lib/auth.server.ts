@@ -36,6 +36,11 @@ export type Doctor = {
   // antes deste campo (ausente) são tratadas como verificadas — ver
   // isEmailVerified(). Contas Google nascem true (o Google já validou).
   emailVerified?: boolean;
+  // Dados que saem impressos no cabeçalho da receita Memed. Opcionais por
+  // compatibilidade com contas antigas; sem eles a receita sai sem telefone
+  // e o local de atendimento cai no fallback "Consultório <nome>".
+  telefoneMedico?: string | null;
+  localAtendimento?: string | null;
 };
 
 /** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
@@ -148,6 +153,8 @@ export async function updateDoctorMemedProfile(
     cpfMedico: string;
     especialidade: string;
     crmCidade: string;
+    telefoneMedico?: string | null;
+    localAtendimento?: string | null;
   },
 ): Promise<Doctor | undefined> {
   let updated: Doctor | undefined;
@@ -159,6 +166,10 @@ export async function updateDoctorMemedProfile(
     d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
     d.especialidade = input.especialidade.trim();
     d.crmCidade = input.crmCidade.trim();
+    if (input.telefoneMedico !== undefined)
+      d.telefoneMedico = input.telefoneMedico?.trim() || null;
+    if (input.localAtendimento !== undefined)
+      d.localAtendimento = input.localAtendimento?.trim() || null;
     updated = { ...d };
   });
   return updated;
