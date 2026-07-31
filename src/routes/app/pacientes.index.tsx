@@ -127,6 +127,7 @@ function PainelPacientes() {
       }
       return r;
     },
+    retry: false,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["workspace"] });
@@ -302,7 +303,19 @@ function PainelPacientes() {
     [charges, cobrancaFiltro, needle, byId],
   );
 
-  if (ws.isLoading || !data) {
+  if (!data) {
+    if (ws.isError) {
+      return (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+          <p className="text-sm text-muted-foreground">
+            Não consegui carregar seus pacientes agora.
+          </p>
+          <Button variant="outline" onClick={() => ws.refetch()}>
+            Tentar de novo
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-primary" />
