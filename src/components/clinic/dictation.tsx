@@ -41,10 +41,13 @@ function pickMimeType(): string {
 
 export function Dictation({
   sections,
+  templateContent = "",
   onAcceptToSection,
 }: {
   /** Cabeçalhos de seção do template ativo — vazio em modo "Texto livre". */
   sections: string[];
+  /** Template ativo por inteiro — serve de instrução pra IA distribuir o texto. */
+  templateContent?: string;
   onAcceptToSection: (label: string, text: string) => void;
 }) {
   const [recording, setRecording] = useState(false);
@@ -78,7 +81,13 @@ export function Dictation({
       const blob = new Blob(chunks, { type: mimeType });
       const audioBase64 = await blobToBase64(blob);
       return transcribeConsult({
-        data: { audioBase64, mimeType, durationSec: seconds, templateSections: sections },
+        data: {
+          audioBase64,
+          mimeType,
+          durationSec: seconds,
+          templateSections: sections,
+          templateContent: templateContent.slice(0, 4000),
+        },
       });
     },
     onSuccess: (r) => {
