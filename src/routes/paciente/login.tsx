@@ -15,6 +15,7 @@ import {
   resendPatientVerificationEmail,
 } from "@/lib/api/patient-auth.functions";
 import { getPatientSession, setPatientSession } from "@/lib/patient-session";
+import { CONSENT_TEXT } from "@/lib/consent";
 
 export const Route = createFileRoute("/paciente/login")({
   head: () => ({
@@ -37,9 +38,14 @@ function PatientLoginPage() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [busy, setBusy] = useState<"form" | "google" | "resend" | null>(null);
   // Cadastro por e-mail não loga: fica nesta tela até confirmar o e-mail.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // Sem provedor de e-mail configurado (RESEND_API_KEY ausente), o backend
+  // devolve o link de confirmação direto — sem isso o cadastro por e-mail
+  // fica travado pra sempre neste ambiente.
+  const [devLink, setDevLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (getPatientSession()) navigate({ to: "/paciente/app" });
@@ -64,14 +70,20 @@ function PatientLoginPage() {
       toast.error("A senha precisa de pelo menos 6 caracteres.");
       return;
     }
+    if (mode === "register" && !consentAccepted) {
+      toast.error("Aceite os Termos de Uso e a Política de Privacidade para continuar.");
+      return;
+    }
     setBusy("form");
     try {
       if (mode === "register") {
         const r = await registerPatient({
-          data: { nome, email, password, origin: window.location.origin },
+          data: { nome, email, password, origin: window.location.origin, consentAccepted: true },
         });
-        if (r.ok) setPendingEmail(r.email);
-        else toast.error(r.error);
+        if (r.ok) {
+          setPendingEmail(r.email);
+          setDevLink(r.devLink ?? null);
+        } else toast.error(r.error);
       } else {
         const r = await loginPatient({ data: { email, password } });
         if (r.ok) finish(r);
@@ -88,9 +100,10 @@ function PatientLoginPage() {
     if (busy || !pendingEmail) return;
     setBusy("resend");
     try {
-      await resendPatientVerificationEmail({
+      const r = await resendPatientVerificationEmail({
         data: { email: pendingEmail, origin: window.location.origin },
       });
+      setDevLink(r.devLink ?? null);
       toast.success("Link reenviado. Confira sua caixa de entrada.");
     } catch {
       toast.error("Não consegui reenviar agora. Tente novamente.");
@@ -137,6 +150,19 @@ function PatientLoginPage() {
             <span className="font-medium text-foreground">{pendingEmail}</span>. Clique nele para
             ativar sua conta.
           </p>
+          {devLink && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              <p className="font-medium">
+                Este ambiente não tem envio de e-mail configurado (RESEND_API_KEY).
+              </p>
+              <p className="mt-1">
+                Use o link direto pra confirmar o cadastro:{" "}
+                <a href={devLink} className="break-all font-semibold underline">
+                  {devLink}
+                </a>
+              </p>
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -151,6 +177,7 @@ function PatientLoginPage() {
             type="button"
             onClick={() => {
               setPendingEmail(null);
+              setDevLink(null);
               setMode("login");
             }}
             className="mt-4 w-full text-xs text-muted-foreground transition hover:text-foreground"
@@ -297,9 +324,21 @@ function PatientLoginPage() {
                 )}
               </div>
 
+              {mode === "register" && (
+                <label className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={consentAccepted}
+                    onChange={(e) => setConsentAccepted(e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  />
+                  {CONSENT_TEXT}
+                </label>
+              )}
+
               <Button
                 type="submit"
-                disabled={busy !== null}
+                disabled={busy !== null || (mode === "register" && !consentAccepted)}
                 className="press w-full brand-gradient text-primary-foreground shadow-md shadow-primary/30 hover:opacity-95"
               >
                 {busy === "form" ? (

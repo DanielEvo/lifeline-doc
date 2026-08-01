@@ -5,6 +5,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import {
+  acceptPatientConsent,
   consumePatientPasswordReset,
   createPatient,
   createPatientEmailVerification,
@@ -31,17 +32,32 @@ import {
   addPendingMeasurements,
   listPendingMeasurements,
 } from "../patient-measurements.server";
+import { createRateLimiter, createUsageCounter } from "../rate-limit.server";
+import { CONSENT_VERSION } from "../consent";
+
+// SEC-02 — mesmo padrão do lado médico (src/lib/api/auth.functions.ts).
+const loginLimiter = createRateLimiter({ maxAttempts: 5, lockoutMs: 15 * 60 * 1000 });
+const resetLimiter = createRateLimiter({ maxAttempts: 3, lockoutMs: 15 * 60 * 1000 });
+// OCR-01 — teto de extrações por IA por conta de paciente/dia. Cada chamada
+// bate na Gemini API (custo real); sem teto, uma conta comprometida ou um
+// loop de retry no cliente pode gerar custo/abuso ilimitado.
+const patientOcrCounter = createUsageCounter(24 * 60 * 60 * 1000);
+const PATIENT_OCR_DAILY_LIMIT = 10;
 
 type PatientAuthResult =
-  | { ok: true; token: string; patient: { nome: string; email: string; avatarUrl: string | null } }
+  | {
+      ok: true;
+      token: string;
+      patient: { nome: string; email: string; avatarUrl: string | null; consentVersion: string | null };
+    }
   | { ok: false; error: string };
 
 type PatientRegisterResult =
-  | { ok: true; needsVerification: true; email: string }
+  | { ok: true; needsVerification: true; email: string; devLink?: string }
   | { ok: false; error: string };
 
 function pub(p: PatientAccount) {
-  return { nome: p.nome, email: p.email, avatarUrl: p.avatarUrl };
+  return { nome: p.nome, email: p.email, avatarUrl: p.avatarUrl, consentVersion: p.consentVersion };
 }
 
 const origemSchema = z.string().url().max(300);
@@ -54,6 +70,9 @@ export const registerPatient = createServerFn({ method: "POST" })
       email: z.string().email().max(160),
       password: z.string().min(6).max(120),
       origin: origemSchema,
+      // LGP-01 — só aceita `true` explícito: sem checkbox marcado, nem
+      // chega a criar a conta.
+      consentAccepted: z.literal(true),
     }),
   )
   .handler(async ({ data }): Promise<PatientRegisterResult> => {
@@ -65,13 +84,18 @@ export const registerPatient = createServerFn({ method: "POST" })
       password: data.password,
       provider: "email",
     });
+    await acceptPatientConsent(patient.id, CONSENT_VERSION);
     const token = await createPatientEmailVerification(patient.id);
-    await sendVerificationEmail(
-      patient.email,
-      patient.nome,
-      `${data.origin}/paciente/confirmar-cadastro/${token}`,
-    );
-    return { ok: true, needsVerification: true, email: patient.email };
+    const link = `${data.origin}/paciente/confirmar-cadastro/${token}`;
+    const sent = await sendVerificationEmail(patient.email, patient.nome, link);
+    return {
+      ok: true,
+      needsVerification: true,
+      email: patient.email,
+      // Sem RESEND_API_KEY o e-mail nunca chega — devolvemos o link direto
+      // pra não deixar o cadastro travado num ambiente sem provedor real.
+      ...(!sent.sent && { devLink: link }),
+    };
   });
 
 export const loginPatient = createServerFn({ method: "POST" })
@@ -82,14 +106,22 @@ export const loginPatient = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }): Promise<PatientAuthResult> => {
+    if (loginLimiter.isLocked(data.email))
+      return { ok: false, error: "Muitas tentativas. Aguarde 15 minutos e tente de novo." };
     const patient = await findPatientByEmail(data.email);
-    if (!patient) return { ok: false, error: "E-mail não encontrado. Crie sua conta." };
+    if (!patient) {
+      loginLimiter.registerFailure(data.email);
+      return { ok: false, error: "E-mail não encontrado. Crie sua conta." };
+    }
     if (patient.provider === "google" && !patient.passHash)
       return { ok: false, error: "Esta conta usa login com Google." };
-    if (!verifyPassword(patient, data.password))
+    if (!verifyPassword(patient, data.password)) {
+      loginLimiter.registerFailure(data.email);
       return { ok: false, error: "Senha incorreta. Tente novamente." };
+    }
     if (!isPatientEmailVerified(patient))
       return { ok: false, error: "E-mail ainda não confirmado. Verifique sua caixa de entrada." };
+    loginLimiter.registerSuccess(data.email);
     const token = await createPatientSession(patient.id);
     return { ok: true, token, patient: pub(patient) };
   });
@@ -106,31 +138,32 @@ export const resendPatientVerificationEmail = createServerFn({ method: "POST" })
   .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
   .handler(async ({ data }) => {
     const patient = await findPatientByEmail(data.email);
+    let devLink: string | undefined;
     if (patient && !isPatientEmailVerified(patient)) {
       const token = await createPatientEmailVerification(patient.id);
-      await sendVerificationEmail(
-        patient.email,
-        patient.nome,
-        `${data.origin}/paciente/confirmar-cadastro/${token}`,
-      );
+      const link = `${data.origin}/paciente/confirmar-cadastro/${token}`;
+      const sent = await sendVerificationEmail(patient.email, patient.nome, link);
+      if (!sent.sent) devLink = link;
     }
-    return { ok: true as const };
+    return { ok: true as const, devLink };
   });
 
 export const requestPatientPasswordReset = createServerFn({ method: "POST" })
   .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
   .handler(async ({ data }) => {
+    if (resetLimiter.isLocked(data.email)) return { ok: true as const, devLink: undefined };
+    resetLimiter.registerFailure(data.email);
     const patient = await findPatientByEmail(data.email);
+    let devLink: string | undefined;
     if (patient) {
       const token = await createPatientPasswordReset(patient.id);
-      await sendPasswordResetEmail(
-        patient.email,
-        patient.nome,
-        `${data.origin}/paciente/redefinir-senha/${token}`,
-        { googleOnly: patient.provider === "google" && !patient.passHash },
-      );
+      const link = `${data.origin}/paciente/redefinir-senha/${token}`;
+      const sent = await sendPasswordResetEmail(patient.email, patient.nome, link, {
+        googleOnly: patient.provider === "google" && !patient.passHash,
+      });
+      if (!sent.sent) devLink = link;
     }
-    return { ok: true as const };
+    return { ok: true as const, devLink };
   });
 
 export const resetPatientPassword = createServerFn({ method: "POST" })
@@ -211,6 +244,17 @@ export const logoutPatient = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
   .handler(async ({ data }) => {
     await revokePatientSession(data.token);
+    return { ok: true as const };
+  });
+
+// LGP-01 — aceite explícito e versionado dos termos. Chamado pelo modal
+// bloqueante em /paciente/app quando patient.consentVersion !== CONSENT_VERSION.
+export const acceptPatientConsentFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const patient = await requirePatient(data.token);
+    if (!patient) return { ok: false as const };
+    await acceptPatientConsent(patient.id, CONSENT_VERSION);
     return { ok: true as const };
   });
 
@@ -295,17 +339,24 @@ export const updatePatientProfile = createServerFn({ method: "POST" })
 // em measurements.json: só cria draft em patient_pending_measurements.
 // ---------------------------------------------------------------------------
 
+// PAC-04 — mesmo teto de tamanho do lado médico (clinic.functions.ts).
+const MAX_EXAM_BASE64_CHARS = Math.ceil(((15 * 1024 * 1024) / 3) * 4);
+
 export const extractExamDocumentPatient = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       token: z.string().min(1),
-      fileBase64: z.string().min(1),
+      fileBase64: z.string().min(1).max(MAX_EXAM_BASE64_CHARS),
       mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
     }),
   )
   .handler(async ({ data }) => {
     const patient = await requirePatient(data.token);
     if (!patient) return { ok: false as const, error: "unauthorized" as const };
+    const used = patientOcrCounter.increment(patient.id);
+    if (used > PATIENT_OCR_DAILY_LIMIT) {
+      return { ok: false as const, error: "ocr_limit" as const };
+    }
     try {
       const result = await extractBiomarkersFromDocument(data.fileBase64, data.mimeType);
       const items = result.biomarkers.map((b) => {

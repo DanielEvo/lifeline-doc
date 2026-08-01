@@ -33,6 +33,10 @@ export type PatientAccount = {
   // Verificação de e-mail. OPCIONAL de propósito: contas anteriores a este
   // campo (ausente) contam como verificadas — ver isPatientEmailVerified().
   emailVerified?: boolean;
+  // LGP-01 — consentimento versionado (LGPD). null até o paciente aceitar os
+  // termos vigentes; comparar com CONSENT_VERSION (src/lib/consent.ts).
+  consentVersion: string | null;
+  consentAcceptedAt: string | null;
 };
 
 /** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
@@ -100,6 +104,8 @@ export async function createPatient(input: {
     createdAt: nowIso(),
     // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
     emailVerified: input.provider === "google",
+    consentVersion: null,
+    consentAcceptedAt: null,
   };
   await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
     rows.push(patient);
@@ -145,6 +151,17 @@ export async function requirePatient(
 ): Promise<PatientAccount | null> {
   if (!token) return null;
   return (await findPatientByToken(token)) ?? null;
+}
+
+/** LGP-01 — grava o aceite explícito dos termos vigentes. */
+export async function acceptPatientConsent(patientId: string, version: string): Promise<void> {
+  await mutateRows<PatientAccount>(PATIENT_ACCOUNTS, (rows) => {
+    const p = rows.find((x) => x.id === patientId);
+    if (p) {
+      p.consentVersion = version;
+      p.consentAcceptedAt = nowIso();
+    }
+  });
 }
 
 export async function revokePatientSession(token: string): Promise<void> {

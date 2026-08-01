@@ -7,7 +7,15 @@
 
 import crypto from "node:crypto";
 
+import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
+
 import { mutateRows, nowIso, readRows } from "./db.server";
+
+// Cookie httpOnly espelhando o token (que também vive no localStorage do
+// cliente, usado pelas outras server fns). Serve só pra permitir um guard
+// de verdade no servidor (beforeLoad da rota /admin), já que o token em
+// localStorage não é visível durante o SSR/loader.
+const ADMIN_COOKIE = "lifeline_admin_session";
 
 type AdminCredentials = { login: string; passHash: string; salt: string; updatedAt: string };
 type AdminSession = { token: string; login: string; createdAt: string; expiresAt: string };
@@ -88,6 +96,26 @@ function registerSuccess(login: string) {
 
 // ---------------------------------------------------------------------------
 
+function setAdminCookie(token: string) {
+  setCookie(ADMIN_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_MS / 1000,
+  });
+}
+
+function clearAdminCookie() {
+  deleteCookie(ADMIN_COOKIE, { path: "/" });
+}
+
+/** Lê o cookie httpOnly e valida a sessão — usado pelo beforeLoad de /admin
+ *  pra barrar a rota no servidor, antes de qualquer componente montar. */
+export async function requireAdminCookie(): Promise<boolean> {
+  return requireAdminSession(getCookie(ADMIN_COOKIE));
+}
+
 export async function loginAdmin(
   login: string,
   senha: string,
@@ -111,6 +139,7 @@ export async function loginAdmin(
     });
     return alive;
   });
+  setAdminCookie(token);
   return { ok: true, token };
 }
 
@@ -123,6 +152,7 @@ export async function requireAdminSession(token: string | undefined | null): Pro
 
 export async function logoutAdmin(token: string): Promise<void> {
   await mutateRows<AdminSession>(SESSIONS, (rows) => rows.filter((x) => x.token !== token));
+  clearAdminCookie();
 }
 
 export async function changeAdminCredentials(

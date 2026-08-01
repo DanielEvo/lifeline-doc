@@ -7,7 +7,13 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import { initialsOf } from "./clinic-types";
 
-export type Clinic = { token: string; nome: string; email: string; avatarUrl: string | null };
+export type Clinic = {
+  token: string;
+  nome: string;
+  email: string;
+  avatarUrl: string | null;
+  consentVersion?: string | null;
+};
 
 const ClinicCtx = createContext<Clinic | null>(null);
 

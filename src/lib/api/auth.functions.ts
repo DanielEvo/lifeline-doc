@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import {
+  acceptDoctorConsent,
   consumePasswordReset,
   createDoctor,
   createEmailVerification,
@@ -13,6 +14,7 @@ import {
   getGoogleConfig,
   googleAuthUrl,
   isEmailVerified,
+  requireDoctor,
   revokeSession,
   verifyEmailToken,
   verifyOAuthState,
@@ -20,17 +22,29 @@ import {
   type Doctor,
 } from "../auth.server";
 import { sendPasswordResetEmail, sendVerificationEmail } from "../email.server";
+import { createRateLimiter } from "../rate-limit.server";
+import { CONSENT_VERSION } from "../consent";
+
+// SEC-02 — mesmo padrão de admin-auth.server.ts: 5 tentativas erradas
+// bloqueiam o e-mail por 15 minutos. Pedidos de reset usam um teto mais
+// folgado (evita e-mail-bombing sem travar quem só errou o e-mail 2x).
+const loginLimiter = createRateLimiter({ maxAttempts: 5, lockoutMs: 15 * 60 * 1000 });
+const resetLimiter = createRateLimiter({ maxAttempts: 3, lockoutMs: 15 * 60 * 1000 });
 
 type AuthResult =
-  | { ok: true; token: string; doctor: { nome: string; email: string; avatarUrl: string | null } }
+  | {
+      ok: true;
+      token: string;
+      doctor: { nome: string; email: string; avatarUrl: string | null; consentVersion: string | null };
+    }
   | { ok: false; error: string };
 
 type RegisterResult =
-  | { ok: true; needsVerification: true; email: string }
+  | { ok: true; needsVerification: true; email: string; devLink?: string }
   | { ok: false; error: string };
 
 function pub(d: Doctor) {
-  return { nome: d.nome, email: d.email, avatarUrl: d.avatarUrl };
+  return { nome: d.nome, email: d.email, avatarUrl: d.avatarUrl, consentVersion: d.consentVersion };
 }
 
 const origemSchema = z.string().url().max(300);
@@ -44,6 +58,9 @@ export const registerDoctor = createServerFn({ method: "POST" })
       email: z.string().email().max(160),
       password: z.string().min(6).max(120),
       origin: origemSchema,
+      // LGP-01 — só aceita `true` explícito: sem checkbox marcado, nem
+      // chega a criar a conta.
+      consentAccepted: z.literal(true),
     }),
   )
   .handler(async ({ data }): Promise<RegisterResult> => {
@@ -55,13 +72,18 @@ export const registerDoctor = createServerFn({ method: "POST" })
       password: data.password,
       provider: "email",
     });
+    await acceptDoctorConsent(doctor.id, CONSENT_VERSION);
     const token = await createEmailVerification(doctor.id);
-    await sendVerificationEmail(
-      doctor.email,
-      doctor.nome,
-      `${data.origin}/confirmar-cadastro/${token}`,
-    );
-    return { ok: true, needsVerification: true, email: doctor.email };
+    const link = `${data.origin}/confirmar-cadastro/${token}`;
+    const sent = await sendVerificationEmail(doctor.email, doctor.nome, link);
+    return {
+      ok: true,
+      needsVerification: true,
+      email: doctor.email,
+      // Sem RESEND_API_KEY o e-mail nunca chega — devolvemos o link direto
+      // pra não deixar o cadastro travado num ambiente sem provedor real.
+      ...(!sent.sent && { devLink: link }),
+    };
   });
 
 export const loginDoctor = createServerFn({ method: "POST" })
@@ -72,14 +94,22 @@ export const loginDoctor = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }): Promise<AuthResult> => {
+    if (loginLimiter.isLocked(data.email))
+      return { ok: false, error: "Muitas tentativas. Aguarde 15 minutos e tente de novo." };
     const doctor = await findDoctorByEmail(data.email);
-    if (!doctor) return { ok: false, error: "E-mail não encontrado. Crie sua conta." };
+    if (!doctor) {
+      loginLimiter.registerFailure(data.email);
+      return { ok: false, error: "E-mail não encontrado. Crie sua conta." };
+    }
     if (doctor.provider === "google" && !doctor.passHash)
       return { ok: false, error: "Esta conta usa login com Google." };
-    if (!verifyPassword(doctor, data.password))
+    if (!verifyPassword(doctor, data.password)) {
+      loginLimiter.registerFailure(data.email);
       return { ok: false, error: "Senha incorreta. Tente novamente." };
+    }
     if (!isEmailVerified(doctor))
       return { ok: false, error: "E-mail ainda não confirmado. Verifique sua caixa de entrada." };
+    loginLimiter.registerSuccess(data.email);
     const token = await createSession(doctor.id);
     return { ok: true, token, doctor: pub(doctor) };
   });
@@ -98,15 +128,14 @@ export const resendVerificationEmail = createServerFn({ method: "POST" })
   .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
   .handler(async ({ data }) => {
     const doctor = await findDoctorByEmail(data.email);
+    let devLink: string | undefined;
     if (doctor && !isEmailVerified(doctor)) {
       const token = await createEmailVerification(doctor.id);
-      await sendVerificationEmail(
-        doctor.email,
-        doctor.nome,
-        `${data.origin}/confirmar-cadastro/${token}`,
-      );
+      const link = `${data.origin}/confirmar-cadastro/${token}`;
+      const sent = await sendVerificationEmail(doctor.email, doctor.nome, link);
+      if (!sent.sent) devLink = link;
     }
-    return { ok: true as const };
+    return { ok: true as const, devLink };
   });
 
 // Resposta genérica sempre igual — não revela existência de conta nem se ela
@@ -114,17 +143,21 @@ export const resendVerificationEmail = createServerFn({ method: "POST" })
 export const requestPasswordReset = createServerFn({ method: "POST" })
   .inputValidator(z.object({ email: z.string().email().max(160), origin: origemSchema }))
   .handler(async ({ data }) => {
+    // Consome o teto SEMPRE, exista a conta ou não — senão dá pra usar o
+    // tempo de resposta pra descobrir quais e-mails têm cadastro.
+    if (resetLimiter.isLocked(data.email)) return { ok: true as const, devLink: undefined };
+    resetLimiter.registerFailure(data.email);
     const doctor = await findDoctorByEmail(data.email);
+    let devLink: string | undefined;
     if (doctor) {
       const token = await createPasswordReset(doctor.id);
-      await sendPasswordResetEmail(
-        doctor.email,
-        doctor.nome,
-        `${data.origin}/redefinir-senha/${token}`,
-        { googleOnly: doctor.provider === "google" && !doctor.passHash },
-      );
+      const link = `${data.origin}/redefinir-senha/${token}`;
+      const sent = await sendPasswordResetEmail(doctor.email, doctor.nome, link, {
+        googleOnly: doctor.provider === "google" && !doctor.passHash,
+      });
+      if (!sent.sent) devLink = link;
     }
-    return { ok: true as const };
+    return { ok: true as const, devLink };
   });
 
 export const resetPassword = createServerFn({ method: "POST" })
@@ -205,5 +238,16 @@ export const logout = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
   .handler(async ({ data }) => {
     await revokeSession(data.token);
+    return { ok: true as const };
+  });
+
+// LGP-01 — aceite explícito e versionado dos termos. Chamado pelo modal
+// bloqueante em /app quando doctor.consentVersion !== CONSENT_VERSION.
+export const acceptConsent = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return { ok: false as const };
+    await acceptDoctorConsent(doctor.id, CONSENT_VERSION);
     return { ok: true as const };
   });

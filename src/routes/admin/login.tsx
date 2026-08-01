@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Lock, Shield, User } from "lucide-react";
 import { toast } from "sonner";
 
@@ -7,10 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { adminLogin } from "@/lib/api/admin-auth.functions";
+import { adminCheckCookie, adminLogin } from "@/lib/api/admin-auth.functions";
 import { getAdminSession, setAdminSession } from "@/lib/admin-session";
 
 export const Route = createFileRoute("/admin/login")({
+  // Espelha o guard de /admin: já logado (cookie válido) → direto pro
+  // painel, sem passar pela tela de login.
+  beforeLoad: async () => {
+    const r = await adminCheckCookie();
+    if (r.ok) throw redirect({ to: "/admin" });
+  },
   head: () => ({
     meta: [{ title: "LifeLine · Admin" }],
   }),
