@@ -343,13 +343,20 @@ export const getWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const [patients, columns, appointments, charges, categories] = await Promise.all([
+    // Só a agenda vive no Postgres; pacientes, kanban, cobranças e categorias
+    // são locais. Antes, uma falha na agenda derrubava o workspace inteiro —
+    // o médico perdia a lista de pacientes por causa de uma fonte só. Agora
+    // a agenda é opcional e a tela avisa explicitamente quando faltou (nunca
+    // mostrar "nenhuma consulta" silenciosamente: quem tem consulta marcada
+    // precisa saber que a lista está incompleta, não vazia).
+    const [patients, columns, appointmentsRead, charges, categories] = await Promise.all([
       listPatients(doctor.id, { includeArchived: true }),
       getBoardColumns(doctor.id),
-      listAppointments(doctor.id),
+      optionalRead("appointments", () => listAppointments(doctor.id), []),
       listCharges(doctor.id),
       listCategories(doctor.id),
     ]);
+    const appointments = appointmentsRead.data;
     return {
       ok: true as const,
       doctor: {
@@ -362,6 +369,7 @@ export const getWorkspace = createServerFn({ method: "POST" })
       patients: await withVinculo(doctor.id, patients),
       columns,
       appointments,
+      agendaUnavailable: appointmentsRead.unavailable,
       charges,
       categories,
     };

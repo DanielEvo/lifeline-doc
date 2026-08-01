@@ -204,6 +204,17 @@ function PainelDoDia() {
         }
       />
 
+      {data?.agendaUnavailable && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <strong>Agenda indisponível agora:</strong> os pacientes abaixo estão corretos, mas os
+            horários de hoje não carregaram. <strong>Não considere a agenda vazia</strong> — pode
+            haver consultas marcadas que não estão aparecendo.
+          </span>
+        </div>
+      )}
+
       {patients.length === 0 ? (
         <EmptyClinic
           onNovo={() => setNovoOpen(true)}

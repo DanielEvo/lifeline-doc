@@ -339,6 +339,17 @@ function PainelPacientes() {
         }
       />
 
+      {data.agendaUnavailable && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <strong>Agenda indisponível agora:</strong> a lista de pacientes está correta, mas as
+            visões <strong>Hoje</strong> e <strong>Faltas</strong> dependem da agenda e podem
+            aparecer vazias sem estarem.
+          </span>
+        </div>
+      )}
+
       {/* Stats clicáveis → visão */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatCard
