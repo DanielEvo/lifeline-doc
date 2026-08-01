@@ -44,12 +44,12 @@ import type {
 } from "@/lib/store.server";
 
 export const Route = createFileRoute("/admin/")({
-  // SEC-01: guard server-side — roda ANTES do componente montar (SSR e
-  // navegação client), sem depender do useEffect que só barra a UI depois
-  // que o JS já hidratou. O check client-side abaixo continua existindo
-  // como camada extra (sessão local pode ter mudado desde o SSR).
+  // SEC-01: guard server-side — valida cookie httpOnly ou o token da sessão
+  // local (o cookie não chega em preview dentro de iframe). ssr:false para
+  // que o localStorage já exista quando o guard rodar.
+  ssr: false,
   beforeLoad: async () => {
-    const r = await adminCheckCookie();
+    const r = await adminCheckCookie({ data: { token: getAdminSession()?.token } });
     if (!r.ok) throw redirect({ to: "/admin/login" });
   },
   head: () => ({ meta: [{ title: "LifeLine · Painel de testes" }] }),

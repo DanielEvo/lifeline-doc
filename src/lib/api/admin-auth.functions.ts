@@ -41,9 +41,15 @@ export const adminGetMe = createServerFn({ method: "POST" })
 // SEC-01 — guard server-side de verdade pro beforeLoad de /admin: lê o
 // cookie httpOnly (não o token de localStorage, invisível no SSR) e valida
 // a sessão ANTES do componente da rota montar.
-export const adminCheckCookie = createServerFn({ method: "POST" }).handler(async () => ({
-  ok: await requireAdminCookie(),
-}));
+// Em previews dentro de iframe cross-site o cookie SameSite=Lax não é
+// enviado, então aceitamos também o token de sessão do localStorage —
+// ambos são validados server-side contra admin_sessions.json.
+export const adminCheckCookie = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().optional() }).optional())
+  .handler(async ({ data }) => {
+    if (await requireAdminCookie()) return { ok: true };
+    return { ok: await requireAdminSession(data?.token ?? null) };
+  });
 
 export const adminLogout = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
