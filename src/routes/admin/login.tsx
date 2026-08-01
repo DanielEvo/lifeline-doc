@@ -11,10 +11,11 @@ import { adminCheckCookie, adminLogin } from "@/lib/api/admin-auth.functions";
 import { getAdminSession, setAdminSession } from "@/lib/admin-session";
 
 export const Route = createFileRoute("/admin/login")({
-  // Espelha o guard de /admin: já logado (cookie válido) → direto pro
-  // painel, sem passar pela tela de login.
+  ssr: false,
+  // Espelha o guard de /admin: já logado (cookie válido ou token local) →
+  // direto pro painel, sem passar pela tela de login.
   beforeLoad: async () => {
-    const r = await adminCheckCookie();
+    const r = await adminCheckCookie({ data: { token: getAdminSession()?.token } });
     if (r.ok) throw redirect({ to: "/admin" });
   },
   head: () => ({
