@@ -76,6 +76,9 @@ const schema = z.object({
     .string()
     .regex(/^(\d{3}\.?\d{3}\.?\d{3}-?\d{2})?$/, "CPF inválido")
     .optional(),
+  // Alternativa ao CPF pra paciente estrangeiro (RDC 1000/25 — exigido pra
+  // prescrever). Só dígitos, sem máscara fixa (varia por país de origem).
+  passaporte: z.string().max(20).optional(),
   telefone: z.string().max(24).optional(),
   email: z.string().email("E-mail inválido").max(160).or(z.literal("")).optional(),
   convenio: z.string().max(60).optional(),
@@ -127,6 +130,7 @@ export function PatientFormDialog({
     nascimento: "",
     sexo: "",
     cpf: "",
+    passaporte: "",
     telefone: "",
     email: "",
     convenio: "",
@@ -185,6 +189,7 @@ export function PatientFormDialog({
             nascimento: patient.nascimento ?? "",
             sexo: patient.sexo ?? "",
             cpf: patient.cpf ?? "",
+            passaporte: patient.passaporte ?? "",
             telefone: patient.telefone ?? "",
             email: patient.email ?? "",
             convenio: patient.convenio ?? "",
@@ -455,6 +460,14 @@ export function PatientFormDialog({
                   <Label htmlFor="pf-cpf" className="text-xs">CPF</Label>
                   <Input id="pf-cpf" {...form.register("cpf")} placeholder="000.000.000-00" />
                   {err.cpf && <p className="text-[11px] text-destructive">{err.cpf.message}</p>}
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="pf-passaporte" className="text-xs">Passaporte (estrangeiro)</Label>
+                  <Input id="pf-passaporte" {...form.register("passaporte")} placeholder="Sem CPF" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Prescrição digital exige CPF ou passaporte (RDC 1000/25).
+                  </p>
                 </div>
               </>
             )}

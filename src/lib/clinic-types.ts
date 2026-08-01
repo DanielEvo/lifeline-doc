@@ -37,6 +37,10 @@ export type Patient = {
   nascimento: string | null; // ISO date (yyyy-mm-dd)
   sexo: "feminino" | "masculino" | "outro" | null;
   cpf: string | null;
+  // Alternativa ao CPF pra paciente estrangeiro — RDC 1000/25 exige CPF OU
+  // passaporte em toda emissão de prescrição (não há mais opção "sem nenhum
+  // dos dois"). Só dígitos, como cpf.
+  passaporte: string | null;
   telefone: string | null;
   email: string | null;
   // E-mail é a credencial de login do paciente — trocar exige a confirmação

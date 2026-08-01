@@ -191,6 +191,7 @@ function Prontuario() {
           nascimento: v.nascimento || null,
           sexo: v.sexo || null,
           cpf: v.cpf || null,
+          passaporte: v.passaporte || null,
           telefone: v.telefone || null,
           email: v.email || null,
           convenio: v.convenio || null,
@@ -2739,6 +2740,7 @@ function ReceitaDialog({
     cpfMedico: "",
     especialidade: "",
     crmCidade: "",
+    dataNascimento: "",
     telefoneMedico: "",
     localAtendimento: "",
   });
@@ -2759,6 +2761,7 @@ function ReceitaDialog({
         cpfMedico: p.cpfMedico,
         especialidade: p.especialidade,
         crmCidade: p.crmCidade,
+        dataNascimento: p.dataNascimento,
         telefoneMedico: p.telefoneMedico,
         localAtendimento: p.localAtendimento,
       });
@@ -2911,6 +2914,13 @@ function ReceitaDialog({
                 placeholder="Cidade do CRM"
                 className="flex-1 rounded border border-border bg-background px-1.5 py-1 text-xs"
               />
+              <input
+                type="date"
+                value={crmForm.dataNascimento}
+                onChange={(e) => setCrmForm((f) => ({ ...f, dataNascimento: e.target.value }))}
+                title="Data de nascimento — exigida pela Memed"
+                className="w-36 rounded border border-border bg-background px-1.5 py-1 text-xs"
+              />
             </div>
             {/* Telefone e local de atendimento saem impressos no cabeçalho da
                 receita (exigência do CFM) — opcionais aqui para não travar o
@@ -2937,6 +2947,7 @@ function ReceitaDialog({
                   !crmForm.cpfMedico ||
                   !crmForm.especialidade ||
                   !crmForm.crmCidade ||
+                  !crmForm.dataNascimento ||
                   saveMemed.isPending
                 }
                 onClick={() => saveMemed.mutate()}
@@ -2949,6 +2960,19 @@ function ReceitaDialog({
         {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error" && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
             Não consegui conectar ao módulo da Memed agora — use a receita local abaixo.
+          </p>
+        )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "prescritor_inativo" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+            Seu cadastro de prescritor está inativo na Memed — fale com o suporte deles para
+            reativar. Por enquanto, use a receita local abaixo.
+          </p>
+        )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "missing_cpf" && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900">
+            Prescrição digital exige CPF (ou passaporte) do paciente cadastrado — é uma exigência da
+            RDC 1000/25. Complete o cadastro do paciente e tente de novo, ou use a receita local
+            abaixo.
           </p>
         )}
 

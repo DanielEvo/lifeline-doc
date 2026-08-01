@@ -47,6 +47,7 @@ export async function runPatientIntake(
       nascimento: values.nascimento || null,
       sexo: values.sexo || null,
       cpf: values.cpf || null,
+      passaporte: values.passaporte || null,
       telefone: values.telefone || null,
       email: values.email || null,
       convenio: values.convenio || null,

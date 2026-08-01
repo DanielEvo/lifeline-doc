@@ -26,7 +26,10 @@ declare global {
       event: { add: (name: string, cb: (module: { name: string }) => void) => void };
     };
     MdHub?: {
-      command: { send: (module: string, command: string, payload: unknown) => Promise<unknown> };
+      // payload opcional: comandos como "logout" (plataforma.sdk) não levam
+      // nenhum — a doc oficial chama `send("plataforma.sdk", "logout")` sem
+      // 3º argumento.
+      command: { send: (module: string, command: string, payload?: unknown) => Promise<unknown> };
       event: { add: (name: string, cb: (data: unknown) => void) => void };
       module: { show: (name: string) => Promise<unknown> };
     };
@@ -55,9 +58,14 @@ export function MemedPrescriptionWidget({
   onPrescricaoExcluida?: (data: unknown) => void;
   onReady?: (api: MemedWidgetApi) => void;
 }) {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // "ready-to-show": módulo inicializado (setPaciente/setWorkplace feitos),
+  // mas MdHub.module.show ainda não foi chamado — a doc pede explicitamente
+  // que `show` rode no clique de um botão, não sozinho dentro do listener
+  // de core:moduleInit.
+  const [status, setStatus] = useState<"loading" | "ready-to-show" | "ready" | "error">("loading");
   const errorMsgRef = useRef<string>("Não consegui carregar o módulo da Memed.");
   const containerRef = useRef<HTMLDivElement>(null);
+  const abrirRef = useRef<() => void>(() => {});
   // Callbacks sempre atualizados sem re-montar o embed.
   const impressaRef = useRef(onPrescricaoImpressa);
   const excluidaRef = useRef(onPrescricaoExcluida);
@@ -124,7 +132,6 @@ export function MemedPrescriptionWidget({
           // Evento marcado como obrigatório pela Memed para autorização das
           // credenciais de produção — precisa estar sempre registrado.
           window.MdHub!.event.add("prescricaoExcluida", onExcluida);
-          await window.MdHub!.module.show("plataforma.prescricao");
           try {
             await window.MdHub!.command.send("plataforma.prescricao", "setFeatureToggle", {
               historyPrescription: false,
@@ -136,15 +143,19 @@ export function MemedPrescriptionWidget({
           } catch {
             // toggles são um ajuste fino: falha aqui não invalida o módulo
           }
-          if (!cancelled) {
-            setStatus("ready");
-            readyRef.current?.({
-              addItem: (payload) =>
-                window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
-              newPrescription: () =>
-                window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+          abrirRef.current = () => {
+            void window.MdHub!.module.show("plataforma.prescricao").then(() => {
+              if (cancelled) return;
+              setStatus("ready");
+              readyRef.current?.({
+                addItem: (payload) =>
+                  window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
+                newPrescription: () =>
+                  window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+              });
             });
-          }
+          };
+          if (!cancelled) setStatus("ready-to-show");
         } catch {
           if (!cancelled) {
             errorMsgRef.current = "Falha ao inicializar a prescrição com os dados do paciente.";
@@ -191,10 +202,27 @@ export function MemedPrescriptionWidget({
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando módulo Memed…
         </div>
       )}
+      {status === "ready-to-show" && (
+        <div className="flex min-h-[300px] flex-col items-center justify-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Prescritor e paciente carregados — pronto para prescrever.
+          </p>
+          <button
+            type="button"
+            onClick={() => abrirRef.current()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+          >
+            Abrir prescrição Memed
+          </button>
+        </div>
+      )}
       {/* min-width 820px é exigência conhecida do embed Memed — não reduzir.
           O wrapper rola horizontalmente para não estourar o dialog em telas
-          menores que 900px (notebook), em vez de cortar o módulo. */}
-      <div className="w-full overflow-x-auto">
+          menores que 900px (notebook), em vez de cortar o módulo. Fica
+          sempre montado no DOM (a Memed pode depender disso pra encontrar
+          onde inserir o iframe) — só escondido visualmente até o clique em
+          "Abrir prescrição", que é quando `MdHub.module.show` de fato roda. */}
+      <div className={`w-full overflow-x-auto ${status === "ready" ? "" : "hidden"}`}>
         <div ref={containerRef} style={{ minWidth: 820, minHeight: 700 }} className="w-full" />
       </div>
     </div>
