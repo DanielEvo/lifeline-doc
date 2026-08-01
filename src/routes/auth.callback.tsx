@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { googleExchange } from "@/lib/api/auth.functions";
 import { setSession } from "@/lib/session";
+import { primeiroNome } from "@/lib/clinic-types";
 
 export const Route = createFileRoute("/auth/callback")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -41,7 +42,7 @@ function AuthCallback() {
           return;
         }
         setSession({ token: r.token, nome: r.doctor.nome, email: r.doctor.email });
-        toast.success(`Bem-vinda, ${r.doctor.nome.split(" ")[0]}!`, {
+        toast.success(`Bem-vinda, ${primeiroNome(r.doctor.nome)}!`, {
           description: "Abrindo seu consultório…",
         });
         navigate({ to: "/app" });

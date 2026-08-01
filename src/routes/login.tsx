@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/auth.functions";
 import { getSession, setSession } from "@/lib/session";
 import { CONSENT_TEXT } from "@/lib/consent";
+import { primeiroNome } from "@/lib/clinic-types";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -51,7 +52,7 @@ function LoginPage() {
 
   const finish = (r: { token: string; doctor: { nome: string; email: string } }) => {
     setSession({ token: r.token, nome: r.doctor.nome, email: r.doctor.email });
-    toast.success(`Bem-vinda, ${r.doctor.nome.split(" ")[0]}!`, {
+    toast.success(`Bem-vinda, ${primeiroNome(r.doctor.nome)}!`, {
       description: "Abrindo seu consultório…",
     });
     navigate({ to: "/app" });

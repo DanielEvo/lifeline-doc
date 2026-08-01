@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { callLovableChat } from "../knowledge-chat.functions";
+import { requireDoctor } from "../auth.server";
 
 // Ditado da consulta: áudio real (MediaRecorder no navegador) → transcrição
 // via Lovable AI Gateway (proxy no formato da OpenAI, modelo
@@ -54,6 +55,9 @@ Se a transcrição não tiver conteúdo clínico relevante, devolva string vazia
 export const transcribeConsult = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
+      // Sem token, qualquer um na internet podia mandar 22MB de áudio e
+      // queimar os créditos de IA do workspace — o endpoint era público.
+      token: z.string().min(1),
       audioBase64: z.string().min(1).max(30_000_000), // ~22MB decodificado, cobre consultas curtas
       mimeType: z.string().max(60).default("audio/webm"),
       durationSec: z.number().min(0).max(7200).default(0),
@@ -66,6 +70,9 @@ export const transcribeConsult = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) throw new Error("Sessão expirada. Entre novamente para usar o ditado.");
+
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
       throw new Error(

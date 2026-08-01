@@ -87,6 +87,7 @@ import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
 import { resolveLoincCode } from "../loinc-mapping.server";
 import { createUsageCounter } from "../rate-limit.server";
 import { logAccess } from "../access-log.server";
+import { optionalRead } from "../resilient.server";
 
 // PAC-04 — limite de arquivo declarado e validado (não só no dropzone, o
 // servidor também recusa payloads gigantes: cada chamada bate na Gemini API
@@ -342,13 +343,20 @@ export const getWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const [patients, columns, appointments, charges, categories] = await Promise.all([
+    // Só a agenda vive no Postgres; pacientes, kanban, cobranças e categorias
+    // são locais. Antes, uma falha na agenda derrubava o workspace inteiro —
+    // o médico perdia a lista de pacientes por causa de uma fonte só. Agora
+    // a agenda é opcional e a tela avisa explicitamente quando faltou (nunca
+    // mostrar "nenhuma consulta" silenciosamente: quem tem consulta marcada
+    // precisa saber que a lista está incompleta, não vazia).
+    const [patients, columns, appointmentsRead, charges, categories] = await Promise.all([
       listPatients(doctor.id, { includeArchived: true }),
       getBoardColumns(doctor.id),
-      listAppointments(doctor.id),
+      optionalRead("appointments", () => listAppointments(doctor.id), []),
       listCharges(doctor.id),
       listCategories(doctor.id),
     ]);
+    const appointments = appointmentsRead.data;
     return {
       ok: true as const,
       doctor: {
@@ -361,6 +369,7 @@ export const getWorkspace = createServerFn({ method: "POST" })
       patients: await withVinculo(doctor.id, patients),
       columns,
       appointments,
+      agendaUnavailable: appointmentsRead.unavailable,
       charges,
       categories,
     };
@@ -1112,9 +1121,13 @@ export const getPatientRecord = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await getPatient(doctor.id, data.id);
     if (!patient) return { ok: false as const, error: "not_found" as const };
+    // Biomarcadores vivem no Postgres (DAT-02); evoluções, SOAP e receitas
+    // continuam em arquivo local. Uma falha na tabela de exames NÃO pode
+    // esconder o prontuário inteiro do médico — devolve o que dá para ler e
+    // sinaliza a parte que faltou.
     const [evolutions, measurements, [merged]] = await Promise.all([
       listEvolutions(doctor.id, data.id),
-      listMeasurements(doctor.id, data.id),
+      optionalRead("measurements", () => listMeasurements(doctor.id, data.id), []),
       withVinculo(doctor.id, [patient]),
     ]);
     // SEC-05 — log de acesso auditável: abrir o prontuário é o evento que
@@ -1128,7 +1141,13 @@ export const getPatientRecord = createServerFn({ method: "POST" })
       action: "view_record",
       channel: "web",
     });
-    return { ok: true as const, patient: merged, evolutions, measurements };
+    return {
+      ok: true as const,
+      patient: merged,
+      evolutions,
+      measurements: measurements.data,
+      measurementsUnavailable: measurements.unavailable,
+    };
   });
 
 // Registrar resultado de exame (biomarcador). A faixa de referência vem do

@@ -124,7 +124,7 @@ type Profile = {
 
 type TimelineData =
   | { status: "loading" }
-  | { status: "ready"; profile: Profile; pending: PendingItem[] }
+  | { status: "ready"; profile: Profile; pending: PendingItem[]; examesIndisponiveis: boolean }
   | { status: "error"; msg: string };
 
 type Tab = "home" | "history" | "exams" | "meds" | "profile";
@@ -162,6 +162,7 @@ function PatientAppPage() {
         status: "ready",
         profile: r.profile as Profile,
         pending: r.pendingMeasurements as PendingItem[],
+        examesIndisponiveis: !!r.measurementsUnavailable,
       });
     } catch {
       setState({ status: "error", msg: "Não consegui carregar agora." });
@@ -296,6 +297,13 @@ function PatientAppPage() {
             {state.status === "error" && (
               <div className="rounded-2xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
                 {state.msg}
+              </div>
+            )}
+
+            {state.status === "ready" && state.examesIndisponiveis && (
+              <div className="mb-3 rounded-2xl bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900">
+                <strong>Seus exames não carregaram agora.</strong> O resto do seu histórico está
+                aqui. Nada foi perdido — tente de novo em alguns instantes.
               </div>
             )}
 

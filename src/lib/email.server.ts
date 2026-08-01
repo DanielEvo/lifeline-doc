@@ -9,6 +9,8 @@
 
 import { Resend } from "resend";
 
+import { primeiroNome } from "./clinic-types";
+
 export type SendResult = { sent: boolean; error?: string };
 
 const FALLBACK_FROM = "LifeLine <onboarding@resend.dev>";
@@ -61,7 +63,7 @@ export async function sendVerificationEmail(
   nome: string,
   link: string,
 ): Promise<SendResult> {
-  const primeiro = nome.split(" ")[0] || nome;
+  const primeiro = primeiroNome(nome);
   return send(
     to,
     "Confirme seu e-mail · LifeLine",
@@ -85,7 +87,7 @@ export async function sendPasswordResetEmail(
   link: string,
   opts?: { googleOnly?: boolean },
 ): Promise<SendResult> {
-  const primeiro = nome.split(" ")[0] || nome;
+  const primeiro = primeiroNome(nome);
   const notaGoogle = opts?.googleOnly
     ? `<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px">
          Atenção: esta conta usa <strong>login com Google</strong>, não senha.

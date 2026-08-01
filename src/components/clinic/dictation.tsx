@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { transcribeConsult } from "@/lib/api/transcribe.functions";
+import { useClinic } from "@/lib/clinic-context";
 
 type Block = {
   id: string;
@@ -50,6 +51,7 @@ export function Dictation({
   templateContent?: string;
   onAcceptToSection: (label: string, text: string) => void;
 }) {
+  const { token } = useClinic();
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -82,6 +84,7 @@ export function Dictation({
       const audioBase64 = await blobToBase64(blob);
       return transcribeConsult({
         data: {
+          token,
           audioBase64,
           mimeType,
           durationSec: seconds,

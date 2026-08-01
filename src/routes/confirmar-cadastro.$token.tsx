@@ -9,6 +9,7 @@ import {
   confirmEmailVerification,
   resendVerificationEmail,
 } from "@/lib/api/auth.functions";
+import { primeiroNome } from "@/lib/clinic-types";
 
 export const Route = createFileRoute("/confirmar-cadastro/$token")({
   head: () => ({
@@ -72,7 +73,7 @@ function ConfirmarCadastroPage() {
             </div>
             <h1 className="mt-4 text-lg font-semibold tracking-tight">E-mail confirmado</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Tudo certo{nome ? `, ${nome.split(" ")[0]}` : ""}. Sua conta já está ativa.
+              Tudo certo{nome ? `, ${primeiroNome(nome)}` : ""}. Sua conta já está ativa.
             </p>
             <Button
               type="button"

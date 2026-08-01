@@ -19,15 +19,27 @@ export function makeSignature(payload: string): string {
   return (hex.slice(0, 32).toUpperCase().match(/.{1,8}/g) ?? []).join("-");
 }
 
+/** Sufixo aleatório em base36 MAIÚSCULO, com entropia criptográfica.
+ *  Math.random() não serve aqui: o código da receita é a única credencial
+ *  da página pública /receita/$code, que devolve nome do paciente e
+ *  medicamentos. Com PRNG previsível (e só 6 caracteres), dava para
+ *  enumerar receitas de terceiros. */
+function randomSuffix(chars: number): string {
+  let out = "";
+  while (out.length < chars) {
+    out += crypto.randomBytes(8).readUInt32BE(0).toString(36).toUpperCase();
+  }
+  return out.slice(0, chars);
+}
+
 export function makeProtocol(): string {
-  return `LL-${Date.now().toString(36).toUpperCase()}-${Math.random()
-    .toString(36)
-    .slice(2, 6)
-    .toUpperCase()}`;
+  return `LL-${Date.now().toString(36).toUpperCase()}-${randomSuffix(4)}`;
 }
 
 export function makePrescriptionCode(): string {
-  return `MD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  // 10 caracteres base36 ≈ 51 bits — inviável de enumerar, e continua
+  // curto o bastante para o paciente ditar por telefone.
+  return `MD-${randomSuffix(10)}`;
 }
 
 export type BoardColumn = "triagem" | "atendimento" | "aguardando" | "recebidos";
