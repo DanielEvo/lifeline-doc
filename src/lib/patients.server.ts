@@ -32,6 +32,7 @@ export type PatientInput = {
   nascimento?: string | null;
   sexo?: Patient["sexo"];
   cpf?: string | null;
+  passaporte?: string | null;
   telefone?: string | null;
   email?: string | null;
   globalId?: string | null;
@@ -127,6 +128,7 @@ export async function createPatient(doctorId: string, input: PatientInput): Prom
     nascimento: input.nascimento || null,
     sexo: input.sexo ?? null,
     cpf: input.cpf?.trim() || null,
+    passaporte: input.passaporte?.trim() || null,
     telefone: input.telefone?.trim() || null,
     email: input.email?.trim() || null,
     pendingEmail: null,
@@ -172,6 +174,7 @@ export async function updatePatient(
     if (patch.nascimento !== undefined) p.nascimento = patch.nascimento || null;
     if (patch.sexo !== undefined) p.sexo = patch.sexo ?? null;
     if (patch.cpf !== undefined) p.cpf = patch.cpf?.trim() || null;
+    if (patch.passaporte !== undefined) p.passaporte = patch.passaporte?.trim() || null;
     if (patch.telefone !== undefined) p.telefone = patch.telefone?.trim() || null;
     if (patch.email !== undefined) {
       const nextEmail = patch.email?.trim() || null;

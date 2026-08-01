@@ -1,13 +1,9 @@
 // Server-only: adaptador real para a API REST da Memed (Sinapse Prescrição).
-// Contrato confirmado em doc.memed.com.br (ambiente de homologação/testes,
-// compartilhado por todos os parceiros até a validação técnica liberar as
-// chaves de produção): POST /sinapse-prescricao/usuarios registra ou
-// atualiza o prescritor e devolve um JWT em data.attributes.token, usado
-// como data-token do script de embed do módulo de prescrição.
-//
-// Sem MEMED_API_KEY/MEMED_SECRET_KEY no ambiente, ou sem CRM/CPF cadastrados
-// no médico, cai em "not_configured"/"missing_profile" — nunca simula um
-// token, porque um token falso quebraria o embed real do widget.
+// Referência: HANDOVER_Memed_Referencia_Tecnica.md (consolidado a partir de
+// 24 páginas da doc oficial, Julho/2026). Nunca simula um token — sem
+// credenciais ou perfil incompleto, cai em erro explícito
+// (not_configured/missing_profile), porque um token falso quebraria o
+// embed real do widget.
 
 import type { Doctor } from "./auth.server";
 
@@ -68,7 +64,11 @@ export function isMemedLikelyOffline(now = new Date()): boolean {
 
 export type MemedTokenResult =
   | { ok: true; token: string }
-  | { ok: false; error: "not_configured" | "missing_profile" | "memed_error"; detail?: string };
+  | {
+      ok: false;
+      error: "not_configured" | "missing_profile" | "prescritor_inativo" | "memed_error";
+      detail?: string;
+    };
 
 // Cache de token por médico: antes cada abertura do dialog de receita batia
 // em POST /usuarios, o que é lento e conta para o rate-limit da Memed.
@@ -89,9 +89,77 @@ async function memedFetch(url: string, init: RequestInit, attempt = 0): Promise<
   }
 }
 
+// ---------------------------------------------------------------------------
+// Resolução de cidade/especialidade → ID numérico da Memed.
+//
+// A API não aceita mais texto livre em `attributes.cidade`/`attributes.
+// especialidade` — exige um bloco `relationships` com IDs numéricos da base
+// da própria Memed (§3.1/§3.2 do handover). As rotas de busca não exigem
+// autenticação. Cacheado em memória (a doc recomenda explicitamente não
+// bater na API a cada cadastro) — perfil de médico muda raramente.
+// ---------------------------------------------------------------------------
+
+const cidadeIdCache = new Map<string, number | null>();
+const especialidadeIdCache = new Map<string, number | null>();
+
+function normalizeKey(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+async function resolveMemedCidadeId(cidade: string, uf: string): Promise<number | null> {
+  const key = `${normalizeKey(cidade)}|${normalizeKey(uf)}`;
+  if (cidadeIdCache.has(key)) return cidadeIdCache.get(key)!;
+  try {
+    const qs = `filter[q]=${encodeURIComponent(cidade)}&filter[uf]=${encodeURIComponent(uf)}`;
+    const res = await memedFetch(`${MEMED_API_BASE}/cidades?${qs}`, {
+      headers: { Accept: "application/vnd.api+json" },
+    });
+    const json: any = await res.json().catch(() => null);
+    const first = Array.isArray(json?.data) ? json.data[0] : null;
+    const id = first?.id != null ? Number(first.id) : null;
+    cidadeIdCache.set(key, id);
+    return id;
+  } catch (e) {
+    console.error("[memed] cidade_lookup_error", { cidade, uf, error: String(e) });
+    return null;
+  }
+}
+
+async function resolveMemedEspecialidadeId(especialidade: string): Promise<number | null> {
+  const key = normalizeKey(especialidade);
+  if (especialidadeIdCache.has(key)) return especialidadeIdCache.get(key)!;
+  try {
+    const qs = `filter[q]=${encodeURIComponent(especialidade)}`;
+    const res = await memedFetch(`${MEMED_API_BASE}/especialidades?${qs}`, {
+      headers: { Accept: "application/vnd.api+json" },
+    });
+    const json: any = await res.json().catch(() => null);
+    const first = Array.isArray(json?.data) ? json.data[0] : null;
+    const id = first?.id != null ? Number(first.id) : null;
+    especialidadeIdCache.set(key, id);
+    return id;
+  } catch (e) {
+    console.error("[memed] especialidade_lookup_error", { especialidade, error: String(e) });
+    return null;
+  }
+}
+
+/** yyyy-mm-dd (formato interno) → dd/mm/YYYY (formato exigido pela Memed). */
+function toMemedDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
-  if (!doctor.crm || !doctor.crmUf || !doctor.cpfMedico || !doctor.especialidade || !doctor.crmCidade) {
+  if (
+    !doctor.crm ||
+    !doctor.crmUf ||
+    !doctor.cpfMedico ||
+    !doctor.especialidade ||
+    !doctor.crmCidade ||
+    !doctor.dataNascimento
+  ) {
     return { ok: false, error: "missing_profile" };
   }
 
@@ -102,6 +170,14 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
   const [nome, ...resto] = doctor.nome.trim().split(/\s+/);
   const sobrenome = resto.join(" ") || nome;
+
+  // cidade/especialidade viram relationships com ID numérico — sem match,
+  // omite o relacionamento em vez de falhar (não estão na lista de campos
+  // obrigatórios da Memed, só board/cpf/nome/sobrenome/data_nascimento estão).
+  const [cidadeId, especialidadeId] = await Promise.all([
+    resolveMemedCidadeId(doctor.crmCidade, doctor.crmUf),
+    resolveMemedEspecialidadeId(doctor.especialidade),
+  ]);
 
   try {
     const res = await memedFetch(`${MEMED_API_BASE}/sinapse-prescricao/usuarios?${qs}`, {
@@ -116,19 +192,32 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
             sobrenome,
             cpf: doctor.cpfMedico.replace(/\D/g, ""),
             board: { board_code: "CRM", board_number: doctor.crm, board_state: doctor.crmUf },
+            data_nascimento: toMemedDate(doctor.dataNascimento),
             email: doctor.email,
             telefone: (doctor.telefoneMedico ?? "").replace(/\D/g, ""),
-            especialidade: doctor.especialidade,
-            cidade: doctor.crmCidade,
           },
+          ...((cidadeId != null || especialidadeId != null) && {
+            relationships: {
+              ...(cidadeId != null && {
+                cidade: { data: { type: "cidades", id: cidadeId } },
+              }),
+              ...(especialidadeId != null && {
+                especialidade: { data: { type: "especialidades", id: especialidadeId } },
+              }),
+            },
+          }),
         },
       }),
     });
     const json: any = await res.json().catch(() => null);
     const jwtToken = json?.data?.attributes?.token;
+    const status = json?.data?.attributes?.status as string | undefined;
+    if (status === "Inativo") {
+      console.error("[memed] prescritor_inativo", { doctorId: doctor.id });
+      return { ok: false, error: "prescritor_inativo" };
+    }
     if (!res.ok || !jwtToken) {
       const detail = JSON.stringify(json)?.slice(0, 300);
-      // Log estruturado server-side (nunca inclui api-key/secret-key).
       console.error("[memed] token_error", { status: res.status, doctorId: doctor.id, detail });
       return { ok: false, error: "memed_error", detail };
     }
@@ -157,6 +246,7 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
     cpfMedico: "11144477735",
     especialidade: "Clínica Geral",
     crmCidade: "São Paulo",
+    dataNascimento: "1990-01-01",
     email: "sandbox@lifeline.doc",
   } as Doctor;
   return getMemedPrescriberToken(fakeDoctor);

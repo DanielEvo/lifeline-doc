@@ -50,6 +50,7 @@ const VAZIO = {
   cpfMedico: "",
   especialidade: "",
   crmCidade: "",
+  dataNascimento: "",
   telefoneMedico: "",
   localAtendimento: "",
 };
@@ -75,6 +76,7 @@ function PerfilPage() {
         cpfMedico: p.cpfMedico,
         especialidade: p.especialidade,
         crmCidade: p.crmCidade,
+        dataNascimento: p.dataNascimento,
         telefoneMedico: p.telefoneMedico,
         localAtendimento: p.localAtendimento,
       });
@@ -91,6 +93,7 @@ function PerfilPage() {
           cpfMedico: form.cpfMedico.replace(/\D/g, ""),
           especialidade: form.especialidade.trim(),
           crmCidade: form.crmCidade.trim(),
+          dataNascimento: form.dataNascimento,
           telefoneMedico: form.telefoneMedico.trim() || null,
           localAtendimento: form.localAtendimento.trim() || null,
         },
@@ -111,6 +114,8 @@ function PerfilPage() {
   if (cpfDigits.length !== 11) erros.push("O CPF deve ter 11 dígitos.");
   if (form.especialidade.trim().length < 2) erros.push("Informe a especialidade.");
   if (form.crmCidade.trim().length < 2) erros.push("Informe a cidade de atuação.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dataNascimento))
+    erros.push("Informe sua data de nascimento (exigida pela Memed desde a RDC 1000/25).");
   const podeSalvar = erros.length === 0 && !salvar.isPending;
 
   const campo = (k: keyof typeof VAZIO) => ({
@@ -212,6 +217,13 @@ function PerfilPage() {
               searchPlaceholder="Buscar especialidade…"
               emptyText="Digite para usar uma especialidade própria."
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dataNascimento">Data de nascimento</Label>
+            <Input id="dataNascimento" type="date" {...campo("dataNascimento")} />
+            <p className="text-[11px] text-muted-foreground">
+              Exigida pela Memed desde a RDC 1000/25 — não sai impressa na receita.
+            </p>
           </div>
         </CardContent>
       </Card>

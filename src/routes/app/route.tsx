@@ -107,6 +107,13 @@ function Shell({ clinic }: { clinic: Clinic }) {
   const larguraAberta = kbOpen ? larguraKb : perfisOpen ? larguraPerfis : 0;
 
   const sair = async () => {
+    // Obrigatório pela Memed (§5.11 do handover): limpa o localStorage do
+    // módulo de prescrição. Sem isso, dois médicos que compartilham a mesma
+    // máquina (comum em consultório) têm conflito de cadastro na Memed. Só
+    // roda se o script chegou a carregar (médico abriu alguma receita).
+    if (window.MdHub) {
+      await window.MdHub.command.send("plataforma.sdk", "logout").catch(() => {});
+    }
     const s = getSession();
     clearSession();
     if (s) logoutFn({ data: { token: s.token } }).catch(() => {});

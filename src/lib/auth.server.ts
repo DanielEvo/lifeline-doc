@@ -25,6 +25,10 @@ export type Doctor = {
   cpfMedico: string | null;
   especialidade: string | null;
   crmCidade: string | null;
+  // RDC 1000/25 (vigente desde 13/02/2026): a Memed exige data de
+  // nascimento do prescritor no cadastro. yyyy-mm-dd (mesmo formato de
+  // Patient.nascimento); convertido pra dd/mm/YYYY só no payload da Memed.
+  dataNascimento: string | null;
   // Biomarcadores em destaque no header do prontuário (PRO-08) — nomes do
   // BIOMARKER_CATALOG, não loincCode: o resto do sistema já chaveia
   // Measurement por `name`, então isso evita uma camada de tradução à toa.
@@ -104,6 +108,7 @@ export async function createDoctor(input: {
     cpfMedico: null,
     especialidade: null,
     crmCidade: null,
+    dataNascimento: null,
     preferredMetrics: [],
     calendarSettings: null,
     // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
@@ -153,6 +158,7 @@ export async function updateDoctorMemedProfile(
     cpfMedico: string;
     especialidade: string;
     crmCidade: string;
+    dataNascimento: string;
     telefoneMedico?: string | null;
     localAtendimento?: string | null;
   },
@@ -166,6 +172,7 @@ export async function updateDoctorMemedProfile(
     d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
     d.especialidade = input.especialidade.trim();
     d.crmCidade = input.crmCidade.trim();
+    d.dataNascimento = input.dataNascimento;
     if (input.telefoneMedico !== undefined)
       d.telefoneMedico = input.telefoneMedico?.trim() || null;
     if (input.localAtendimento !== undefined)

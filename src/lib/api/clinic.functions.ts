@@ -438,6 +438,7 @@ export const createMyPatient = createServerFn({ method: "POST" })
       nascimento: YMD.nullish(),
       sexo: z.enum(["feminino", "masculino", "outro"]).nullish(),
       cpf: z.string().max(20).nullish(),
+      passaporte: z.string().max(20).nullish(),
       telefone: z.string().max(24).nullish(),
       email: z.string().email().max(160).nullish(),
       convenio: z.string().max(60).nullish(),
@@ -471,6 +472,7 @@ export const updateMyPatient = createServerFn({ method: "POST" })
       nascimento: YMD.nullish(),
       sexo: z.enum(["feminino", "masculino", "outro"]).nullish(),
       cpf: z.string().max(20).nullish(),
+      passaporte: z.string().max(20).nullish(),
       telefone: z.string().max(24).nullish(),
       email: z.string().email().max(160).nullish(),
       convenio: z.string().max(60).nullish(),
@@ -869,7 +871,14 @@ export const getMemedStatus = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
     if (!isMemedConfigured()) return { ok: true as const, state: "not_configured" as const };
-    if (!doctor.crm || !doctor.crmUf || !doctor.cpfMedico) {
+    if (
+      !doctor.crm ||
+      !doctor.crmUf ||
+      !doctor.cpfMedico ||
+      !doctor.especialidade ||
+      !doctor.crmCidade ||
+      !doctor.dataNascimento
+    ) {
       return { ok: true as const, state: "missing_profile" as const };
     }
     const result = await getMemedPrescriberToken(doctor);
@@ -886,6 +895,7 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       cpfMedico: z.string().min(11).max(14),
       especialidade: z.string().min(2).max(80),
       crmCidade: z.string().min(2).max(80),
+      dataNascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
       telefoneMedico: z.string().max(20).nullish(),
       localAtendimento: z.string().max(120).nullish(),
     }),
@@ -899,6 +909,7 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
       cpfMedico: data.cpfMedico,
       especialidade: data.especialidade,
       crmCidade: data.crmCidade,
+      dataNascimento: data.dataNascimento,
       telefoneMedico: data.telefoneMedico ?? undefined,
       localAtendimento: data.localAtendimento ?? undefined,
     });
@@ -921,16 +932,26 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
     if (!isMemedConfigured()) return { ok: false as const, error: "not_configured" as const };
     const result = await getMemedPrescriberToken(doctor);
     if (!result.ok) return { ok: false as const, error: result.error, detail: result.detail };
-    // CPF inválido/incompleto quebra o setPaciente silenciosamente — sem 11
-    // dígitos, envia withoutCpf em vez de mandar lixo para a Memed.
+    // RDC 1000/25 (vigente desde 13/02/2026): CPF ou passaporte é
+    // obrigatório em toda emissão de prescrição — não existe mais
+    // "withoutCpf". Sem um dos dois, nem abrimos o módulo: melhor pedir
+    // pro médico completar o cadastro do que gerar uma receita fora de
+    // conformidade (ou que a própria Memed vai rejeitar).
     const cpfDigits = (patient.cpf ?? "").replace(/\D/g, "");
+    const passaporte = (patient.passaporte ?? "").replace(/\D/g, "");
+    if (cpfDigits.length !== 11 && passaporte.length === 0) {
+      return { ok: false as const, error: "missing_cpf" as const };
+    }
     return {
       ok: true as const,
       token: result.token,
       scriptUrl: MEMED_SCRIPT_URL,
       likelyOffline: isMemedLikelyOffline(),
       patient: {
-        idExterno: patient.id,
+        // globalId (TECH-13) é o identificador estável do paciente entre
+        // médicos; patient.id só vale dentro deste prontuário. Cai pro id
+        // local só quando o paciente ainda não passou pelo vínculo BKL-37.
+        idExterno: patient.globalId ?? patient.id,
         nome: patient.nome,
         sexo:
           patient.sexo === "feminino"
@@ -938,7 +959,7 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
             : patient.sexo === "masculino"
               ? ("Masculino" as const)
               : undefined,
-        ...(cpfDigits.length === 11 ? { cpf: cpfDigits } : { withoutCpf: true as const }),
+        ...(cpfDigits.length === 11 ? { cpf: cpfDigits } : { passaporte }),
         data_nascimento: patient.nascimento
           ? patient.nascimento.split("-").reverse().join("/")
           : undefined,
@@ -1530,6 +1551,7 @@ export const getDoctorProfile = createServerFn({ method: "POST" })
         cpfMedico: doctor.cpfMedico ?? "",
         especialidade: doctor.especialidade ?? "",
         crmCidade: doctor.crmCidade ?? "",
+        dataNascimento: doctor.dataNascimento ?? "",
         telefoneMedico: doctor.telefoneMedico ?? "",
         localAtendimento: doctor.localAtendimento ?? "",
       },
