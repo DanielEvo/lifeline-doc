@@ -259,6 +259,10 @@ export type Measurement = {
   date: string; // yyyy-mm-dd (data da coleta)
   label: string; // "Check-up de rotina", "Exames via WhatsApp"…
   motivo?: string | null; // razão clínica da solicitação (ex.: "investigar fadiga")
+  // DAT-02 — mesmo par já calculado na extração por IA (resolveLoincCode) e
+  // até então descartado antes de gravar; agora persiste junto no Postgres.
+  loincCode?: string | null;
+  loincConfidence?: "exact" | "fuzzy" | "unmapped";
   createdAt: string;
 };
 

@@ -45,6 +45,11 @@ export type Doctor = {
   // e o local de atendimento cai no fallback "Consultório <nome>".
   telefoneMedico?: string | null;
   localAtendimento?: string | null;
+  // LGP-01 — consentimento versionado (LGPD). null até o médico aceitar os
+  // termos vigentes; comparar com CONSENT_VERSION (src/lib/consent.ts), não
+  // só checar presença — uma mudança de versão precisa de novo aceite.
+  consentVersion: string | null;
+  consentAcceptedAt: string | null;
 };
 
 /** Ausência do campo = conta legada, já em uso → nunca travar o acesso. */
@@ -113,6 +118,8 @@ export async function createDoctor(input: {
     calendarSettings: null,
     // Google já validou o e-mail no OAuth; cadastro por senha precisa confirmar.
     emailVerified: input.provider === "google",
+    consentVersion: null,
+    consentAcceptedAt: null,
   };
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     rows.push(doctor);
@@ -218,6 +225,17 @@ export async function findDoctorByToken(token: string): Promise<Doctor | undefin
 export async function requireDoctor(token: string | undefined | null): Promise<Doctor | null> {
   if (!token) return null;
   return (await findDoctorByToken(token)) ?? null;
+}
+
+/** LGP-01 — grava o aceite explícito dos termos vigentes. */
+export async function acceptDoctorConsent(doctorId: string, version: string): Promise<void> {
+  await mutateRows<Doctor>(DOCTORS, (rows) => {
+    const d = rows.find((x) => x.id === doctorId);
+    if (d) {
+      d.consentVersion = version;
+      d.consentAcceptedAt = nowIso();
+    }
+  });
 }
 
 export async function revokeSession(token: string): Promise<void> {

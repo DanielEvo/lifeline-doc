@@ -22,13 +22,17 @@ function EsqueciSenhaPacientePage() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [devLink, setDevLink] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy || !email) return;
     setBusy(true);
     try {
-      await requestPatientPasswordReset({ data: { email, origin: window.location.origin } });
+      const r = await requestPatientPasswordReset({
+        data: { email, origin: window.location.origin },
+      });
+      setDevLink(r.devLink ?? null);
       setEnviado(true);
     } catch {
       toast.error("Não consegui conectar agora. Tente novamente.");
@@ -51,6 +55,19 @@ function EsqueciSenhaPacientePage() {
                 Se este e-mail estiver cadastrado, enviamos um link para criar uma nova senha. Ele
                 vale por 30 minutos.
               </p>
+              {devLink && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                  <p className="font-medium">
+                    Este ambiente não tem envio de e-mail configurado (RESEND_API_KEY).
+                  </p>
+                  <p className="mt-1">
+                    Use o link direto pra redefinir a senha:{" "}
+                    <a href={devLink} className="break-all font-semibold underline">
+                      {devLink}
+                    </a>
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <>

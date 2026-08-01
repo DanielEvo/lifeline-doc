@@ -9,6 +9,17 @@ import {
   listConsultations,
   listPrescriptions,
 } from "../store.server";
+import { listAccessLog } from "../access-log.server";
+
+// SEC-05 — log de acesso auditável, consulta admin-only (mesmo padrão de
+// getConsultations/getPrescriptions abaixo).
+export const getAccessLog = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdminSession(data.token)))
+      return { ok: false as const, error: "unauthorized" as const };
+    return { ok: true as const, ...(await listAccessLog()) };
+  });
 
 // Seal a consultation → authoritative digital signature (SHA-256), protocol
 // number and timestamp, the ICP-Brasil-style legal seal. Persisted so /admin

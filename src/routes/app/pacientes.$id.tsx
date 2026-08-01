@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Clock,
   Copy,
   CreditCard,
   FileSignature,
@@ -782,7 +783,10 @@ function PreferredMetricsDialog({
 
 type FileEntry = {
   file: File;
-  state: "reading" | "review" | "done" | "error";
+  // PAC-03 — "queued" cobre o tempo entre o drop e o processamento de fato:
+  // a extração roda um arquivo por vez, então o resto da fila precisa de um
+  // estado visível diferente de "lendo agora".
+  state: "queued" | "reading" | "review" | "done" | "error";
   errorMsg?: string;
   extracted?: {
     rawName: string;
@@ -800,6 +804,9 @@ type FileEntry = {
   motivo?: string;
 };
 const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
+// PAC-04 — mesmo teto declarado no servidor (clinic.functions.ts).
+const MAX_EXAM_FILE_MB = 15;
+const MAX_EXAM_FILE_BYTES = MAX_EXAM_FILE_MB * 1024 * 1024;
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1009,12 +1016,16 @@ function UploadExamesDialog({
       if (!ACCEPTED_EXTS.includes(ext)) {
         return { file, state: "error", errorMsg: `Formato não suportado (${ext || "?"})` };
       }
-      return { file, state: "reading" };
+      if (file.size > MAX_EXAM_FILE_BYTES) {
+        return { file, state: "error", errorMsg: `Arquivo muito grande (máx. ${MAX_EXAM_FILE_MB}MB)` };
+      }
+      return { file, state: "queued" };
     });
     setFiles((prev) => [...prev, ...entries]);
 
     for (const entry of entries) {
-      if (entry.state !== "reading") continue;
+      if (entry.state !== "queued") continue;
+      setFiles((prev) => prev.map((f) => (f.file === entry.file ? { ...f, state: "reading" } : f)));
       try {
         const base64 = await fileToBase64(entry.file);
         const mimeType = entry.file.type || "application/pdf";
@@ -1022,12 +1033,12 @@ function UploadExamesDialog({
           data: { token, fileBase64: base64, mimeType: mimeType as any },
         });
         if (!result.ok) {
+          const errorMsg =
+            result.error === "ocr_limit"
+              ? "Limite diário de leituras por IA atingido — tente de novo amanhã"
+              : "Falha na leitura do documento";
           setFiles((prev) =>
-            prev.map((f) =>
-              f.file === entry.file
-                ? { ...f, state: "error", errorMsg: "Falha na leitura do documento" }
-                : f,
-            ),
+            prev.map((f) => (f.file === entry.file ? { ...f, state: "error", errorMsg } : f)),
           );
           continue;
         }
@@ -1091,6 +1102,27 @@ function UploadExamesDialog({
   };
 
   const doneCount = files.filter((f) => f.state === "done").length;
+  // OCR-04 — confirmação em lote: só entram arquivos 100% reconhecidos
+  // (nenhum biomarcador sem correspondência), pra nunca descartar nada
+  // silenciosamente em massa. Descarte parcial continua exigindo revisão
+  // individual (fluxo confirmingDiscard acima).
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const bulkConfirmable = files.filter(
+    (f) =>
+      f.state === "review" &&
+      f.extracted &&
+      f.extracted.length > 0 &&
+      f.extracted.every((it) => it.matchedName || it.manualOverrideName),
+  );
+  const confirmarTodos = async () => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      for (const entry of bulkConfirmable) await confirmarExame(entry);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setFiles([]); }}>
@@ -1124,7 +1156,9 @@ function UploadExamesDialog({
             Arraste PDFs ou imagens, ou{" "}
             <span className="text-primary underline underline-offset-2">clique para selecionar</span>
           </p>
-          <p className="text-[11px] text-muted-foreground/70">.pdf · .jpg · .jpeg · .png</p>
+          <p className="text-[11px] text-muted-foreground/70">
+            .pdf · .jpg · .jpeg · .png · máx. {MAX_EXAM_FILE_MB}MB por arquivo
+          </p>
         </div>
         <input
           ref={inputRef}
@@ -1139,6 +1173,24 @@ function UploadExamesDialog({
         />
         {files.length > 0 && (
           <ul className="mt-1 max-h-72 space-y-1.5 overflow-y-auto">
+            {bulkConfirmable.length > 1 && (
+              <li>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  disabled={bulkBusy}
+                  onClick={confirmarTodos}
+                >
+                  {bulkBusy ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Confirmar todos os {bulkConfirmable.length} reconhecidos automaticamente
+                </Button>
+              </li>
+            )}
             {files.map((entry, i) => (
               <li
                 key={i}
@@ -1149,6 +1201,9 @@ function UploadExamesDialog({
                 }`}
               >
                 <div className="flex items-center gap-2">
+                  {entry.state === "queued" && (
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
                   {entry.state === "reading" && (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
                   )}
@@ -1161,6 +1216,7 @@ function UploadExamesDialog({
                   {entry.state === "error" && <X className="h-3.5 w-3.5 shrink-0 text-red-500" />}
                   <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {entry.state === "queued" && "Na fila…"}
                     {entry.state === "reading" && "Lendo documento…"}
                     {entry.state === "review" && "Revise abaixo"}
                     {entry.state === "done" && "✓ salvo"}
@@ -2828,7 +2884,14 @@ function ReceitaDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Receita digital</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Receita digital
+              {widgetConfig.data.environment === "sandbox" && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                  Ambiente de testes (Memed sandbox)
+                </span>
+              )}
+            </DialogTitle>
             <DialogDescription>
               Prescreva pelo módulo oficial da Memed — a assinatura digital sai direto daqui.
             </DialogDescription>

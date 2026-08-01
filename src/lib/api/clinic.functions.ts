@@ -67,6 +67,7 @@ import {
   isMemedConfigured,
   isMemedLikelyOffline,
   MEMED_SCRIPT_URL,
+  memedEnvironment,
 } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
 import { createStripeCheckoutLink, isStripeConfigured } from "../payments.server";
@@ -84,6 +85,18 @@ import { addMeasurement, listMeasurements } from "../measurements.server";
 import { extractTriage } from "../triage.server";
 import { extractBiomarkersFromDocument } from "../ocr-extraction.server";
 import { resolveLoincCode } from "../loinc-mapping.server";
+import { createUsageCounter } from "../rate-limit.server";
+import { logAccess } from "../access-log.server";
+
+// PAC-04 — limite de arquivo declarado e validado (não só no dropzone, o
+// servidor também recusa payloads gigantes: cada chamada bate na Gemini API
+// e um PDF gigante custa tempo/dinheiro real). ~15MB de arquivo original.
+export const MAX_EXAM_FILE_MB = 15;
+const MAX_EXAM_BASE64_CHARS = Math.ceil(((MAX_EXAM_FILE_MB * 1024 * 1024) / 3) * 4);
+
+// OCR-01 — teto de extrações por IA por conta médica/dia.
+const doctorOcrCounter = createUsageCounter(24 * 60 * 60 * 1000);
+const DOCTOR_OCR_DAILY_LIMIT = 60;
 import {
   ageFrom,
   BIOMARKER_CATALOG,
@@ -883,7 +896,12 @@ export const getMemedStatus = createServerFn({ method: "POST" })
     }
     const result = await getMemedPrescriberToken(doctor);
     if (!result.ok) return { ok: true as const, state: "error" as const, detail: result.detail };
-    return { ok: true as const, state: "ready" as const, memedToken: result.token };
+    return {
+      ok: true as const,
+      state: "ready" as const,
+      memedToken: result.token,
+      environment: memedEnvironment(),
+    };
   });
 
 export const saveMemedProfile = createServerFn({ method: "POST" })
@@ -947,6 +965,7 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
       token: result.token,
       scriptUrl: MEMED_SCRIPT_URL,
       likelyOffline: isMemedLikelyOffline(),
+      environment: memedEnvironment(),
       patient: {
         // globalId (TECH-13) é o identificador estável do paciente entre
         // médicos; patient.id só vale dentro deste prontuário. Cai pro id
@@ -1098,6 +1117,17 @@ export const getPatientRecord = createServerFn({ method: "POST" })
       listMeasurements(doctor.id, data.id),
       withVinculo(doctor.id, [patient]),
     ]);
+    // SEC-05 — log de acesso auditável: abrir o prontuário é o evento que
+    // importa (edições passam por aqui antes de qualquer escrita).
+    void logAccess({
+      actorType: "doctor",
+      actorId: doctor.id,
+      actorNome: doctor.nome,
+      patientId: data.id,
+      patientNome: patient.nome,
+      action: "view_record",
+      channel: "web",
+    });
     return { ok: true as const, patient: merged, evolutions, measurements };
   });
 
@@ -1423,13 +1453,17 @@ export const extractExamDocument = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       token,
-      fileBase64: z.string().min(1),
+      fileBase64: z.string().min(1).max(MAX_EXAM_BASE64_CHARS),
       mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
     }),
   )
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
+    const used = doctorOcrCounter.increment(doctor.id);
+    if (used > DOCTOR_OCR_DAILY_LIMIT) {
+      return { ok: false as const, error: "ocr_limit" as const };
+    }
     try {
       const result = await extractBiomarkersFromDocument(data.fileBase64, data.mimeType);
       const items = await Promise.all(

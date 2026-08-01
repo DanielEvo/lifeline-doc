@@ -19,10 +19,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { getMe, logout as logoutFn } from "@/lib/api/auth.functions";
+import { acceptConsent, getMe, logout as logoutFn } from "@/lib/api/auth.functions";
 import { clearSession, getSession, type DoctorSession } from "@/lib/session";
 import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ConsentGate } from "@/components/clinic/consent-gate";
+import { CONSENT_VERSION } from "@/lib/consent";
 
 import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
 import { SimilarCasesDrawer } from "@/components/clinic/similar-cases";
@@ -43,6 +45,10 @@ export const Route = createFileRoute("/app")({
 function AppLayout() {
   const navigate = useNavigate();
   const [clinic, setClinic] = useState<Clinic | null>(null);
+  // LGP-01 — distinto de "clinic.consentVersion === undefined": contas
+  // legadas (JSON sem o campo) também leem undefined em runtime, então só
+  // "getMe já respondeu" (não o valor em si) pode dizer se dá pra decidir.
+  const [meChecked, setMeChecked] = useState(false);
 
   // Guarda: sem sessão local → login; com sessão → valida token no servidor
   // e sincroniza o perfil (nome/avatar podem ter mudado no Google).
@@ -62,6 +68,7 @@ function AppLayout() {
           return;
         }
         setClinic({ token: s.token, ...r.doctor });
+        setMeChecked(true);
       })
       .catch(() => {
         /* offline — segue com a sessão local */
@@ -76,6 +83,25 @@ function AppLayout() {
           Abrindo seu consultório…
         </div>
       </div>
+    );
+  }
+
+  // LGP-01 — bloqueia até o aceite explícito da versão vigente. Só decide
+  // depois que getMe respondeu de verdade (meChecked), não só quando o
+  // campo existe — contas legadas também têm consentVersion undefined.
+  if (meChecked && clinic.consentVersion !== CONSENT_VERSION) {
+    return (
+      <ConsentGate
+        onAccept={async () => {
+          const r = await acceptConsent({ data: { token: clinic.token } });
+          if (r.ok) setClinic((c) => (c ? { ...c, consentVersion: CONSENT_VERSION } : c));
+          return r.ok;
+        }}
+        onLogout={() => {
+          clearSession();
+          navigate({ to: "/login" });
+        }}
+      />
     );
   }
 

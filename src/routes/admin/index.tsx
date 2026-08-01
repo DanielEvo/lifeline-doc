@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Eye,
   HeartPulse,
   Inbox,
   KeyRound,
@@ -20,11 +21,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { adminChangeCredentials, adminGetMe, adminLogout } from "@/lib/api/admin-auth.functions";
+import {
+  adminChangeCredentials,
+  adminCheckCookie,
+  adminGetMe,
+  adminLogout,
+} from "@/lib/api/admin-auth.functions";
 import { googleLogin } from "@/lib/api/auth.functions";
 import { getFeedback } from "@/lib/api/feedback.functions";
 import { getLeads } from "@/lib/api/leads.functions";
-import { getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import { getAccessLog, getConsultations, getPrescriptions } from "@/lib/api/prontuario.functions";
+import type { AccessLogEntry } from "@/lib/access-log.server";
 import { patientGoogleLogin } from "@/lib/api/patient-auth.functions";
 import { clearAdminSession, getAdminSession } from "@/lib/admin-session";
 import { setSession } from "@/lib/session";
@@ -37,6 +44,14 @@ import type {
 } from "@/lib/store.server";
 
 export const Route = createFileRoute("/admin/")({
+  // SEC-01: guard server-side — roda ANTES do componente montar (SSR e
+  // navegação client), sem depender do useEffect que só barra a UI depois
+  // que o JS já hidratou. O check client-side abaixo continua existindo
+  // como camada extra (sessão local pode ter mudado desde o SSR).
+  beforeLoad: async () => {
+    const r = await adminCheckCookie();
+    if (!r.ok) throw redirect({ to: "/admin/login" });
+  },
   head: () => ({ meta: [{ title: "LifeLine · Painel de testes" }] }),
   component: Admin,
 });
@@ -52,6 +67,7 @@ type PanelData = {
   leads: { rows: LeadEntry[]; total: number };
   consults: { rows: ConsultationEntry[]; total: number };
   rx: { rows: PrescriptionEntry[]; total: number };
+  access: { rows: AccessLogEntry[]; total: number };
 };
 
 function Admin() {
@@ -88,16 +104,17 @@ function Admin() {
       getLeads({ data: { token } }),
       getConsultations({ data: { token } }),
       getPrescriptions({ data: { token } }),
+      getAccessLog({ data: { token } }),
     ])
-      .then(([fb, leads, consults, rx]) => {
+      .then(([fb, leads, consults, rx, access]) => {
         if (cancelled) return;
-        if (!fb.ok || !leads.ok || !consults.ok || !rx.ok) {
+        if (!fb.ok || !leads.ok || !consults.ok || !rx.ok || !access.ok) {
           clearAdminSession();
           toast.error("Sessão expirada. Entre novamente.");
           navigate({ to: "/admin/login" });
           return;
         }
-        setData({ fb, leads, consults, rx });
+        setData({ fb, leads, consults, rx, access });
       })
       .catch(() => {
         if (!cancelled) toast.error("Não consegui carregar os dados agora.");
@@ -124,7 +141,7 @@ function Admin() {
     );
   }
 
-  const { fb, leads, consults, rx } = data;
+  const { fb, leads, consults, rx, access } = data;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -248,6 +265,36 @@ function Admin() {
                 <span className="text-[11px] text-muted-foreground">{p.meds.join(", ")}</span>
                 <span className="ml-auto text-[11px] text-muted-foreground">
                   {new Date(p.createdAt).toLocaleString("pt-BR")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SEC-05 — log de acesso auditável */}
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <Eye className="h-4 w-4 text-primary" />
+            <h2 className="text-base font-semibold">Log de acesso a prontuários</h2>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {access.total}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {access.rows.length === 0 && <EmptyState label="Nenhum acesso registrado ainda." />}
+            {access.rows.map((a: AccessLogEntry) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card p-3 text-sm"
+              >
+                <span className="font-semibold">{a.actorNome}</span>
+                <span className="text-[11px] text-muted-foreground">acessou</span>
+                <span className="font-medium">{a.patientNome}</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {a.channel}
+                </span>
+                <span className="ml-auto text-[11px] text-muted-foreground">
+                  {new Date(a.createdAt).toLocaleString("pt-BR")}
                 </span>
               </div>
             ))}

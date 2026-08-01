@@ -9,6 +9,7 @@ import {
   changeAdminCredentials,
   loginAdmin,
   logoutAdmin,
+  requireAdminCookie,
   requireAdminSession,
 } from "../admin-auth.server";
 
@@ -36,6 +37,13 @@ export const adminLogin = createServerFn({ method: "POST" })
 export const adminGetMe = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
   .handler(async ({ data }) => ({ ok: await requireAdminSession(data.token) }));
+
+// SEC-01 — guard server-side de verdade pro beforeLoad de /admin: lê o
+// cookie httpOnly (não o token de localStorage, invisível no SSR) e valida
+// a sessão ANTES do componente da rota montar.
+export const adminCheckCookie = createServerFn({ method: "POST" }).handler(async () => ({
+  ok: await requireAdminCookie(),
+}));
 
 export const adminLogout = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string().min(1) }))
