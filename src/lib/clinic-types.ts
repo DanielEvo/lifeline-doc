@@ -765,6 +765,14 @@ export type Evolution = {
 // Helpers puros
 // ---------------------------------------------------------------------------
 
+/** Primeiro nome para saudação, ignorando título: "Dra. Helena Costa" →
+ *  "Helena". Sem isto, `nome.split(" ")[0]` produz "Bem-vinda, Dra.!".
+ *  Mesmo tratamento que initialsOf já fazia para as iniciais. */
+export function primeiroNome(nome: string): string {
+  const semTitulo = nome.replace(/^((dr|dra|sr|sra|srta)\.?\s+)+/i, "").trim();
+  return semTitulo.split(/\s+/)[0] || nome.trim();
+}
+
 export function initialsOf(nome: string): string {
   return nome
     .replace(/^(dra?\.?\s+)/i, "")

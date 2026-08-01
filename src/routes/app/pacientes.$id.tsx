@@ -236,6 +236,10 @@ function Prontuario() {
   // guard de loading/erro abaixo, senão a ordem de hooks muda entre renders
   const measurements = rec.data?.ok ? rec.data.measurements : [];
   const evolutions = rec.data?.ok ? rec.data.evolutions : [];
+  // Biomarcadores ficam no Postgres; se a tabela estiver fora, o resto do
+  // prontuário ainda abre — mas o médico PRECISA saber que a lista de exames
+  // está incompleta, senão "sem exames" parece resultado clínico.
+  const measurementsUnavailable = rec.data?.ok ? rec.data.measurementsUnavailable : false;
   const hist = usePatientHistory(measurements, evolutions);
 
   // "foco" de uma métrica principal (PRO-08): reaproveita o showAll existente
@@ -398,6 +402,18 @@ function Prontuario() {
             {p.queixa && !p.briefing && (
               <p className="text-xs text-muted-foreground"><strong className="text-foreground">Queixa atual:</strong> {p.queixa}</p>
             )}
+          </div>
+        )}
+
+        {measurementsUnavailable && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              <strong>Exames indisponíveis agora:</strong> não consegui ler o histórico de
+              biomarcadores deste paciente. O resto do prontuário está completo, mas{" "}
+              <strong>não interprete a ausência de exames como resultado clínico</strong> — recarregue
+              a página em instantes ou avise o suporte se persistir.
+            </span>
           </div>
         )}
 

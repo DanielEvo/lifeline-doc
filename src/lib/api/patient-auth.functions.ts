@@ -34,6 +34,7 @@ import {
 } from "../patient-measurements.server";
 import { createRateLimiter, createUsageCounter } from "../rate-limit.server";
 import { CONSENT_VERSION } from "../consent";
+import { optionalRead } from "../resilient.server";
 
 // SEC-02 — mesmo padrão do lado médico (src/lib/api/auth.functions.ts).
 const loginLimiter = createRateLimiter({ maxAttempts: 5, lockoutMs: 15 * 60 * 1000 });
@@ -272,10 +273,16 @@ export const getPatientTimeline = createServerFn({ method: "POST" })
     const patient = await requirePatient(data.token);
     if (!patient) return { ok: false as const, error: "unauthorized" as const };
     const registry = await findRegistryByGlobalId(patient.globalId);
-    const pendingMeasurements = await listPendingMeasurements(patient.globalId);
+    // Exames pendentes vivem no Postgres (DAT-02). Se o banco estiver
+    // indisponível, o paciente ainda vê o perfil e o resto da tela — com
+    // aviso explícito — em vez de uma página de erro inteira.
+    const pending = await optionalRead("patient_pending_measurements", () =>
+      listPendingMeasurements(patient.globalId), []);
+    const pendingMeasurements = pending.data;
     return {
       ok: true as const,
       linked: false as const,
+      measurementsUnavailable: pending.unavailable,
       profile: {
         publicCode: registry?.publicCode ?? null,
         birthDate: registry?.birthDate ?? null,
