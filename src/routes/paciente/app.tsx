@@ -1277,8 +1277,12 @@ function ProfileTab({
     alergias: profile.alergias ?? "",
     pesoKg: profile.pesoKg != null ? String(profile.pesoKg) : "",
     alturaCm: profile.alturaCm != null ? String(profile.alturaCm) : "",
+    comorbidades: profile.comorbidades ?? [],
+    historicoFamiliar: profile.historicoFamiliar ?? "",
   });
   const [saving, setSaving] = useState(false);
+
+  const comorbidadesIniciais = (profile.comorbidades ?? []).join("|");
 
   const dirty =
     form.birthDate !== (profile.birthDate ?? "") ||
@@ -1288,7 +1292,18 @@ function ProfileTab({
     form.tipoSanguineo !== (profile.tipoSanguineo ?? "") ||
     form.alergias !== (profile.alergias ?? "") ||
     form.pesoKg !== (profile.pesoKg != null ? String(profile.pesoKg) : "") ||
-    form.alturaCm !== (profile.alturaCm != null ? String(profile.alturaCm) : "");
+    form.alturaCm !== (profile.alturaCm != null ? String(profile.alturaCm) : "") ||
+    form.comorbidades.join("|") !== comorbidadesIniciais ||
+    form.historicoFamiliar !== (profile.historicoFamiliar ?? "");
+
+  const toggleComorbidade = (c: string) =>
+    setForm((f) => ({
+      ...f,
+      comorbidades: f.comorbidades.includes(c)
+        ? f.comorbidades.filter((x) => x !== c)
+        : [...f.comorbidades, c],
+    }));
+
 
   const submit = async () => {
     setSaving(true);
