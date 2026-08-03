@@ -174,7 +174,10 @@ export async function updateRegistryProfile(
         alergias: profile.alergias ?? r.patientProfile?.alergias,
         pesoKg: profile.pesoKg ?? r.patientProfile?.pesoKg,
         alturaCm: profile.alturaCm ?? r.patientProfile?.alturaCm,
+        comorbidades: profile.comorbidades ?? r.patientProfile?.comorbidades,
+        historicoFamiliar: profile.historicoFamiliar ?? r.patientProfile?.historicoFamiliar,
         updatedAt: nowIso(),
+
       };
       updated = r;
       break;
