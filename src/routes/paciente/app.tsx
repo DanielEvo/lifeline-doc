@@ -213,29 +213,56 @@ function PatientAppPage() {
 
   const firstName = session?.nome.split(" ")[0] ?? "";
 
-  // Deriva a linha do tempo vertical a partir dos exames pendentes,
-  // agrupando por mês/ano da coleta.
-  const timelineEvents = useMemo<VerticalEvent[]>(() => {
-    if (state.status !== "ready") return [];
+  // Dados de exemplo: só entram por ação explícita do paciente e sempre
+  // rotulados como tal — nunca se misturam a exames reais sem marcação.
+  const [demoOn, setDemoOnState] = useState(false);
+  useEffect(() => setDemoOnState(isDemoOn()), []);
+  const toggleDemo = (on: boolean) => {
+    setDemoOn(on);
+    setDemoOnState(on);
+  };
+
+  // Linha do tempo do histórico: exames reais enviados pelo paciente,
+  // agrupados por mês/ano da coleta (+ exemplos, quando ativados).
+  const historyEntries = useMemo<PatientHistoryEntry[]>(() => {
+    if (state.status !== "ready") return demoOn ? DEMO_HISTORY : [];
     const groups = new Map<string, PendingItem[]>();
     for (const p of state.pending) {
       const key = (p.collectionDate ?? "").slice(0, 7) || "sem-data";
       groups.set(key, [...(groups.get(key) ?? []), p]);
     }
-    const events: VerticalEvent[] = [];
+    const entries: PatientHistoryEntry[] = [];
     for (const [key, items] of groups.entries()) {
       const date = key === "sem-data" ? new Date().toISOString().slice(0, 10) : `${key}-01`;
-      events.push({
+      const biomarkers = items.map((m) => {
+        const cat = BIOMARKER_CATALOG.find(
+          (b) => b.name.toLowerCase() === m.name.trim().toLowerCase(),
+        );
+        return {
+          name: m.name,
+          value: m.value,
+          unit: m.unit,
+          min: cat?.min ?? 0,
+          max: cat?.max ?? Math.max(m.value, 1),
+        };
+      });
+      const comFaixa = biomarkers.filter((b) => b.max > b.min);
+      entries.push({
         key: `exam-${key}`,
         kind: "exame",
         date,
         title: `Exames enviados (${items.length})`,
-        summary: items.map((m) => `${m.name} ${m.value}${m.unit}`).join(" · "),
-        status: "Pendente",
+        source: "Enviado por você · aguardando revisão médica",
+        status: comFaixa.length > 0 ? statusDosBiomarcadores(comFaixa) : "Pendente",
+        biomarkers,
+        fileName: null,
+        demo: false,
       });
     }
-    return events.sort((a, b) => b.date.localeCompare(a.date));
-  }, [state]);
+    const all = demoOn ? [...entries, ...DEMO_HISTORY] : entries;
+    return all.sort((a, b) => b.date.localeCompare(a.date));
+  }, [state, demoOn]);
+
 
   // LGP-01 — bloqueia até o aceite explícito da versão vigente.
   if (session && consentChecked && consentVersion !== CONSENT_VERSION) {
