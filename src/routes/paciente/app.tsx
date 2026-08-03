@@ -761,83 +761,8 @@ function MetricCard({
   );
 }
 
-function HistoryTab({ events }: { events: VerticalEvent[] }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold tracking-tight">Linha do tempo</h3>
-        <p className="text-[11px] text-muted-foreground">
-          Exames, consultas e cirurgias em ordem cronológica.
-        </p>
-      </div>
-      <VerticalTimeline events={events} />
-    </div>
-  );
-}
 
-function ExamsTab({
-  pending,
-  onOpenUpload,
-}: {
-  pending: PendingItem[];
-  onOpenUpload: () => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold tracking-tight">Meus exames</h3>
-          <p className="text-[11px] text-muted-foreground">
-            Envie PDFs ou fotos — a leitura é automática, mas só um médico valida.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={onOpenUpload}
-          className="brand-gradient shrink-0 text-primary-foreground"
-        >
-          <FileUp className="mr-1.5 h-3.5 w-3.5" />
-          Enviar
-        </Button>
-      </div>
 
-      {pending.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-          Você ainda não enviou nenhum exame.
-        </div>
-      ) : (
-        <ul className="space-y-1.5">
-          {pending.map((m) => (
-            <li
-              key={m.id}
-              className="rounded-xl border border-border bg-card p-3 text-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 flex-1 truncate font-medium">{m.name}</p>
-                <p className="shrink-0 font-semibold tabular-nums">
-                  {m.value}
-                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                    {m.unit}
-                  </span>
-                </p>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>
-                  {m.collectionDate
-                    ? `Coleta ${new Date(m.collectionDate).toLocaleDateString("pt-BR")}`
-                    : "Sem data"}
-                </span>
-                <span className="rounded-full bg-muted px-2 py-0.5 uppercase tracking-wide">
-                  Aguardando revisão
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Remédios — dado 100% real (patient-medications.functions). Origem "self":
