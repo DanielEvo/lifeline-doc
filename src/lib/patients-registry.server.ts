@@ -27,8 +27,12 @@ export type PatientRegistry = {
     alergias?: string;
     pesoKg?: number | null;
     alturaCm?: number | null;
+    /** Autodeclaradas pelo paciente — nunca viram fato clínico sozinhas. */
+    comorbidades?: string[];
+    historicoFamiliar?: string;
     updatedAt: string;
   } | null;
+
 };
 
 const REGISTRY = "patients_registry.json";
@@ -144,7 +148,10 @@ export type ProfileUpdate = {
   alergias?: string;
   pesoKg?: number;
   alturaCm?: number;
+  comorbidades?: string[];
+  historicoFamiliar?: string;
 };
+
 
 export async function updateRegistryProfile(
   globalId: string,
@@ -167,7 +174,10 @@ export async function updateRegistryProfile(
         alergias: profile.alergias ?? r.patientProfile?.alergias,
         pesoKg: profile.pesoKg ?? r.patientProfile?.pesoKg,
         alturaCm: profile.alturaCm ?? r.patientProfile?.alturaCm,
+        comorbidades: profile.comorbidades ?? r.patientProfile?.comorbidades,
+        historicoFamiliar: profile.historicoFamiliar ?? r.patientProfile?.historicoFamiliar,
         updatedAt: nowIso(),
+
       };
       updated = r;
       break;

@@ -81,16 +81,22 @@ import {
   listMyAccessRequests,
   respondMyAccessRequest,
 } from "@/lib/api/patient-access.functions";
-import { BIOMARKER_CATALOG } from "@/lib/clinic-types";
+import { BIOMARKER_CATALOG, COMORBIDADES_CATALOGO } from "@/lib/clinic-types";
 import {
   clearPatientSession,
   getPatientSession,
   type PatientSession,
 } from "@/lib/patient-session";
+import { PatientHistoryScreen } from "@/components/patient/history-screen";
+import { PatientConsultasScreen } from "@/components/patient/consultas-screen";
 import {
-  VerticalTimeline,
-  type VerticalEvent,
-} from "@/components/patient/vertical-timeline";
+  DEMO_CONSULTAS,
+  DEMO_HISTORY,
+  isDemoOn,
+  setDemoOn,
+  statusDosBiomarcadores,
+  type PatientHistoryEntry,
+} from "@/lib/patient-demo-data";
 
 export const Route = createFileRoute("/paciente/app")({
   head: () => ({
@@ -120,6 +126,8 @@ type Profile = {
   alergias: string | null;
   pesoKg: number | null;
   alturaCm: number | null;
+  comorbidades: string[];
+  historicoFamiliar: string | null;
 };
 
 type TimelineData =
@@ -132,10 +140,11 @@ type Tab = "home" | "history" | "exams" | "meds" | "profile";
 const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "home", label: "Início", icon: Home },
   { id: "history", label: "Histórico", icon: FileText },
-  { id: "exams", label: "Exames", icon: CalendarDays },
+  { id: "exams", label: "Consultas", icon: CalendarDays },
   { id: "meds", label: "Remédios", icon: Pill },
   { id: "profile", label: "Perfil", icon: UserIcon },
 ];
+
 
 function PatientAppPage() {
   const navigate = useNavigate();
@@ -204,29 +213,56 @@ function PatientAppPage() {
 
   const firstName = session?.nome.split(" ")[0] ?? "";
 
-  // Deriva a linha do tempo vertical a partir dos exames pendentes,
-  // agrupando por mês/ano da coleta.
-  const timelineEvents = useMemo<VerticalEvent[]>(() => {
-    if (state.status !== "ready") return [];
+  // Dados de exemplo: só entram por ação explícita do paciente e sempre
+  // rotulados como tal — nunca se misturam a exames reais sem marcação.
+  const [demoOn, setDemoOnState] = useState(false);
+  useEffect(() => setDemoOnState(isDemoOn()), []);
+  const toggleDemo = (on: boolean) => {
+    setDemoOn(on);
+    setDemoOnState(on);
+  };
+
+  // Linha do tempo do histórico: exames reais enviados pelo paciente,
+  // agrupados por mês/ano da coleta (+ exemplos, quando ativados).
+  const historyEntries = useMemo<PatientHistoryEntry[]>(() => {
+    if (state.status !== "ready") return demoOn ? DEMO_HISTORY : [];
     const groups = new Map<string, PendingItem[]>();
     for (const p of state.pending) {
       const key = (p.collectionDate ?? "").slice(0, 7) || "sem-data";
       groups.set(key, [...(groups.get(key) ?? []), p]);
     }
-    const events: VerticalEvent[] = [];
+    const entries: PatientHistoryEntry[] = [];
     for (const [key, items] of groups.entries()) {
       const date = key === "sem-data" ? new Date().toISOString().slice(0, 10) : `${key}-01`;
-      events.push({
+      const biomarkers = items.map((m) => {
+        const cat = BIOMARKER_CATALOG.find(
+          (b) => b.name.toLowerCase() === m.name.trim().toLowerCase(),
+        );
+        return {
+          name: m.name,
+          value: m.value,
+          unit: m.unit,
+          min: cat?.min ?? 0,
+          max: cat?.max ?? Math.max(m.value, 1),
+        };
+      });
+      const comFaixa = biomarkers.filter((b) => b.max > b.min);
+      entries.push({
         key: `exam-${key}`,
         kind: "exame",
         date,
         title: `Exames enviados (${items.length})`,
-        summary: items.map((m) => `${m.name} ${m.value}${m.unit}`).join(" · "),
-        status: "Pendente",
+        source: "Enviado por você · aguardando revisão médica",
+        status: comFaixa.length > 0 ? statusDosBiomarcadores(comFaixa) : "Pendente",
+        biomarkers,
+        fileName: null,
+        demo: false,
       });
     }
-    return events.sort((a, b) => b.date.localeCompare(a.date));
-  }, [state]);
+    const all = demoOn ? [...entries, ...DEMO_HISTORY] : entries;
+    return all.sort((a, b) => b.date.localeCompare(a.date));
+  }, [state, demoOn]);
+
 
   // LGP-01 — bloqueia até o aceite explícito da versão vigente.
   if (session && consentChecked && consentVersion !== CONSENT_VERSION) {
@@ -318,13 +354,22 @@ function PatientAppPage() {
                     token={session.token}
                   />
                 )}
-                {tab === "history" && <HistoryTab events={timelineEvents} />}
-                {tab === "exams" && (
-                  <ExamsTab
-                    pending={state.pending}
+                {tab === "history" && (
+                  <PatientHistoryScreen
+                    entries={historyEntries}
                     onOpenUpload={() => setUploadOpen(true)}
+                    demoOn={demoOn}
+                    onToggleDemo={toggleDemo}
                   />
                 )}
+                {tab === "exams" && (
+                  <PatientConsultasScreen
+                    consultas={demoOn ? DEMO_CONSULTAS : []}
+                    demoOn={demoOn}
+                    onToggleDemo={toggleDemo}
+                  />
+                )}
+
                 {tab === "meds" && <MedsTab token={session.token} />}
                 {tab === "profile" && (
                   <ProfileTab
@@ -572,7 +617,7 @@ function HomeTab({
       )}
 
       <button
-        onClick={() => onGoTo("exams")}
+        onClick={() => onGoTo("history")}
         className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:border-primary/40"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -716,83 +761,8 @@ function MetricCard({
   );
 }
 
-function HistoryTab({ events }: { events: VerticalEvent[] }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold tracking-tight">Linha do tempo</h3>
-        <p className="text-[11px] text-muted-foreground">
-          Exames, consultas e cirurgias em ordem cronológica.
-        </p>
-      </div>
-      <VerticalTimeline events={events} />
-    </div>
-  );
-}
 
-function ExamsTab({
-  pending,
-  onOpenUpload,
-}: {
-  pending: PendingItem[];
-  onOpenUpload: () => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold tracking-tight">Meus exames</h3>
-          <p className="text-[11px] text-muted-foreground">
-            Envie PDFs ou fotos — a leitura é automática, mas só um médico valida.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={onOpenUpload}
-          className="brand-gradient shrink-0 text-primary-foreground"
-        >
-          <FileUp className="mr-1.5 h-3.5 w-3.5" />
-          Enviar
-        </Button>
-      </div>
 
-      {pending.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-          Você ainda não enviou nenhum exame.
-        </div>
-      ) : (
-        <ul className="space-y-1.5">
-          {pending.map((m) => (
-            <li
-              key={m.id}
-              className="rounded-xl border border-border bg-card p-3 text-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 flex-1 truncate font-medium">{m.name}</p>
-                <p className="shrink-0 font-semibold tabular-nums">
-                  {m.value}
-                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                    {m.unit}
-                  </span>
-                </p>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>
-                  {m.collectionDate
-                    ? `Coleta ${new Date(m.collectionDate).toLocaleDateString("pt-BR")}`
-                    : "Sem data"}
-                </span>
-                <span className="rounded-full bg-muted px-2 py-0.5 uppercase tracking-wide">
-                  Aguardando revisão
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Remédios — dado 100% real (patient-medications.functions). Origem "self":
@@ -1307,8 +1277,12 @@ function ProfileTab({
     alergias: profile.alergias ?? "",
     pesoKg: profile.pesoKg != null ? String(profile.pesoKg) : "",
     alturaCm: profile.alturaCm != null ? String(profile.alturaCm) : "",
+    comorbidades: profile.comorbidades ?? [],
+    historicoFamiliar: profile.historicoFamiliar ?? "",
   });
   const [saving, setSaving] = useState(false);
+
+  const comorbidadesIniciais = (profile.comorbidades ?? []).join("|");
 
   const dirty =
     form.birthDate !== (profile.birthDate ?? "") ||
@@ -1318,7 +1292,18 @@ function ProfileTab({
     form.tipoSanguineo !== (profile.tipoSanguineo ?? "") ||
     form.alergias !== (profile.alergias ?? "") ||
     form.pesoKg !== (profile.pesoKg != null ? String(profile.pesoKg) : "") ||
-    form.alturaCm !== (profile.alturaCm != null ? String(profile.alturaCm) : "");
+    form.alturaCm !== (profile.alturaCm != null ? String(profile.alturaCm) : "") ||
+    form.comorbidades.join("|") !== comorbidadesIniciais ||
+    form.historicoFamiliar !== (profile.historicoFamiliar ?? "");
+
+  const toggleComorbidade = (c: string) =>
+    setForm((f) => ({
+      ...f,
+      comorbidades: f.comorbidades.includes(c)
+        ? f.comorbidades.filter((x) => x !== c)
+        : [...f.comorbidades, c],
+    }));
+
 
   const submit = async () => {
     setSaving(true);
@@ -1336,6 +1321,9 @@ function ProfileTab({
           alergias: form.alergias || undefined,
           pesoKg: form.pesoKg && !Number.isNaN(pesoKg) ? pesoKg : undefined,
           alturaCm: form.alturaCm && !Number.isNaN(alturaCm) ? alturaCm : undefined,
+          comorbidades: form.comorbidades,
+          historicoFamiliar: form.historicoFamiliar || undefined,
+
         },
       });
       if (!r.ok) {
@@ -1449,6 +1437,40 @@ function ProfileTab({
             onChange={(e) => setForm({ ...form, alergias: e.target.value })}
           />
         </Field>
+        <Field
+          label="Comorbidades"
+          hint="Autodeclaradas — seu médico confirma antes de virar registro clínico."
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {COMORBIDADES_CATALOGO.map((c) => {
+              const on = form.comorbidades.includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => toggleComorbidade(c)}
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                    on
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+        <Field label="Histórico familiar">
+          <Textarea
+            rows={3}
+            placeholder="Ex.: mãe com diabetes tipo 2, pai hipertenso, avó com câncer de mama"
+            value={form.historicoFamiliar}
+            onChange={(e) => setForm({ ...form, historicoFamiliar: e.target.value })}
+          />
+        </Field>
+
+
 
         <Button
           onClick={submit}
