@@ -293,6 +293,9 @@ export const getPatientTimeline = createServerFn({ method: "POST" })
         alergias: registry?.patientProfile?.alergias ?? null,
         pesoKg: registry?.patientProfile?.pesoKg ?? null,
         alturaCm: registry?.patientProfile?.alturaCm ?? null,
+        comorbidades: registry?.patientProfile?.comorbidades ?? [],
+        historicoFamiliar: registry?.patientProfile?.historicoFamiliar ?? null,
+
       },
       pendingMeasurements: pendingMeasurements.map((m) => ({
         id: m.id,
