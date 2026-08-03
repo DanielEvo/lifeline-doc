@@ -81,16 +81,22 @@ import {
   listMyAccessRequests,
   respondMyAccessRequest,
 } from "@/lib/api/patient-access.functions";
-import { BIOMARKER_CATALOG } from "@/lib/clinic-types";
+import { BIOMARKER_CATALOG, COMORBIDADES_CATALOGO } from "@/lib/clinic-types";
 import {
   clearPatientSession,
   getPatientSession,
   type PatientSession,
 } from "@/lib/patient-session";
+import { PatientHistoryScreen } from "@/components/patient/history-screen";
+import { PatientConsultasScreen } from "@/components/patient/consultas-screen";
 import {
-  VerticalTimeline,
-  type VerticalEvent,
-} from "@/components/patient/vertical-timeline";
+  DEMO_CONSULTAS,
+  DEMO_HISTORY,
+  isDemoOn,
+  setDemoOn,
+  statusDosBiomarcadores,
+  type PatientHistoryEntry,
+} from "@/lib/patient-demo-data";
 
 export const Route = createFileRoute("/paciente/app")({
   head: () => ({
@@ -120,6 +126,8 @@ type Profile = {
   alergias: string | null;
   pesoKg: number | null;
   alturaCm: number | null;
+  comorbidades: string[];
+  historicoFamiliar: string | null;
 };
 
 type TimelineData =
@@ -132,10 +140,11 @@ type Tab = "home" | "history" | "exams" | "meds" | "profile";
 const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "home", label: "Início", icon: Home },
   { id: "history", label: "Histórico", icon: FileText },
-  { id: "exams", label: "Exames", icon: CalendarDays },
+  { id: "exams", label: "Consultas", icon: CalendarDays },
   { id: "meds", label: "Remédios", icon: Pill },
   { id: "profile", label: "Perfil", icon: UserIcon },
 ];
+
 
 function PatientAppPage() {
   const navigate = useNavigate();
