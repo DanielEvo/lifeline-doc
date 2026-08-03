@@ -1437,6 +1437,40 @@ function ProfileTab({
             onChange={(e) => setForm({ ...form, alergias: e.target.value })}
           />
         </Field>
+        <Field
+          label="Comorbidades"
+          hint="Autodeclaradas — seu médico confirma antes de virar registro clínico."
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {COMORBIDADES_CATALOGO.map((c) => {
+              const on = form.comorbidades.includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => toggleComorbidade(c)}
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                    on
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+        <Field label="Histórico familiar">
+          <Textarea
+            rows={3}
+            placeholder="Ex.: mãe com diabetes tipo 2, pai hipertenso, avó com câncer de mama"
+            value={form.historicoFamiliar}
+            onChange={(e) => setForm({ ...form, historicoFamiliar: e.target.value })}
+          />
+        </Field>
+
+
 
         <Button
           onClick={submit}
