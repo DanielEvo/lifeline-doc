@@ -325,6 +325,8 @@ export const updatePatientProfile = createServerFn({ method: "POST" })
       alergias: z.string().max(500).optional(),
       pesoKg: z.number().min(0).max(500).optional(),
       alturaCm: z.number().min(0).max(280).optional(),
+      comorbidades: z.array(z.string().max(60)).max(20).optional(),
+      historicoFamiliar: z.string().max(1000).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -339,7 +341,10 @@ export const updatePatientProfile = createServerFn({ method: "POST" })
       alergias: data.alergias,
       pesoKg: data.pesoKg,
       alturaCm: data.alturaCm,
+      comorbidades: data.comorbidades,
+      historicoFamiliar: data.historicoFamiliar,
     });
+
     return { ok: true as const };
   });
 
