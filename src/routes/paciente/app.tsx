@@ -354,13 +354,22 @@ function PatientAppPage() {
                     token={session.token}
                   />
                 )}
-                {tab === "history" && <HistoryTab events={timelineEvents} />}
-                {tab === "exams" && (
-                  <ExamsTab
-                    pending={state.pending}
+                {tab === "history" && (
+                  <PatientHistoryScreen
+                    entries={historyEntries}
                     onOpenUpload={() => setUploadOpen(true)}
+                    demoOn={demoOn}
+                    onToggleDemo={toggleDemo}
                   />
                 )}
+                {tab === "exams" && (
+                  <PatientConsultasScreen
+                    consultas={demoOn ? DEMO_CONSULTAS : []}
+                    demoOn={demoOn}
+                    onToggleDemo={toggleDemo}
+                  />
+                )}
+
                 {tab === "meds" && <MedsTab token={session.token} />}
                 {tab === "profile" && (
                   <ProfileTab
