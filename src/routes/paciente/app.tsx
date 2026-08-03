@@ -1321,6 +1321,9 @@ function ProfileTab({
           alergias: form.alergias || undefined,
           pesoKg: form.pesoKg && !Number.isNaN(pesoKg) ? pesoKg : undefined,
           alturaCm: form.alturaCm && !Number.isNaN(alturaCm) ? alturaCm : undefined,
+          comorbidades: form.comorbidades,
+          historicoFamiliar: form.historicoFamiliar || undefined,
+
         },
       });
       if (!r.ok) {
