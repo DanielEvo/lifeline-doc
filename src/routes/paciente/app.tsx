@@ -617,7 +617,7 @@ function HomeTab({
       )}
 
       <button
-        onClick={() => onGoTo("exams")}
+        onClick={() => onGoTo("history")}
         className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition hover:border-primary/40"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
