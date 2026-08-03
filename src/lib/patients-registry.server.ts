@@ -27,8 +27,12 @@ export type PatientRegistry = {
     alergias?: string;
     pesoKg?: number | null;
     alturaCm?: number | null;
+    /** Autodeclaradas pelo paciente — nunca viram fato clínico sozinhas. */
+    comorbidades?: string[];
+    historicoFamiliar?: string;
     updatedAt: string;
   } | null;
+
 };
 
 const REGISTRY = "patients_registry.json";
