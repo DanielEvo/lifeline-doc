@@ -148,7 +148,10 @@ export type ProfileUpdate = {
   alergias?: string;
   pesoKg?: number;
   alturaCm?: number;
+  comorbidades?: string[];
+  historicoFamiliar?: string;
 };
+
 
 export async function updateRegistryProfile(
   globalId: string,
