@@ -1010,14 +1010,6 @@ export function AppointmentCalendar({
                 </button>
               ))}
             </div>
-            <SettingsPopover
-              settings={settings}
-              onChange={persistSettings}
-              customDayCount={customDayCount}
-              onCustomDayCountChange={setCustomDayCount}
-              zoom={zoom}
-              onZoomChange={setZoom}
-            />
           </div>
         </div>
 
