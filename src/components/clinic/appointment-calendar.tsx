@@ -1131,6 +1131,32 @@ export function AppointmentCalendar({
             </DialogHeader>
 
             <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="ap-data" className="text-xs">
+                    Data
+                  </Label>
+                  <Input
+                    id="ap-data"
+                    type="date"
+                    value={pendingDate}
+                    onChange={(e) => setPendingDateTime(e.target.value, pendingTime)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ap-hora" className="text-xs">
+                    Hora
+                  </Label>
+                  <Input
+                    id="ap-hora"
+                    type="time"
+                    step={300}
+                    value={pendingTime}
+                    onChange={(e) => setPendingDateTime(pendingDate, e.target.value)}
+                  />
+                </div>
+              </div>
+
               {!isBloqueio &&
                 (pending?.patient ? (
                   <div className="text-sm font-medium">{pending.patient.nome}</div>
