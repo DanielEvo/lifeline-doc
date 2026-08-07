@@ -903,3 +903,14 @@ export function localDateTimeToIso(ymd: string, hhmm: string): string {
   const [h, min] = hhmm.split(":").map(Number);
   return toIsoWithOffset(new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0, 0));
 }
+
+/** Rede de segurança do servidor: string sem fuso ("2026-08-07T18:00") é hora
+ *  de parede do consultório — interpretada em America/Sao_Paulo, nunca em UTC
+ *  (o runtime edge roda em UTC e deslocaria o evento em 3h). */
+export function parseAppointmentInstant(value: string): string {
+  const naive = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(value);
+  const iso = naive ? `${value.length === 16 ? `${value}:00` : value}-03:00` : value;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) throw new Error("data/hora inválida");
+  return d.toISOString();
+}
