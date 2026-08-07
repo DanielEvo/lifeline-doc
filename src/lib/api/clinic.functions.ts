@@ -102,6 +102,7 @@ import {
   ageFrom,
   BIOMARKER_CATALOG,
   DEFAULT_CALENDAR_SETTINGS,
+  parseAppointmentInstant,
   resolveBiomarkerName,
   todayIso,
   type CalendarSettings,
@@ -631,7 +632,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const dateTimeIso = new Date(data.dateTime).toISOString();
+    const dateTimeIso = parseAppointmentInstant(data.dateTime);
     const recurrence = data.recurrence;
     const wantsRecurrence = recurrence && recurrence.freq !== "none" && recurrence.count > 0;
 
@@ -789,7 +790,7 @@ export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
 
-    const dateTimeIso = data.dateTime ? new Date(data.dateTime).toISOString() : undefined;
+    const dateTimeIso = data.dateTime ? parseAppointmentInstant(data.dateTime) : undefined;
 
     // BUG-3: mover/redimensionar uma consulta também precisa respeitar
     // maxParallel — o resultado final (novo horário e/ou nova duração)
