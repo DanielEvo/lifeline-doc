@@ -102,6 +102,7 @@ import {
   ageFrom,
   BIOMARKER_CATALOG,
   DEFAULT_CALENDAR_SETTINGS,
+  parseAppointmentInstant,
   resolveBiomarkerName,
   todayIso,
   type CalendarSettings,
