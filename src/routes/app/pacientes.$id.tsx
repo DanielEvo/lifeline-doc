@@ -120,6 +120,7 @@ import {
   formatHourBR,
   initialsOf,
   isConsultaAppointment,
+  localDateTimeToIso,
   isOutOfRange,
   MED_CATALOG,
   parseTemplateSections,
