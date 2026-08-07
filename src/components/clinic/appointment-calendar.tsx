@@ -891,7 +891,23 @@ export function AppointmentCalendar({
     setPending({ patient: null, dateTime });
   };
 
+  // Data/hora do dialog de confirmação — editáveis (o valor inicial vem do
+  // slot clicado/arrastado, mas o médico pode ajustar antes de confirmar).
+  const pendingDateObj = pending ? new Date(pending.dateTime) : null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const pendingDate = pendingDateObj
+    ? `${pendingDateObj.getFullYear()}-${pad(pendingDateObj.getMonth() + 1)}-${pad(pendingDateObj.getDate())}`
+    : "";
+  const pendingTime = pendingDateObj
+    ? `${pad(pendingDateObj.getHours())}:${pad(pendingDateObj.getMinutes())}`
+    : "";
+  const setPendingDateTime = (ymd: string, hhmm: string) => {
+    if (!ymd || !hhmm) return;
+    setPending((prev) => (prev ? { ...prev, dateTime: localDateTimeToIso(ymd, hhmm) } : prev));
+  };
+
   const chosenPatientId = pending?.patient?.id ?? selectedPatientId;
+
   const canConfirm = isBloqueio || !!chosenPatientId;
   const effectiveCor =
     corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
