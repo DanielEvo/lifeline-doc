@@ -61,6 +61,8 @@ import {
   EVENT_COLOR_SWATCHES,
   formatHourBR,
   toIsoWithOffset,
+  localDateTimeToIso,
+
   initialsOf,
   REMINDER_PRESETS,
   TINT_TO_HEX,
@@ -891,7 +893,23 @@ export function AppointmentCalendar({
     setPending({ patient: null, dateTime });
   };
 
+  // Data/hora do dialog de confirmação — editáveis (o valor inicial vem do
+  // slot clicado/arrastado, mas o médico pode ajustar antes de confirmar).
+  const pendingDateObj = pending ? new Date(pending.dateTime) : null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const pendingDate = pendingDateObj
+    ? `${pendingDateObj.getFullYear()}-${pad(pendingDateObj.getMonth() + 1)}-${pad(pendingDateObj.getDate())}`
+    : "";
+  const pendingTime = pendingDateObj
+    ? `${pad(pendingDateObj.getHours())}:${pad(pendingDateObj.getMinutes())}`
+    : "";
+  const setPendingDateTime = (ymd: string, hhmm: string) => {
+    if (!ymd || !hhmm) return;
+    setPending((prev) => (prev ? { ...prev, dateTime: localDateTimeToIso(ymd, hhmm) } : prev));
+  };
+
   const chosenPatientId = pending?.patient?.id ?? selectedPatientId;
+
   const canConfirm = isBloqueio || !!chosenPatientId;
   const effectiveCor =
     corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
@@ -1131,6 +1149,32 @@ export function AppointmentCalendar({
             </DialogHeader>
 
             <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="ap-data" className="text-xs">
+                    Data
+                  </Label>
+                  <Input
+                    id="ap-data"
+                    type="date"
+                    value={pendingDate}
+                    onChange={(e) => setPendingDateTime(e.target.value, pendingTime)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ap-hora" className="text-xs">
+                    Hora
+                  </Label>
+                  <Input
+                    id="ap-hora"
+                    type="time"
+                    step={300}
+                    value={pendingTime}
+                    onChange={(e) => setPendingDateTime(pendingDate, e.target.value)}
+                  />
+                </div>
+              </div>
+
               {!isBloqueio &&
                 (pending?.patient ? (
                   <div className="text-sm font-medium">{pending.patient.nome}</div>
