@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createMyCharge, scheduleAppointment } from "@/lib/api/clinic.functions";
-import { todayIso, type Patient } from "@/lib/clinic-types";
+import { localDateTimeToIso, todayIso, type Patient } from "@/lib/clinic-types";
 
 export function invalidateWorkspace(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["workspace"] });
@@ -70,7 +70,7 @@ export function ScheduleDialog({
         data: {
           token,
           patientId: patient!.id,
-          dateTime: `${data}T${hora}:00`,
+          dateTime: localDateTimeToIso(data, hora),
           note: nota || null,
         },
       }),

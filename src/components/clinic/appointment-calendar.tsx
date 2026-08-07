@@ -60,6 +60,7 @@ import {
   DEFAULT_CALENDAR_SETTINGS,
   EVENT_COLOR_SWATCHES,
   formatHourBR,
+  toIsoWithOffset,
   initialsOf,
   REMINDER_PRESETS,
   TINT_TO_HEX,
@@ -118,9 +119,10 @@ const MONTHS = [
   "Dezembro",
 ];
 
+// Instante absoluto (com offset local). Sem o offset o servidor — que roda
+// em UTC — lê a hora de parede como UTC e o evento reaparece 3h antes.
 function toIsoLocal(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+  return toIsoWithOffset(date);
 }
 function ymd(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

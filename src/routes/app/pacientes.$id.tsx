@@ -932,7 +932,7 @@ function MiniAgenda({
                     <button
                       type="button"
                       disabled={!novaData || !novaHora || reagendar.isPending}
-                      onClick={() => reagendar.mutate({ id: a.id, dateTime: `${novaData}T${novaHora}:00` })}
+                      onClick={() => reagendar.mutate({ id: a.id, dateTime: localDateTimeToIso(novaData, novaHora) })}
                       className="rounded bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
                     >
                       OK
