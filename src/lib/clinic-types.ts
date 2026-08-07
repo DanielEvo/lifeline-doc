@@ -871,3 +871,35 @@ export const WA_TEMPLATES = {
   pedirAtualizacaoCadastro: (paciente: string, medico: string) =>
     `Olá, ${paciente.split(" ")[0]}! Tipo sanguíneo, alergias, peso e altura no seu cadastro agora são atualizados por você direto no app LifeLine — se algo mudou, é só editar por lá. — ${medico}`,
 };
+
+// ---------------------------------------------------------------------------
+// Fuso horário da agenda — o cliente SEMPRE envia instante absoluto.
+// Antes o calendário mandava "2026-08-07T18:00:00" (sem offset); o servidor
+// roda em UTC, então `new Date(...)` lia 18:00Z e o médico via 15:00 no
+// Brasil. Toda hora que sai do browser passa por aqui e carrega o offset.
+
+/** Offset local no formato ±HH:MM (ex.: "-03:00"). */
+function localOffset(date: Date): string {
+  const mins = -date.getTimezoneOffset();
+  const sign = mins >= 0 ? "+" : "-";
+  const abs = Math.abs(mins);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
+/** ISO com offset local — hora de parede preservada em qualquer runtime. */
+export function toIsoWithOffset(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    localOffset(date)
+  );
+}
+
+/** Junta "yyyy-mm-dd" + "HH:MM" digitados pelo médico num instante absoluto. */
+export function localDateTimeToIso(ymd: string, hhmm: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const [h, min] = hhmm.split(":").map(Number);
+  return toIsoWithOffset(new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0, 0));
+}
