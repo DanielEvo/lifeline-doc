@@ -1010,14 +1010,6 @@ export function AppointmentCalendar({
                 </button>
               ))}
             </div>
-            <SettingsPopover
-              settings={settings}
-              onChange={persistSettings}
-              customDayCount={customDayCount}
-              onCustomDayCountChange={setCustomDayCount}
-              zoom={zoom}
-              onZoomChange={setZoom}
-            />
           </div>
         </div>
 
@@ -2159,133 +2151,8 @@ function EventSearch({
 
 // ---------------------------------------------------------------------------
 
-function SettingsPopover({
-  settings,
-  onChange,
-  customDayCount,
-  onCustomDayCountChange,
-  zoom,
-  onZoomChange,
-}: {
-  settings: CalendarSettings;
-  onChange: (s: CalendarSettings) => void;
-  customDayCount: number;
-  onCustomDayCountChange: (n: number) => void;
-  zoom: number;
-  onZoomChange: (n: number) => void;
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-[11px]">
-          <Settings2 className="h-3.5 w-3.5" />
-          {settings.slotMinutes}min · {settings.startHour}h–{settings.endHour}h
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 space-y-3" align="end">
-        <div className="text-xs font-semibold">Configurar agenda</div>
-        <div className="space-y-1">
-          <Label className="text-[11px]">Duração do slot</Label>
-          <Select
-            value={String(settings.slotMinutes)}
-            onValueChange={(v) =>
-              onChange({ ...settings, slotMinutes: Number(v) as CalendarSettings["slotMinutes"] })
-            }
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[15, 20, 30, 45, 60].map((m) => (
-                <SelectItem key={m} value={String(m)}>
-                  {m} minutos
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-[11px]">Início</Label>
-            <Input
-              type="number"
-              min={0}
-              max={23}
-              value={settings.startHour}
-              onChange={(e) => {
-                const v = Math.max(0, Math.min(23, Number(e.target.value) || 0));
-                onChange({ ...settings, startHour: v, endHour: Math.max(v + 1, settings.endHour) });
-              }}
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">Fim</Label>
-            <Input
-              type="number"
-              min={1}
-              max={24}
-              value={settings.endHour}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(24, Number(e.target.value) || 24));
-                onChange({ ...settings, endHour: Math.max(settings.startHour + 1, v) });
-              }}
-              className="h-8 text-xs"
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px]">Consultas em paralelo (mesmo horário)</Label>
-          <Select
-            value={String(settings.maxParallel)}
-            onValueChange={(v) =>
-              onChange({ ...settings, maxParallel: Number(v) as CalendarSettings["maxParallel"] })
-            }
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  até {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px]">Dias exibidos (visão "N dias")</Label>
-          <Input
-            type="number"
-            min={2}
-            max={14}
-            value={customDayCount}
-            onChange={(e) =>
-              onCustomDayCountChange(Math.max(2, Math.min(14, Number(e.target.value) || 4)))
-            }
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <Label className="text-[11px]">Zoom (densidade)</Label>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
-              {zoom.toFixed(1)}x
-            </span>
-          </div>
-          <Slider
-            value={[zoom]}
-            onValueChange={([v]) => onZoomChange(v)}
-            min={ZOOM_MIN}
-            max={ZOOM_MAX}
-            step={0.1}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+
+
 
 // ---------------------------------------------------------------------------
 // Canvas contínuo — dia/semana. Cada DayColumn é um canvas relativo de altura
