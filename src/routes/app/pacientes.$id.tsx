@@ -2883,23 +2883,42 @@ function ReceitaDialog({
     cancelMemed.mutate({ memedPrescricaoId: id });
   };
 
+  // O payload de prescricaoImpressa não tem forma única: dependendo da versão
+  // do SDK os medicamentos vêm na raiz ou dentro de `prescricao`, e o PDF ora
+  // é `url`, ora `link`. Antes só a primeira forma era lida — a receita era
+  // salva no prontuário sem nenhum medicamento e sem link.
   const handlePrescricaoImpressa = (raw: unknown) => {
+    type Item = { nome?: string; name?: string; descricao?: string } | string;
     const data = raw as {
-      prescricao?: { id?: string | number; url?: string };
-      medicamentos?: Array<{ nome?: string } | string>;
+      prescricao?: {
+        id?: string | number;
+        url?: string;
+        link?: string;
+        medicamentos?: Item[];
+      };
+      medicamentos?: Item[];
     };
     const memedPrescricaoId = data?.prescricao?.id != null ? String(data.prescricao.id) : null;
     if (!memedPrescricaoId) {
       toast.error("Memed não retornou o id da prescrição — não consegui salvar no prontuário.");
       return;
     }
-    const medsResumo = Array.isArray(data.medicamentos)
+    const itens: Item[] = Array.isArray(data.medicamentos)
       ? data.medicamentos
-          .map((m) => (typeof m === "string" ? m : (m?.nome ?? "")))
-          .filter((n): n is string => n.length > 0)
-      : [];
-    confirmMemed.mutate({ memedPrescricaoId, medsResumo, pdfUrl: data?.prescricao?.url || null });
+      : Array.isArray(data.prescricao?.medicamentos)
+        ? data.prescricao.medicamentos
+        : [];
+    const medsResumo = itens
+      .map((m) => (typeof m === "string" ? m : (m?.nome ?? m?.name ?? m?.descricao ?? "")))
+      .map((n) => n.trim().slice(0, 200))
+      .filter((n) => n.length > 0);
+    confirmMemed.mutate({
+      memedPrescricaoId,
+      medsResumo,
+      pdfUrl: data?.prescricao?.url || data?.prescricao?.link || null,
+    });
   };
+
 
   if (showWidget && widgetConfig.data?.ok) {
     return (
