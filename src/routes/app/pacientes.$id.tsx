@@ -3047,6 +3047,20 @@ function ReceitaDialog({
             Não consegui conectar ao módulo da Memed agora — use a receita local abaixo.
           </p>
         )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_offline" && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900">
+            O serviço de prescrição digital está fora do ar neste momento (indisponibilidade do
+            provedor, não é problema no seu cadastro). Use a receita local abaixo e tente de novo
+            mais tarde.
+          </p>
+        )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "invalid_credentials" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+            As credenciais de prescrição digital deste ambiente foram recusadas — a receita local
+            abaixo continua funcionando enquanto isso é corrigido.
+          </p>
+        )}
+
         {widgetConfig.data?.ok === false && widgetConfig.data.error === "prescritor_inativo" && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
             Seu cadastro de prescritor está inativo na Memed — fale com o suporte deles para
