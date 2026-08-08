@@ -35,6 +35,7 @@ type AppointmentUpdate = Partial<{
   cor: string | null;
   descricao: string | null;
   local: string | null;
+  tipo_atendimento_id: string | null;
   lembretes_min: number[];
   date_time: string;
 }>;
@@ -54,6 +55,7 @@ type AppointmentRow = {
   cor: string | null;
   descricao: string | null;
   local: string | null;
+  tipo_atendimento_id: string | null;
   recurrence_id: string | null;
   lembretes_min: number[];
   created_at: string;
@@ -76,6 +78,7 @@ function fromRow(row: AppointmentRow): Appointment {
     cor: row.cor,
     descricao: row.descricao,
     local: row.local,
+    tipoAtendimentoId: row.tipo_atendimento_id,
     recurrenceId: row.recurrence_id,
     lembretesMin: row.lembretes_min ?? [],
     createdAt: row.created_at,
@@ -175,6 +178,7 @@ type CreateAppointmentInput = {
   cor?: string | null;
   descricao?: string | null;
   local?: string | null;
+  tipoAtendimentoId?: string | null;
   lembretesMin?: number[];
 };
 
@@ -196,6 +200,7 @@ function buildRow(doctorId: string, input: CreateAppointmentInput, now: string) 
     cor: input.cor ?? null,
     descricao: input.descricao?.trim() || null,
     local: input.local?.trim() || null,
+    tipo_atendimento_id: input.tipoAtendimentoId ?? null,
     lembretes_min: input.lembretesMin ?? [],
     created_at: now,
     updated_at: now,
@@ -358,6 +363,7 @@ export type AppointmentEditableFields = {
   cor?: string | null;
   descricao?: string | null;
   local?: string | null;
+  tipoAtendimentoId?: string | null;
   lembretesMin?: number[];
 };
 
@@ -402,6 +408,7 @@ export async function updateAppointment(
   if (patch.cor !== undefined) patchRow.cor = patch.cor;
   if (patch.descricao !== undefined) patchRow.descricao = patch.descricao;
   if (patch.local !== undefined) patchRow.local = patch.local;
+  if (patch.tipoAtendimentoId !== undefined) patchRow.tipo_atendimento_id = patch.tipoAtendimentoId;
   if (patch.lembretesMin !== undefined) patchRow.lembretes_min = patch.lembretesMin;
 
   const { data: updatedRows, error } = await supabaseAdmin

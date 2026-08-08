@@ -16,6 +16,7 @@ import {
   updateDoctorPreferredMetrics,
 } from "../auth.server";
 import { listCategories } from "../categories.server";
+import { listAppointmentTypes } from "../appointment-types.server";
 import {
   bumpExams,
   createPatient,
@@ -102,6 +103,8 @@ import {
   ageFrom,
   BIOMARKER_CATALOG,
   DEFAULT_CALENDAR_SETTINGS,
+  DEFAULT_STATUS_COLORS,
+  MAX_PARALLEL_CONSULTAS,
   parseAppointmentInstant,
   resolveBiomarkerName,
   todayIso,
@@ -113,6 +116,7 @@ import {
 const token = z.string().min(1).max(80);
 const COLUMN = z.string().min(1).max(32);
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "cor precisa ser um hex válido (#rrggbb)");
 
 // Antecedentes pessoais — mesmo fragmento em createMyPatient e
 // updateMyPatient para não divergir a validação entre os dois.
@@ -350,13 +354,15 @@ export const getWorkspace = createServerFn({ method: "POST" })
     // a agenda é opcional e a tela avisa explicitamente quando faltou (nunca
     // mostrar "nenhuma consulta" silenciosamente: quem tem consulta marcada
     // precisa saber que a lista está incompleta, não vazia).
-    const [patients, columns, appointmentsRead, charges, categories] = await Promise.all([
-      listPatients(doctor.id, { includeArchived: true }),
-      getBoardColumns(doctor.id),
-      optionalRead("appointments", () => listAppointments(doctor.id), []),
-      listCharges(doctor.id),
-      listCategories(doctor.id),
-    ]);
+    const [patients, columns, appointmentsRead, charges, categories, appointmentTypes] =
+      await Promise.all([
+        listPatients(doctor.id, { includeArchived: true }),
+        getBoardColumns(doctor.id),
+        optionalRead("appointments", () => listAppointments(doctor.id), []),
+        listCharges(doctor.id),
+        listCategories(doctor.id),
+        listAppointmentTypes(doctor.id),
+      ]);
     const appointments = appointmentsRead.data;
     return {
       ok: true as const,
@@ -365,7 +371,11 @@ export const getWorkspace = createServerFn({ method: "POST" })
         email: doctor.email,
         avatarUrl: doctor.avatarUrl,
         preferredMetrics: doctor.preferredMetrics ?? [],
-        calendarSettings: doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS,
+        // Spread (não `??`): médicos com calendarSettings salvo antes desta
+        // rodada (formato antigo, sem colorMode/statusColors) precisam dos
+        // campos novos preenchidos com default — `??` só cobre null, não um
+        // objeto existente com shape antigo.
+        calendarSettings: { ...DEFAULT_CALENDAR_SETTINGS, ...doctor.calendarSettings },
       },
       patients: await withVinculo(doctor.id, patients),
       columns,
@@ -373,11 +383,22 @@ export const getWorkspace = createServerFn({ method: "POST" })
       agendaUnavailable: appointmentsRead.unavailable,
       charges,
       categories,
+      appointmentTypes,
     };
   });
 
 // Configuração da agenda (duração do slot, expediente) — antes só em
 // localStorage por token, agora por médico (sincroniza entre dispositivos).
+const STATUS_COLORS_SCHEMA = z
+  .object({
+    agendada: HEX_COLOR,
+    confirmada: HEX_COLOR,
+    realizada: HEX_COLOR,
+    faltou: HEX_COLOR,
+  })
+  .optional()
+  .default(DEFAULT_STATUS_COLORS);
+
 export const saveMyCalendarSettings = createServerFn({ method: "POST" })
   .inputValidator(
     z
@@ -392,10 +413,8 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
         ]),
         startHour: z.number().int().min(0).max(23),
         endHour: z.number().int().min(1).max(24),
-        maxParallel: z
-          .union([z.literal(1), z.literal(2), z.literal(3)])
-          .optional()
-          .default(1),
+        colorMode: z.enum(["paciente", "status", "tipo"]).optional().default("paciente"),
+        statusColors: STATUS_COLORS_SCHEMA,
       })
       .refine((v) => v.startHour < v.endHour, {
         message: "startHour precisa ser antes de endHour",
@@ -408,7 +427,8 @@ export const saveMyCalendarSettings = createServerFn({ method: "POST" })
       slotMinutes: data.slotMinutes,
       startHour: data.startHour,
       endHour: data.endHour,
-      maxParallel: data.maxParallel,
+      colorMode: data.colorMode,
+      statusColors: data.statusColors,
     };
     const updated = await updateDoctorCalendarSettings(doctor.id, settings);
     return updated
@@ -595,7 +615,6 @@ const RECURRENCE = z
     count: z.number().int().min(0).max(23),
   })
   .optional();
-const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "cor precisa ser um hex válido (#rrggbb)");
 const RECURRENCE_SCOPE = z.enum(["this", "following", "all"]).optional().default("this");
 const LEMBRETES_MIN = z
   .array(
@@ -606,6 +625,31 @@ const LEMBRETES_MIN = z
       .max(2 * 24 * 60),
   )
   .max(5);
+
+// PM-12 (HANDOVER_AGENDA_v2.md Parte 1): teto de simultaneidade fixo em
+// código (MAX_PARALLEL_CONSULTAS). Qualquer sobreposição a partir da 1ª
+// exige confirmação explícita do médico (confirmParallel); acima do teto o
+// servidor recusa direto, sem oferecer confirmação — não há o que confirmar.
+async function checkParallelLimit(
+  doctorId: string,
+  dateTime: string,
+  durationMin: number,
+  confirmParallel: boolean,
+  excludeId?: string,
+): Promise<
+  | { ok: true }
+  | { ok: false; error: "needs_confirmation" | "parallel_limit_reached"; count: number }
+> {
+  const overlapping = await countOverlappingConsultas(doctorId, dateTime, durationMin, excludeId);
+  const wouldBe = overlapping + 1;
+  if (wouldBe > MAX_PARALLEL_CONSULTAS) {
+    return { ok: false, error: "parallel_limit_reached", count: overlapping };
+  }
+  if (wouldBe > 1 && !confirmParallel) {
+    return { ok: false, error: "needs_confirmation", count: overlapping };
+  }
+  return { ok: true };
+}
 
 export const scheduleAppointment = createServerFn({ method: "POST" })
   .inputValidator(
@@ -622,8 +666,10 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
       cor: HEX_COLOR.nullish(),
       descricao: z.string().max(2000).nullish(),
       local: z.string().max(160).nullish(),
+      tipoAtendimentoId: z.string().min(1).nullish(),
       lembretesMin: LEMBRETES_MIN.optional().default([]),
       recurrence: RECURRENCE,
+      confirmParallel: z.boolean().optional().default(false),
       // BUG-13: chave de idempotência gerada uma vez no client por abertura
       // do dialog — duplo clique/retry com o mesmo requestId não duplica.
       requestId: z.string().min(1).max(100).optional(),
@@ -668,13 +714,16 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
 
-    // BUG-3: limite de consultas em paralelo no mesmo horário — bloqueio não
-    // passa por aqui (kind "bloqueio" já retornou acima).
-    const maxParallel =
-      doctor.calendarSettings?.maxParallel ?? DEFAULT_CALENDAR_SETTINGS.maxParallel;
-    const overlapping = await countOverlappingConsultas(doctor.id, dateTimeIso, data.durationMin);
-    if (overlapping + 1 > maxParallel) {
-      return { ok: false as const, error: "parallel_limit" as const };
+    // BUG-3/PM-12: limite de consultas em paralelo no mesmo horário —
+    // bloqueio não passa por aqui (kind "bloqueio" já retornou acima).
+    const parallelCheck = await checkParallelLimit(
+      doctor.id,
+      dateTimeIso,
+      data.durationMin,
+      data.confirmParallel,
+    );
+    if (!parallelCheck.ok) {
+      return { ok: false as const, error: parallelCheck.error, count: parallelCheck.count };
     }
 
     if (wantsRecurrence && recurrence) {
@@ -686,6 +735,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
           note: data.note,
           durationMin: data.allDay ? null : data.durationMin,
           allDay: data.allDay,
+          tipoAtendimentoId: data.tipoAtendimentoId,
           lembretesMin: data.lembretesMin,
         },
         { freq: recurrence.freq as "daily" | "weekly" | "monthly", count: recurrence.count },
@@ -702,6 +752,7 @@ export const scheduleAppointment = createServerFn({ method: "POST" })
         note: data.note,
         durationMin: data.allDay ? null : data.durationMin,
         allDay: data.allDay,
+        tipoAtendimentoId: data.tipoAtendimentoId,
         lembretesMin: data.lembretesMin,
       },
       data.requestId,
@@ -737,6 +788,7 @@ export const updateMyAppointment = createServerFn({ method: "POST" })
       cor: HEX_COLOR.nullish(),
       descricao: z.string().max(2000).nullish(),
       local: z.string().max(160).nullish(),
+      tipoAtendimentoId: z.string().min(1).nullish(),
       lembretesMin: LEMBRETES_MIN.optional(),
       scope: RECURRENCE_SCOPE,
     }),
@@ -781,6 +833,7 @@ export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
           .refine((s) => !Number.isNaN(Date.parse(s)), "data/hora inválida")
           .optional(),
         durationMin: z.number().int().min(5).max(480).optional(),
+        confirmParallel: z.boolean().optional().default(false),
       })
       .refine((v) => v.dateTime !== undefined || v.durationMin !== undefined, {
         message: "informe dateTime e/ou durationMin",
@@ -792,25 +845,24 @@ export const updateMyAppointmentTiming = createServerFn({ method: "POST" })
 
     const dateTimeIso = data.dateTime ? parseAppointmentInstant(data.dateTime) : undefined;
 
-    // BUG-3: mover/redimensionar uma consulta também precisa respeitar
-    // maxParallel — o resultado final (novo horário e/ou nova duração)
-    // não pode ultrapassar o limite do médico.
+    // BUG-3/PM-12: mover/redimensionar uma consulta também precisa respeitar
+    // o teto de simultaneidade — o resultado final (novo horário e/ou nova
+    // duração) passa pela mesma checagem de 2 níveis do agendamento novo.
     if (dateTimeIso !== undefined || data.durationMin !== undefined) {
       const current = await getAppointment(doctor.id, data.id);
       if (!current) return { ok: false as const, error: "not_found" as const };
       if (current.kind === "consulta") {
         const finalDateTime = dateTimeIso ?? current.dateTime;
         const finalDuration = data.durationMin ?? current.durationMin ?? 30;
-        const maxParallel =
-          doctor.calendarSettings?.maxParallel ?? DEFAULT_CALENDAR_SETTINGS.maxParallel;
-        const overlapping = await countOverlappingConsultas(
+        const parallelCheck = await checkParallelLimit(
           doctor.id,
           finalDateTime,
           finalDuration,
+          data.confirmParallel,
           data.id,
         );
-        if (overlapping + 1 > maxParallel) {
-          return { ok: false as const, error: "parallel_limit" as const };
+        if (!parallelCheck.ok) {
+          return { ok: false as const, error: parallelCheck.error, count: parallelCheck.count };
         }
       }
     }

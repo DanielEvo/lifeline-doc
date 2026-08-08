@@ -47,6 +47,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createMyCategory } from "@/lib/api/categories.functions";
+import { createMyAppointmentType } from "@/lib/api/appointment-types.functions";
 import {
   deleteMyAppointment,
   listMyAppointments,
@@ -62,13 +63,15 @@ import {
   formatHourBR,
   toIsoWithOffset,
   localDateTimeToIso,
-
+  MAX_PARALLEL_CONSULTAS,
   initialsOf,
   REMINDER_PRESETS,
   TINT_TO_HEX,
   type Appointment,
   type AppointmentStatus,
+  type AppointmentType,
   type CalendarSettings,
+  type ColorMode,
   type EventCategory,
   type Patient,
   type RecurrenceFreq,
@@ -87,6 +90,15 @@ const ZOOM_MAX = 2;
 const ZOOM_DEFAULT = 1;
 const MIN_BLOCK_PX = 22; // clamp mínimo — consulta de 15min não vira lasca ilegível
 const FALLBACK_COLOR = "#64748b"; // slate-500 — bloqueio sem cor/categoria ainda
+const SEM_CONVENIO_KEY = "__sem_convenio"; // UX-09 — agrupa pacientes sem Patient.convenio
+
+// PM-13: fora do expediente configurado vira hachura diagonal (não mais
+// fundo sólido) — o canvas de dia/semana/N-dias renderiza as 24h sempre,
+// então essa faixa precisa continuar lendo como "fora de hora", não "vazio".
+const OUT_OF_HOURS_HACHURA: React.CSSProperties = {
+  backgroundImage:
+    "repeating-linear-gradient(45deg, var(--color-border) 0, var(--color-border) 1px, transparent 1px, transparent 8px)",
+};
 
 export const DRAG_PATIENT_KEY = "application/x-patient-id";
 const DRAG_KEY = DRAG_PATIENT_KEY;
@@ -153,10 +165,24 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Cor de um evento — consulta usa a cor do próprio paciente (tint), evento
- *  pessoal usa a própria cor resolvida (categoria ou sobrescrita). */
-function resolveApptColor(appt: Appointment, byId: Map<string, Patient>): string {
+/** Cor de um evento (UX-12/UX-15, HANDOVER_AGENDA_v2.md Parte 4.3) —
+ *  bloqueio/evento pessoal SEMPRE usa a própria cor (categoria ou
+ *  sobrescrita), em qualquer colorMode. Consulta segue `settings.colorMode`:
+ *  "paciente" (padrão, tint do paciente), "status" (cor configurada por
+ *  status) ou "tipo" (cor do Tipo de Atendimento, se algum estiver setado —
+ *  sem tipo definido, cai na cor neutra padrão). */
+function resolveApptColor(
+  appt: Appointment,
+  byId: Map<string, Patient>,
+  typesById: Map<string, AppointmentType>,
+  settings: CalendarSettings,
+): string {
   if (appt.kind === "bloqueio") return appt.cor ?? FALLBACK_COLOR;
+  if (settings.colorMode === "status") return settings.statusColors[appt.status];
+  if (settings.colorMode === "tipo") {
+    const t = appt.tipoAtendimentoId ? typesById.get(appt.tipoAtendimentoId) : undefined;
+    return t?.cor ?? FALLBACK_COLOR;
+  }
   const patient = appt.patientId ? byId.get(appt.patientId) : undefined;
   return TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR;
 }
@@ -397,12 +423,14 @@ export function AppointmentCalendar({
   token,
   patients,
   categories,
+  appointmentTypes,
   calendarSettings,
   onOpenPatient,
 }: {
   token: string;
   patients: Patient[];
   categories: EventCategory[];
+  appointmentTypes: AppointmentType[];
   calendarSettings: CalendarSettings;
   onOpenPatient?: (p: Patient) => void;
 }) {
@@ -489,7 +517,10 @@ export function AppointmentCalendar({
   const [allDay, setAllDay] = useState(false);
   const [descricao, setDescricao] = useState("");
   const [local, setLocal] = useState("");
+  const [tipoAtendimentoId, setTipoAtendimentoId] = useState<string | null>(null);
   const [lembretesMin, setLembretesMin] = useState<number[]>([]);
+  // PM-12: confirmação explícita de simultaneidade a partir da 1ª sobreposição.
+  const [parallelConfirmed, setParallelConfirmed] = useState(false);
 
   // Editor completo (reabre em cima de evento já existente) — separado do
   // dialog de criação acima; guarda só o id pra ficar sincronizado se
@@ -497,10 +528,17 @@ export function AppointmentCalendar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const editingAppt = editingId ? (appointments.find((a) => a.id === editingId) ?? null) : null;
 
+  // Parte 4.4: aberto pelo link "Gerenciar tipos de atendimento" do painel
+  // de configurações (Parte 6).
+  const [typesManagerOpen, setTypesManagerOpen] = useState(false);
+
   // Filtro da sidebar — só visual/local, não persiste (mesmo padrão do
   // showAll do painel de biomarcadores: estado de sessão, não config salva).
   const [hiddenCategoryIds, setHiddenCategoryIds] = useState<Set<string>>(new Set());
   const [showConsultas, setShowConsultas] = useState(true);
+  // UX-09: sub-toggle por convênio dentro de "Consultas" — mesmo padrão de
+  // hiddenCategoryIds (session-only, filtro só visual do grid).
+  const [hiddenConvenios, setHiddenConvenios] = useState<Set<string>>(new Set());
 
   const salvarSettings = useMutation({
     mutationFn: (s: CalendarSettings) => saveMyCalendarSettings({ data: { token, ...s } }),
@@ -516,6 +554,10 @@ export function AppointmentCalendar({
 
   const byId = useMemo(() => new Map(patients.map((p) => [p.id, p])), [patients]);
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const typesById = useMemo(
+    () => new Map(appointmentTypes.map((t) => [t.id, t])),
+    [appointmentTypes],
+  );
   // BUG-12: decisão explícita — hiddenCategoryIds/showConsultas é só um
   // filtro VISUAL do grid (TimeGrid/MonthGrid/YearGrid/ListView, todos
   // recebem visibleAppointments abaixo). Lembretes, busca (EventSearch) e o
@@ -527,10 +569,15 @@ export function AppointmentCalendar({
   const visibleAppointments = useMemo(
     () =>
       appointments.filter((a) => {
-        if (a.kind === "consulta") return showConsultas;
+        if (a.kind === "consulta") {
+          if (!showConsultas) return false;
+          const patient = a.patientId ? byId.get(a.patientId) : undefined;
+          const convenioKey = patient?.convenio ?? SEM_CONVENIO_KEY;
+          return !hiddenConvenios.has(convenioKey);
+        }
         return !a.categoriaId || !hiddenCategoryIds.has(a.categoriaId);
       }),
-    [appointments, showConsultas, hiddenCategoryIds],
+    [appointments, showConsultas, hiddenCategoryIds, hiddenConvenios, byId],
   );
 
   const resetDialogFields = () => {
@@ -546,7 +593,9 @@ export function AppointmentCalendar({
     setAllDay(false);
     setDescricao("");
     setLocal("");
+    setTipoAtendimentoId(null);
     setLembretesMin([]);
+    setParallelConfirmed(false);
   };
 
   const closeDialog = () => {
@@ -558,7 +607,7 @@ export function AppointmentCalendar({
   // em routes/app/index.tsx (onMutate cancela+snapshot+aplica, onError
   // restaura, onSettled invalida o prefixo inteiro — cobre todas as janelas).
   const parallelLimitMsg = () =>
-    `Limite de ${settings.maxParallel} atendimento${settings.maxParallel > 1 ? "s" : ""} em paralelo atingido nesse horário.`;
+    `Limite de ${MAX_PARALLEL_CONSULTAS} atendimentos simultâneos atingido nesse horário.`;
 
   const agendar = useMutation({
     mutationFn: (v: {
@@ -573,9 +622,11 @@ export function AppointmentCalendar({
       cor: string | null;
       descricao: string | null;
       local: string | null;
+      tipoAtendimentoId: string | null;
       lembretesMin: number[];
       recurrence: { freq: RecurrenceFreq; count: number };
       requestId: string;
+      confirmParallel: boolean;
     }) =>
       scheduleAppointment({
         data: {
@@ -591,9 +642,11 @@ export function AppointmentCalendar({
           cor: v.cor,
           descricao: v.descricao,
           local: v.local,
+          tipoAtendimentoId: v.tipoAtendimentoId,
           lembretesMin: v.lembretesMin,
           recurrence: v.recurrence,
           requestId: v.requestId,
+          confirmParallel: v.confirmParallel,
         },
       }),
     onMutate: async (v) => {
@@ -616,6 +669,7 @@ export function AppointmentCalendar({
         cor: v.cor,
         descricao: v.descricao,
         local: v.local,
+        tipoAtendimentoId: v.tipoAtendimentoId,
         recurrenceId: null,
         lembretesMin: v.lembretesMin,
         createdAt: now,
@@ -627,7 +681,12 @@ export function AppointmentCalendar({
     onSuccess: (r, v, ctx) => {
       if (!r.ok) {
         if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
-        if (r.error === "parallel_limit") return toast.error(parallelLimitMsg());
+        if (r.error === "needs_confirmation") {
+          return toast.warning(
+            `Já existe ${r.count} consulta${r.count > 1 ? "s" : ""} nesse horário — confirme a simultaneidade pra continuar.`,
+          );
+        }
+        if (r.error === "parallel_limit_reached") return toast.error(parallelLimitMsg());
         return toast.error(
           v.kind === "bloqueio" ? "Não consegui bloquear o horário." : "Não consegui agendar.",
         );
@@ -637,8 +696,20 @@ export function AppointmentCalendar({
         ...(old ?? []).filter((a) => a.id !== ctx?.tempId),
         ...created,
       ]);
+      // Simetria com mover/redimensionar (que já são instant+undo): criar
+      // também ganha "Desfazer" quando é inequívoco qual evento desfazer —
+      // só no caso de 1 único agendamento (recorrência cria vários, sem um
+      // alvo óbvio pro undo, mesmo cuidado que atualizarTiming já toma).
+      const undoAction =
+        created.length === 1
+          ? {
+              label: "Desfazer",
+              onClick: () => excluirComDesfazer(created[0].id, "this" as RecurrenceScope),
+            }
+          : undefined;
+
       if (v.kind === "bloqueio") {
-        toast.success("Evento pessoal criado.");
+        toast.success("Evento pessoal criado.", undoAction ? { action: undoAction } : undefined);
       } else {
         const nome = (
           pending?.patient?.nome ??
@@ -650,6 +721,7 @@ export function AppointmentCalendar({
           criados > 1
             ? `${nome} agendado(a) ${criados}x a partir de ${new Date(v.dateTime).toLocaleDateString("pt-BR")}.`
             : `${nome} agendado(a) para ${new Date(v.dateTime).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+          undoAction ? { action: undoAction } : undefined,
         );
       }
       closeDialog();
@@ -742,6 +814,7 @@ export function AppointmentCalendar({
       cor?: string | null;
       descricao?: string | null;
       local?: string | null;
+      tipoAtendimentoId?: string | null;
       lembretesMin?: number[];
     }) => updateMyAppointment({ data: { token, ...v } }),
     onSuccess: (r) => {
@@ -770,8 +843,12 @@ export function AppointmentCalendar({
   // durationMin, alça na borda do bloco) — updateMyAppointmentTiming aceita
   // qualquer um dos dois independentemente.
   const atualizarTiming = useMutation({
-    mutationFn: (v: { id: string; dateTime?: string; durationMin?: number }) =>
-      updateMyAppointmentTiming({ data: { token, ...v } }),
+    mutationFn: (v: {
+      id: string;
+      dateTime?: string;
+      durationMin?: number;
+      confirmParallel?: boolean;
+    }) => updateMyAppointmentTiming({ data: { token, ...v } }),
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: apptsKey });
       const prev = qc.getQueryData<Appointment[]>(apptsKey);
@@ -791,7 +868,18 @@ export function AppointmentCalendar({
     onSuccess: (r, v, ctx) => {
       if (!r.ok) {
         if (ctx?.prev) qc.setQueryData(apptsKey, ctx.prev);
-        if (r.error === "parallel_limit") return toast.error(parallelLimitMsg());
+        if (r.error === "needs_confirmation") {
+          return toast(
+            `Já existe ${r.count} consulta${r.count > 1 ? "s" : ""} nesse horário.`,
+            {
+              action: {
+                label: "Confirmar Simultaneidade",
+                onClick: () => atualizarTiming.mutate({ ...v, confirmParallel: true }),
+              },
+            },
+          );
+        }
+        if (r.error === "parallel_limit_reached") return toast.error(parallelLimitMsg());
         return toast.error(
           v.durationMin !== undefined ? "Não consegui redimensionar." : "Não consegui remarcar.",
         );
@@ -910,9 +998,25 @@ export function AppointmentCalendar({
 
   const chosenPatientId = pending?.patient?.id ?? selectedPatientId;
 
-  const canConfirm = isBloqueio || !!chosenPatientId;
   const effectiveCor =
     corOverride ?? (categoriaId ? (categoriesById.get(categoriaId)?.cor ?? null) : null);
+
+  // PM-12: checagem local só pra feedback imediato (mesmo princípio de
+  // countOverlappingConsultasLocal já usado no canvas) — quem decide de
+  // verdade é o servidor, que vê a agenda inteira, não só o dia carregado.
+  const overlapCountLocal = useMemo(() => {
+    if (!pending || isBloqueio) return 0;
+    const day = new Date(pending.dateTime);
+    const dayKey = ymd(day);
+    const dayAppts = appointments.filter(
+      (a) => a.kind === "consulta" && ymd(new Date(a.dateTime)) === dayKey,
+    );
+    const candidateStartMin = day.getHours() * 60 + day.getMinutes();
+    return countOverlappingConsultasLocal(dayAppts, candidateStartMin, duracaoMin);
+  }, [pending, isBloqueio, appointments, duracaoMin]);
+
+  const canConfirm =
+    isBloqueio || (!!chosenPatientId && (overlapCountLocal === 0 || parallelConfirmed));
 
   const confirmar = () => {
     // BUG-13: guard síncrono — não depende de agendar.isPending (que só
@@ -936,9 +1040,11 @@ export function AppointmentCalendar({
         cor: effectiveCor,
         descricao: descricao.trim() || null,
         local: local.trim() || null,
+        tipoAtendimentoId: null,
         lembretesMin,
         recurrence,
         requestId,
+        confirmParallel: false,
       });
       return;
     }
@@ -958,9 +1064,11 @@ export function AppointmentCalendar({
       cor: null,
       descricao: null,
       local: null,
+      tipoAtendimentoId,
       lembretesMin,
       recurrence,
       requestId,
+      confirmParallel: parallelConfirmed,
     });
   };
 
@@ -980,6 +1088,16 @@ export function AppointmentCalendar({
         }
         showConsultas={showConsultas}
         onToggleConsultas={setShowConsultas}
+        patients={patients}
+        hiddenConvenios={hiddenConvenios}
+        onToggleConvenio={(key) =>
+          setHiddenConvenios((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+          })
+        }
         cursor={cursor}
         onPickDate={setCursor}
         appointments={appointments}
@@ -1007,6 +1125,8 @@ export function AppointmentCalendar({
             <EventSearch
               appointments={appointments}
               byId={byId}
+              typesById={typesById}
+              settings={settings}
               onJump={(appt) => {
                 const d = new Date(appt.dateTime);
                 d.setHours(0, 0, 0, 0);
@@ -1030,6 +1150,11 @@ export function AppointmentCalendar({
                 </button>
               ))}
             </div>
+            <AgendaSettingsPopover
+              settings={settings}
+              onSave={persistSettings}
+              onManageTypes={() => setTypesManagerOpen(true)}
+            />
           </div>
         </div>
 
@@ -1045,6 +1170,7 @@ export function AppointmentCalendar({
                   settings={settings}
                   appointments={visibleAppointments}
                   byId={byId}
+                  typesById={typesById}
                   pxPerMin={pxPerMin}
                   onDropPatient={openConfirm}
                   onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
@@ -1053,6 +1179,8 @@ export function AppointmentCalendar({
                   }
                   onOpenEditor={setEditingId}
                   onSlotClick={openEmptySlot}
+                  onDeleteSelected={(id) => excluirComDesfazer(id, "this")}
+                  onQuickStatus={(id, status) => atualizarStatus.mutate({ id, status })}
                 />
               )}
               {view === "semana" && (
@@ -1061,6 +1189,7 @@ export function AppointmentCalendar({
                   settings={settings}
                   appointments={visibleAppointments}
                   byId={byId}
+                  typesById={typesById}
                   pxPerMin={pxPerMin}
                   onDropPatient={openConfirm}
                   onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
@@ -1069,6 +1198,8 @@ export function AppointmentCalendar({
                   }
                   onOpenEditor={setEditingId}
                   onSlotClick={openEmptySlot}
+                  onDeleteSelected={(id) => excluirComDesfazer(id, "this")}
+                  onQuickStatus={(id, status) => atualizarStatus.mutate({ id, status })}
                 />
               )}
               {view === "custom" && (
@@ -1077,6 +1208,7 @@ export function AppointmentCalendar({
                   settings={settings}
                   appointments={visibleAppointments}
                   byId={byId}
+                  typesById={typesById}
                   pxPerMin={pxPerMin}
                   onDropPatient={openConfirm}
                   onMoveAppointment={(id, dateTime) => atualizarTiming.mutate({ id, dateTime })}
@@ -1085,6 +1217,8 @@ export function AppointmentCalendar({
                   }
                   onOpenEditor={setEditingId}
                   onSlotClick={openEmptySlot}
+                  onDeleteSelected={(id) => excluirComDesfazer(id, "this")}
+                  onQuickStatus={(id, status) => atualizarStatus.mutate({ id, status })}
                 />
               )}
               {view === "mes" && (
@@ -1092,6 +1226,8 @@ export function AppointmentCalendar({
                   cursor={cursor}
                   appointments={visibleAppointments}
                   byId={byId}
+                  typesById={typesById}
+                  settings={settings}
                   onPickDay={(d) => {
                     setCursor(d);
                     setView("dia");
@@ -1117,6 +1253,8 @@ export function AppointmentCalendar({
                   cursor={cursor}
                   appointments={visibleAppointments}
                   byId={byId}
+                  typesById={typesById}
+                  settings={settings}
                   onOpenEditor={setEditingId}
                 />
               )}
@@ -1174,6 +1312,23 @@ export function AppointmentCalendar({
                   />
                 </div>
               </div>
+
+              {!isBloqueio && overlapCountLocal >= 1 && (
+                <button
+                  type="button"
+                  onClick={() => setParallelConfirmed(true)}
+                  disabled={parallelConfirmed}
+                  className={`flex w-fit items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+                    parallelConfirmed
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
+                  }`}
+                >
+                  {parallelConfirmed
+                    ? "✓ Simultaneidade confirmada"
+                    : `⚠ Confirmar Simultaneidade (${overlapCountLocal} já agendado${overlapCountLocal > 1 ? "s" : ""})`}
+                </button>
+              )}
 
               {!isBloqueio &&
                 (pending?.patient ? (
@@ -1327,6 +1482,27 @@ export function AppointmentCalendar({
                       maxLength={200}
                     />
                   </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tipo de atendimento (opcional)</Label>
+                    <Select
+                      value={tipoAtendimentoId ?? "__none"}
+                      onValueChange={(v) => setTipoAtendimentoId(v === "__none" ? null : v)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Sem tipo definido" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">Sem tipo definido</SelectItem>
+                        {appointmentTypes
+                          .filter((t) => t.ativo)
+                          .map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.nome}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               )}
 
@@ -1362,6 +1538,7 @@ export function AppointmentCalendar({
             appt={editingAppt}
             patient={editingAppt.patientId ? byId.get(editingAppt.patientId) : undefined}
             categories={categories}
+            appointmentTypes={appointmentTypes}
             onClose={() => setEditingId(null)}
             onOpenPatient={onOpenPatient}
             onSave={(patch, scope) => editarEvento.mutate({ id: editingAppt.id, scope, ...patch })}
@@ -1371,6 +1548,13 @@ export function AppointmentCalendar({
             deleting={excluirEvento.isPending}
           />
         )}
+
+        <AppointmentTypesManagerDialog
+          token={token}
+          appointmentTypes={appointmentTypes}
+          open={typesManagerOpen}
+          onOpenChange={setTypesManagerOpen}
+        />
       </div>
     </div>
   );
@@ -1513,6 +1697,7 @@ type EditPatch = {
   cor?: string | null;
   descricao?: string | null;
   local?: string | null;
+  tipoAtendimentoId?: string | null;
   lembretesMin?: number[];
 };
 
@@ -1520,6 +1705,7 @@ function EventEditorDialog({
   appt,
   patient,
   categories,
+  appointmentTypes,
   onClose,
   onOpenPatient,
   onSave,
@@ -1531,6 +1717,7 @@ function EventEditorDialog({
   appt: Appointment;
   patient: Patient | undefined;
   categories: EventCategory[];
+  appointmentTypes: AppointmentType[];
   onClose: () => void;
   onOpenPatient?: (p: Patient) => void;
   onSave: (patch: EditPatch, scope: RecurrenceScope) => void;
@@ -1551,6 +1738,9 @@ function EventEditorDialog({
   const [corOverride, setCorOverride] = useState<string | null>(appt.cor);
   const [descricao, setDescricao] = useState(appt.descricao ?? "");
   const [local, setLocal] = useState(appt.local ?? "");
+  const [tipoAtendimentoId, setTipoAtendimentoId] = useState<string | null>(
+    appt.tipoAtendimentoId,
+  );
   const [lembretesMin, setLembretesMin] = useState<number[]>(appt.lembretesMin);
   const [scope, setScope] = useState<RecurrenceScope>("this");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -1574,6 +1764,7 @@ function EventEditorDialog({
           note: note.trim() || null,
           allDay,
           durationMin: allDay ? null : duracaoMin,
+          tipoAtendimentoId,
           lembretesMin,
         };
     onSave(patch, scope);
@@ -1752,6 +1943,27 @@ function EventEditorDialog({
                   maxLength={200}
                 />
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Tipo de atendimento (opcional)</Label>
+                <Select
+                  value={tipoAtendimentoId ?? "__none"}
+                  onValueChange={(v) => setTipoAtendimentoId(v === "__none" ? null : v)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Sem tipo definido" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Sem tipo definido</SelectItem>
+                    {appointmentTypes
+                      .filter((t) => t.ativo)
+                      .map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </>
           )}
 
@@ -1832,6 +2044,305 @@ function EventEditorDialog({
 }
 
 // ---------------------------------------------------------------------------
+// Gerenciar Tipos de Atendimento (UX-15, Parte 4.4) — tela separada da lista
+// de categorias de evento pessoal, aberta a partir do painel de
+// configurações quando "Colorir por: Tipo" está selecionado. Mesmo padrão
+// mínimo de CategorySidebar (lista + criação inline com swatch) — sem
+// edição/desativação na UI por enquanto, mesma assimetria já existente em
+// categorias (o servidor tem update/setActive, o client só expõe criar).
+
+function AppointmentTypesManagerDialog({
+  token,
+  appointmentTypes,
+  open,
+  onOpenChange,
+}: {
+  token: string;
+  appointmentTypes: AppointmentType[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [nome, setNome] = useState("");
+  const [cor, setCor] = useState<string>(EVENT_COLOR_SWATCHES[0]);
+
+  const criar = useMutation({
+    mutationFn: () => createMyAppointmentType({ data: { token, nome, cor } }),
+    onSuccess: (r) => {
+      if (!r.ok) return toast.error("Não consegui criar o tipo de atendimento.");
+      toast.success("Tipo de atendimento criado.");
+      setNome("");
+      setCor(EVENT_COLOR_SWATCHES[0]);
+      qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Tipos de atendimento</DialogTitle>
+          <DialogDescription>
+            Usados pra colorir consultas quando "Colorir por: Tipo" está ativo — separado das
+            categorias de evento pessoal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+          {appointmentTypes.length === 0 ? (
+            <div className="p-2 text-center text-xs text-muted-foreground">
+              Nenhum tipo de atendimento criado ainda.
+            </div>
+          ) : (
+            appointmentTypes.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: t.cor }}
+                />
+                <span className="truncate">{t.nome}</span>
+                {!t.ativo && (
+                  <span className="ml-auto text-[10px] text-muted-foreground">inativo</span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-1.5 rounded-lg border border-border p-2">
+          <Input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="Nome do tipo (ex.: Telemedicina)"
+            className="h-8 text-sm"
+            maxLength={40}
+          />
+          <div className="flex flex-wrap gap-1">
+            {EVENT_COLOR_SWATCHES.map((sw) => (
+              <button
+                key={sw}
+                type="button"
+                onClick={() => setCor(sw)}
+                className={`h-5 w-5 rounded-full ring-2 transition ${cor === sw ? "ring-foreground" : "ring-transparent"}`}
+                style={{ backgroundColor: sw }}
+              />
+            ))}
+          </div>
+          <Button
+            size="sm"
+            className="h-7 w-full text-xs"
+            disabled={nome.trim().length < 2 || criar.isPending}
+            onClick={() => criar.mutate()}
+          >
+            {criar.isPending && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Criar tipo de
+            atendimento
+          </Button>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Painel de configurações da agenda (Parte 6) — versão simples: expediente,
+// duração padrão do slot, "Colorir por". Sem maxParallel (removido, é fixo
+// em MAX_PARALLEL_CONSULTAS). Nada além do listado no handover — resistir à
+// tentação de adicionar mais campos.
+
+const SLOT_MINUTES_OPTIONS = [15, 20, 30, 45, 60] as const;
+const OFFICE_START_HOURS = Array.from({ length: 24 }, (_, i) => i);
+const OFFICE_END_HOURS = Array.from({ length: 24 }, (_, i) => i + 1);
+
+const COLOR_MODE_LABEL: Record<ColorMode, string> = {
+  paciente: "Paciente",
+  status: "Status",
+  tipo: "Tipo de atendimento",
+};
+
+const STATUS_LABEL: Record<AppointmentStatus, string> = {
+  agendada: "Agendada",
+  confirmada: "Confirmada",
+  realizada: "Realizada",
+  faltou: "Faltou",
+};
+
+function AgendaSettingsPopover({
+  settings,
+  onSave,
+  onManageTypes,
+}: {
+  settings: CalendarSettings;
+  onSave: (s: CalendarSettings) => void;
+  onManageTypes: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<CalendarSettings>(settings);
+
+  // Sincroniza o rascunho toda vez que o popover abre — evita editar em
+  // cima de um estado velho se o médico abriu, fechou sem salvar e abriu de
+  // novo (settings pode ter mudado por fora, ex.: outra aba).
+  useEffect(() => {
+    if (open) setDraft(settings);
+  }, [open, settings]);
+
+  const salvar = () => {
+    onSave(draft);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:text-foreground"
+          aria-label="Configurações da agenda"
+          title="Configurações da agenda"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 space-y-3 p-3" align="end">
+        <div className="text-xs font-semibold">Configurações da agenda</div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Expediente</Label>
+          <div className="flex items-center gap-2">
+            <Select
+              value={String(draft.startHour)}
+              onValueChange={(v) => setDraft((d) => ({ ...d, startHour: Number(v) }))}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OFFICE_START_HOURS.map((h) => (
+                  <SelectItem key={h} value={String(h)}>
+                    {String(h).padStart(2, "0")}h
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">até</span>
+            <Select
+              value={String(draft.endHour)}
+              onValueChange={(v) => setDraft((d) => ({ ...d, endHour: Number(v) }))}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OFFICE_END_HOURS.map((h) => (
+                  <SelectItem key={h} value={String(h)}>
+                    {String(h).padStart(2, "0")}h
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {draft.startHour >= draft.endHour && (
+            <p className="text-[10px] text-destructive">O início precisa ser antes do fim.</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Duração padrão do slot</Label>
+          <Select
+            value={String(draft.slotMinutes)}
+            onValueChange={(v) =>
+              setDraft((d) => ({
+                ...d,
+                slotMinutes: Number(v) as CalendarSettings["slotMinutes"],
+              }))
+            }
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SLOT_MINUTES_OPTIONS.map((m) => (
+                <SelectItem key={m} value={String(m)}>
+                  {m} minutos
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Colorir consultas por</Label>
+          <div className="flex flex-wrap gap-1">
+            {(Object.keys(COLOR_MODE_LABEL) as ColorMode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, colorMode: m }))}
+                className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
+                  draft.colorMode === m
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {COLOR_MODE_LABEL[m]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {draft.colorMode === "status" && (
+          <div className="space-y-1.5 rounded-lg border border-border p-2">
+            {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map((s) => (
+              <div key={s} className="flex items-center justify-between gap-2 text-xs">
+                <span>{STATUS_LABEL[s]}</span>
+                <input
+                  type="color"
+                  value={draft.statusColors[s]}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      statusColors: { ...d.statusColors, [s]: e.target.value },
+                    }))
+                  }
+                  className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent p-0"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {draft.colorMode === "tipo" && (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onManageTypes();
+            }}
+            className="text-[11px] font-medium text-primary hover:underline"
+          >
+            Gerenciar tipos de atendimento
+          </button>
+        )}
+
+        <Button
+          size="sm"
+          className="h-7 w-full text-xs"
+          onClick={salvar}
+          disabled={draft.startHour >= draft.endHour}
+        >
+          Salvar
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar — mini-calendário pra navegação rápida + lista de categorias com
 // checkbox (mostra/esconde no grid; "Consultas" é um pseudo-toggle fixo, não
 // uma EventCategory de verdade, só pra manter a mesma interação de checkbox
@@ -1844,6 +2355,9 @@ function CategorySidebar({
   onToggleCategory,
   showConsultas,
   onToggleConsultas,
+  patients,
+  hiddenConvenios,
+  onToggleConvenio,
   cursor,
   onPickDate,
   appointments,
@@ -1854,6 +2368,9 @@ function CategorySidebar({
   onToggleCategory: (id: string) => void;
   showConsultas: boolean;
   onToggleConsultas: (v: boolean) => void;
+  patients: Patient[];
+  hiddenConvenios: Set<string>;
+  onToggleConvenio: (key: string) => void;
   cursor: Date;
   onPickDate: (d: Date) => void;
   appointments: Appointment[];
@@ -1862,6 +2379,7 @@ function CategorySidebar({
   const [creating, setCreating] = useState(false);
   const [nome, setNome] = useState("");
   const [cor, setCor] = useState<string>(EVENT_COLOR_SWATCHES[0]);
+  const [consultasExpanded, setConsultasExpanded] = useState(true);
 
   const criar = useMutation({
     mutationFn: () => createMyCategory({ data: { token, nome, cor } }),
@@ -1875,6 +2393,18 @@ function CategorySidebar({
     },
   });
 
+  // UX-09: convênios detectados entre os pacientes do médico — "Sem
+  // convênio informado" sempre por último.
+  const convenios = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of patients) set.add(p.convenio ?? SEM_CONVENIO_KEY);
+    return [...set].sort((a, b) => {
+      if (a === SEM_CONVENIO_KEY) return 1;
+      if (b === SEM_CONVENIO_KEY) return -1;
+      return a.localeCompare(b);
+    });
+  }, [patients]);
+
   return (
     <aside className="hidden w-52 shrink-0 border-r border-border p-3 lg:block">
       <MiniMonthPicker cursor={cursor} onPick={onPickDate} appointments={appointments} />
@@ -1883,16 +2413,49 @@ function CategorySidebar({
         <div className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Agendas
         </div>
-        <label className="flex cursor-pointer items-center gap-2 rounded px-0.5 py-1 text-xs hover:bg-muted/50">
-          <input
-            type="checkbox"
-            checked={showConsultas}
-            onChange={(e) => onToggleConsultas(e.target.checked)}
-            className="h-3.5 w-3.5 rounded accent-primary"
-          />
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
-          <span className="truncate">Consultas</span>
-        </label>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setConsultasExpanded((v) => !v)}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            aria-label={consultasExpanded ? "Recolher Consultas" : "Expandir Consultas"}
+          >
+            <ChevronRight
+              className={`h-3 w-3 transition-transform ${consultasExpanded ? "rotate-90" : ""}`}
+            />
+          </button>
+          <label className="flex flex-1 cursor-pointer items-center gap-2 rounded px-0.5 py-1 text-xs hover:bg-muted/50">
+            <input
+              type="checkbox"
+              checked={showConsultas}
+              onChange={(e) => onToggleConsultas(e.target.checked)}
+              className="h-3.5 w-3.5 rounded accent-primary"
+            />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+            <span className="truncate">Consultas</span>
+          </label>
+        </div>
+        {consultasExpanded && convenios.length > 0 && (
+          <div className="ml-5 space-y-0.5">
+            {convenios.map((key) => (
+              <label
+                key={key}
+                className="flex cursor-pointer items-center gap-2 rounded px-0.5 py-1 text-xs hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={!hiddenConvenios.has(key)}
+                  onChange={() => onToggleConvenio(key)}
+                  className="h-3.5 w-3.5 rounded accent-primary"
+                />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-primary/50" />
+                <span className="truncate">
+                  {key === SEM_CONVENIO_KEY ? "Sem convênio informado" : key}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
         {categories
           .filter((c) => c.ativo)
           .map((c) => (
@@ -2088,10 +2651,14 @@ const SEARCH_KIND_LABEL: Record<SearchKindFilter, string> = {
 function EventSearch({
   appointments,
   byId,
+  typesById,
+  settings,
   onJump,
 }: {
   appointments: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
+  settings: CalendarSettings;
   onJump: (appt: Appointment) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -2175,7 +2742,7 @@ function EventSearch({
                     setQuery("");
                   }}
                   className="flex w-full items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-left text-xs transition hover:bg-muted/60"
-                  style={{ borderLeftColor: resolveApptColor(a, byId) }}
+                  style={{ borderLeftColor: resolveApptColor(a, byId, typesById, settings) }}
                 >
                   <span className="w-20 shrink-0 tabular-nums text-muted-foreground">
                     {new Date(a.dateTime).toLocaleDateString("pt-BR", {
@@ -2228,53 +2795,47 @@ function TimeGrid({
   settings,
   appointments,
   byId,
+  typesById,
   pxPerMin,
   onDropPatient,
   onMoveAppointment,
   onResizeAppointment,
   onOpenEditor,
   onSlotClick,
+  onDeleteSelected,
+  onQuickStatus,
 }: {
   days: Date[];
   settings: CalendarSettings;
   appointments: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
   pxPerMin: number;
   onDropPatient: (patientId: string, dateTime: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
   onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string, durationMin?: number) => void;
+  onDeleteSelected: (id: string) => void;
+  onQuickStatus: (id: string, status: AppointmentStatus) => void;
 }) {
-  // O expediente configurado é só o padrão da janela visível: se existir
-  // evento fora dele nos dias mostrados, o canvas estica pra que nada que o
-  // médico agendou fique invisível.
-  const gridSettings = useMemo(() => {
-    const dayKeys = new Set(days.map((d) => ymd(d)));
-    let startHour = settings.startHour;
-    let endHour = settings.endHour;
-    for (const a of appointments) {
-      if (a.allDay) continue;
-      const d = new Date(a.dateTime);
-      if (!dayKeys.has(ymd(d))) continue;
-      const endMin = d.getHours() * 60 + d.getMinutes() + (a.durationMin ?? 30);
-      startHour = Math.min(startHour, d.getHours());
-      endHour = Math.max(endHour, Math.min(24, Math.ceil(endMin / 60)));
-    }
-    if (startHour === settings.startHour && endHour === settings.endHour) return settings;
-    return { ...settings, startHour, endHour };
-  }, [settings, appointments, days]);
+  // PM-13: o canvas de dia/semana/N-dias sempre renderiza as 24h completas —
+  // o expediente configurado (`settings`) vira só sombreamento/aviso, nunca
+  // muda o que é renderizado. `fullDaySettings` é o mesmo CalendarSettings
+  // do médico, só com start/end fixados em 0/24 pra ticks e canvasHeightPx;
+  // `settings` original continua indo como `officeHours` pro DayColumn.
+  const fullDaySettings = useMemo(() => ({ ...settings, startHour: 0, endHour: 24 }), [settings]);
 
   const ticks = useMemo(() => {
     const arr: Tick[] = [];
-    for (let h = gridSettings.startHour; h < gridSettings.endHour; h++) {
-      for (let m = 0; m < 60; m += gridSettings.slotMinutes)
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += fullDaySettings.slotMinutes)
         arr.push({ hour: h, minute: m, isHour: m === 0 });
     }
     return arr;
-  }, [gridSettings.startHour, gridSettings.endHour, gridSettings.slotMinutes]);
+  }, [fullDaySettings.slotMinutes]);
 
-  const canvasHeightPx = (gridSettings.endHour - gridSettings.startHour) * 60 * pxPerMin;
+  const canvasHeightPx = 24 * 60 * pxPerMin;
 
   const { timedByDay, allDayByDay } = useMemo(() => {
     const timed = new Map<string, Appointment[]>();
@@ -2303,8 +2864,8 @@ function TimeGrid({
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const withinHours =
       days.some((d) => ymd(d) === todayKey) &&
-      nowMin >= gridSettings.startHour * 60 &&
-      nowMin < gridSettings.endHour * 60;
+      nowMin >= settings.startHour * 60 &&
+      nowMin < settings.endHour * 60;
     let anchorMin: number | null = withinHours ? nowMin : null;
     if (anchorMin === null) {
       const allTimed = [...timedByDay.values()].flat();
@@ -2316,8 +2877,12 @@ function TimeGrid({
         anchorMin = Number.isFinite(earliest) ? earliest : null;
       }
     }
-    if (anchorMin === null) return;
-    const anchorPx = (anchorMin - gridSettings.startHour * 60) * pxPerMin;
+    // PM-13: grid agora sempre renderiza 24h — sem esse fallback, um dia
+    // vazio sem "agora" dentro do expediente deixava o scroll em 00:00 (o
+    // grid "esticado" antigo já cobria só o expediente, então isso nunca
+    // acontecia antes).
+    if (anchorMin === null) anchorMin = settings.startHour * 60;
+    const anchorPx = anchorMin * pxPerMin;
     el.scrollTop = Math.max(0, anchorPx - el.clientHeight / 3);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só reancora quando o conjunto de dias exibidos ou o zoom mudam, não a cada tick/re-render
   }, [daysKey, pxPerMin]);
@@ -2366,6 +2931,8 @@ function TimeGrid({
               day={d}
               appts={allDayByDay.get(ymd(d)) ?? []}
               byId={byId}
+              typesById={typesById}
+              settings={settings}
               onOpenEditor={onOpenEditor}
               onMoveAppointment={onMoveAppointment}
             />
@@ -2379,16 +2946,17 @@ function TimeGrid({
         onDragOver={(e) => autoScrollNearEdge(e.clientY)}
         onPointerMove={(e) => autoScrollNearEdge(e.clientY)}
       >
-        <TimeGutter ticks={ticks} settings={gridSettings} pxPerMin={pxPerMin} />
+        <TimeGutter ticks={ticks} settings={fullDaySettings} pxPerMin={pxPerMin} />
         {days.map((d) => (
           <DayColumn
             key={ymd(d)}
             day={d}
             isToday={ymd(d) === todayKey}
-            settings={gridSettings}
+            settings={fullDaySettings}
             officeHours={settings}
             timedAppts={timedByDay.get(ymd(d)) ?? []}
             byId={byId}
+            typesById={typesById}
             ticks={ticks}
             canvasHeightPx={canvasHeightPx}
             pxPerMin={pxPerMin}
@@ -2397,6 +2965,8 @@ function TimeGrid({
             onResizeAppointment={onResizeAppointment}
             onOpenEditor={onOpenEditor}
             onSlotClick={onSlotClick}
+            onDeleteSelected={onDeleteSelected}
+            onQuickStatus={onQuickStatus}
           />
         ))}
       </div>
@@ -2434,12 +3004,16 @@ function AllDayCell({
   day,
   appts,
   byId,
+  typesById,
+  settings,
   onOpenEditor,
   onMoveAppointment,
 }: {
   day: Date;
   appts: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
+  settings: CalendarSettings;
   onOpenEditor: (id: string) => void;
   onMoveAppointment: (appointmentId: string, dateTime: string) => void;
 }) {
@@ -2467,10 +3041,7 @@ function AllDayCell({
     >
       {appts.map((a) => {
         const patient = a.patientId ? byId.get(a.patientId) : undefined;
-        const color =
-          a.kind === "bloqueio"
-            ? (a.cor ?? FALLBACK_COLOR)
-            : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
+        const color = resolveApptColor(a, byId, typesById, settings);
         return (
           <div
             key={a.id}
@@ -2517,6 +3088,7 @@ function DayColumn({
   officeHours,
   timedAppts,
   byId,
+  typesById,
   ticks,
   canvasHeightPx,
   pxPerMin,
@@ -2525,15 +3097,19 @@ function DayColumn({
   onResizeAppointment,
   onOpenEditor,
   onSlotClick,
+  onDeleteSelected,
+  onQuickStatus,
 }: {
   day: Date;
   isToday: boolean;
   settings: CalendarSettings;
-  // Parte 3, item 6: expediente configurado de verdade (antes do grid
-  // esticar pra caber evento fora de hora) — usado só pra sombrear/avisar.
+  // PM-13: expediente real do médico — settings aqui é sempre 0-24h
+  // (canvas fixo); officeHours é o valor configurado, usado só pra
+  // sombrear/avisar, nunca pra decidir o que é renderizado.
   officeHours: CalendarSettings;
   timedAppts: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
   ticks: Tick[];
   canvasHeightPx: number;
   pxPerMin: number;
@@ -2542,6 +3118,8 @@ function DayColumn({
   onResizeAppointment: (appointmentId: string, durationMin: number) => void;
   onOpenEditor: (id: string) => void;
   onSlotClick: (dateTime: string, durationMin?: number) => void;
+  onDeleteSelected: (id: string) => void;
+  onQuickStatus: (id: string, status: AppointmentStatus) => void;
 }) {
   const colRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
@@ -2601,7 +3179,7 @@ function DayColumn({
     const candidateMin = candidate.getHours() * 60 + candidate.getMinutes();
     if (candidateMin < officeHours.startHour * 60 || candidateMin >= officeHours.endHour * 60) {
       toast.warning(
-        `Fora do seu expediente configurado (${officeHours.startHour}h–${officeHours.endHour}h) — agendado mesmo assim.`,
+        `Agendamento fora do horário de trabalho (${officeHours.startHour}h–${officeHours.endHour}h).`,
       );
     }
   };
@@ -2622,13 +3200,14 @@ function DayColumn({
     const durationMin = Math.max(SNAP_MIN, height / pxPerMin);
     const conflict =
       countOverlappingConsultasLocal(timedAppts, candidateStartMin, durationMin) + 1 >
-      settings.maxParallel;
+      MAX_PARALLEL_CONSULTAS;
     return { top: Math.max(0, top), height, conflict };
   }, [dragCreate, day, settings, pxPerMin, timedAppts]);
 
-  // Parte 3, item 6: sombrear as horas fora do expediente configurado que só
-  // aparecem porque um evento fora de hora esticou o grid (settings aqui já
-  // vem esticado; officeHours é o valor original do médico).
+  // PM-13: sombrear (hachura) as horas fora do expediente configurado — o
+  // canvas (`settings`, sempre 0-24h) e o expediente real (`officeHours`)
+  // são coisas diferentes agora; a diferença entre os dois é só o que
+  // aparece hachurado, nunca muda o que é renderizado.
   const beforeHoursPx =
     officeHours.startHour > settings.startHour
       ? (officeHours.startHour - settings.startHour) * 60 * pxPerMin
@@ -2658,7 +3237,7 @@ function DayColumn({
         const candidateMin = candidate.getHours() * 60 + candidate.getMinutes();
         setHoverConflict(
           countOverlappingConsultasLocal(timedAppts, candidateMin, SNAP_MIN) + 1 >
-            settings.maxParallel,
+            MAX_PARALLEL_CONSULTAS,
         );
       }}
       onDragLeave={() => {
@@ -2727,14 +3306,14 @@ function DayColumn({
     >
       {beforeHoursPx > 0 && (
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 bg-muted/50"
-          style={{ height: beforeHoursPx }}
+          className="pointer-events-none absolute inset-x-0 top-0 bg-muted/20"
+          style={{ height: beforeHoursPx, ...OUT_OF_HOURS_HACHURA }}
         />
       )}
       {afterHoursPx > 0 && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 bg-muted/50"
-          style={{ height: afterHoursPx }}
+          className="pointer-events-none absolute inset-x-0 bottom-0 bg-muted/20"
+          style={{ height: afterHoursPx, ...OUT_OF_HOURS_HACHURA }}
         />
       )}
 
@@ -2777,10 +3356,15 @@ function DayColumn({
           col={col}
           totalCols={Math.min(totalCols, MAX_VISIBLE_COLS)}
           pxPerMin={pxPerMin}
+          officeHours={officeHours}
+          byId={byId}
+          typesById={typesById}
           onOpenEditor={onOpenEditor}
           onResize={onResizeAppointment}
           onAddParallel={onSlotClick}
           onMove={onMoveAppointment}
+          onDeleteSelected={onDeleteSelected}
+          onQuickStatus={onQuickStatus}
         />
       ))}
 
@@ -2867,10 +3451,15 @@ function EventBlock({
   col,
   totalCols,
   pxPerMin,
+  officeHours,
+  byId,
+  typesById,
   onAddParallel,
   onOpenEditor,
   onResize,
   onMove,
+  onDeleteSelected,
+  onQuickStatus,
 }: {
   appt: Appointment;
   patient: Patient | undefined;
@@ -2879,18 +3468,21 @@ function EventBlock({
   col: number;
   totalCols: number;
   pxPerMin: number;
+  officeHours: CalendarSettings;
+  byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
   onAddParallel: (dateTime: string, durationMin?: number) => void;
   onOpenEditor: (id: string) => void;
   onResize: (id: string, durationMin: number) => void;
   onMove: (id: string, dateTime: string) => void;
+  onDeleteSelected: (id: string) => void;
+  onQuickStatus: (id: string, status: AppointmentStatus) => void;
 }) {
   const [resizeDeltaPx, setResizeDeltaPx] = useState<number | null>(null);
   const startYRef = useRef(0);
   const baseDuration = appt.durationMin ?? 30;
   const isBloqueio = appt.kind === "bloqueio";
-  const color = isBloqueio
-    ? (appt.cor ?? FALLBACK_COLOR)
-    : (TINT_TO_HEX[patient?.tint ?? ""] ?? FALLBACK_COLOR);
+  const color = resolveApptColor(appt, byId, typesById, officeHours);
   const displayHeight =
     resizeDeltaPx !== null ? Math.max(MIN_BLOCK_PX, height + resizeDeltaPx) : height;
   const gutterPx = 2;
@@ -2944,6 +3536,13 @@ function EventBlock({
           const next = new Date(appt.dateTime);
           next.setMinutes(next.getMinutes() + deltaMin);
           onMove(appt.id, toIsoLocal(next));
+          return;
+        }
+        // Parte 5: Delete/Backspace remove o evento focado (consulta ou
+        // bloqueio, sem distinção) — mesmo undo de 5s do botão de lixeira.
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          onDeleteSelected(appt.id);
         }
       }}
       onContextMenu={(e) => {
@@ -3015,6 +3614,35 @@ function EventBlock({
       )}
 
       {!isBloqueio && (
+        <div className="absolute bottom-1.5 right-0.5 z-10 flex gap-0.5 opacity-0 shadow-sm transition group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickStatus(appt.id, "realizada");
+            }}
+            title="Marcar como realizada"
+            aria-label="Marcar como realizada"
+            className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-background/80 text-emerald-600 hover:bg-background dark:text-emerald-400"
+          >
+            <CheckCircle2 className="h-2.5 w-2.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickStatus(appt.id, "faltou");
+            }}
+            title="Marcar como faltou"
+            aria-label="Marcar como faltou"
+            className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-background/80 text-destructive hover:bg-background"
+          >
+            <XCircle className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      )}
+
+      {!isBloqueio && (
         <div
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -3035,7 +3663,18 @@ function EventBlock({
               Math.round((baseDuration + deltaMin) / SNAP_MIN) * SNAP_MIN,
             );
             setResizeDeltaPx(null);
-            if (snapped !== baseDuration) onResize(appt.id, snapped);
+            if (snapped !== baseDuration) {
+              onResize(appt.id, snapped);
+              // PM-13: redimensionar nunca trava na borda do expediente —
+              // só avisa, igual criar/mover.
+              const start = new Date(appt.dateTime);
+              const endMin = start.getHours() * 60 + start.getMinutes() + snapped;
+              if (endMin > officeHours.endHour * 60) {
+                toast.warning(
+                  `Agendamento fora do horário de trabalho (${officeHours.startHour}h–${officeHours.endHour}h).`,
+                );
+              }
+            }
           }}
           className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize opacity-0 group-hover:opacity-100"
           style={{ backgroundColor: color }}
@@ -3055,11 +3694,15 @@ function ListView({
   cursor,
   appointments,
   byId,
+  typesById,
+  settings,
   onOpenEditor,
 }: {
   cursor: Date;
   appointments: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
+  settings: CalendarSettings;
   onOpenEditor: (id: string) => void;
 }) {
   const cursorKey = ymd(cursor);
@@ -3104,7 +3747,7 @@ function ListView({
                   key={a.id}
                   onClick={() => onOpenEditor(a.id)}
                   className={`flex cursor-pointer items-center gap-2 rounded-md border-l-4 bg-muted/30 px-2 py-1.5 text-xs hover:bg-muted/60 ${isPastAppt(a) ? "opacity-50" : ""}`}
-                  style={{ borderLeftColor: resolveApptColor(a, byId) }}
+                  style={{ borderLeftColor: resolveApptColor(a, byId, typesById, settings) }}
                 >
                   <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
                     {a.allDay ? "Dia todo" : formatHourBR(a.dateTime)}
@@ -3131,11 +3774,15 @@ function MonthGrid({
   cursor,
   appointments,
   byId,
+  typesById,
+  settings,
   onPickDay,
 }: {
   cursor: Date;
   appointments: Appointment[];
   byId: Map<string, Patient>;
+  typesById: Map<string, AppointmentType>;
+  settings: CalendarSettings;
   onPickDay: (d: Date) => void;
 }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -3210,7 +3857,7 @@ function MonthGrid({
                     <span
                       key={a.id}
                       className="w-full truncate rounded px-1 py-0.5 text-[9px] font-medium text-white"
-                      style={{ backgroundColor: resolveApptColor(a, byId) }}
+                      style={{ backgroundColor: resolveApptColor(a, byId, typesById, settings) }}
                       title={label}
                     >
                       {!a.allDay && `${formatHourBR(a.dateTime)} `}

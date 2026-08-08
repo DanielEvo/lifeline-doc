@@ -282,6 +282,7 @@ function PainelDoDia() {
         token={token}
         patients={patients}
         categories={data?.categories ?? []}
+        appointmentTypes={data?.appointmentTypes ?? []}
         calendarSettings={data?.doctor.calendarSettings ?? DEFAULT_CALENDAR_SETTINGS}
         onOpenPatient={(p) => navigate({ to: "/app/pacientes/$id", params: { id: p.id } })}
       />

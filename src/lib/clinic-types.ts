@@ -137,6 +137,10 @@ export type Appointment = {
   cor: string | null; // hex resolvido no momento da criação, sobrescrevível — snapshot, não muda se a categoria mudar/for desativada depois
   descricao: string | null;
   local: string | null;
+  // Referência solta pro catálogo de Tipos de Atendimento — só se aplica a
+  // kind === "consulta"; sem FK (mesmo padrão não-normalizado de categoriaId),
+  // resolvida em memória via Map no client.
+  tipoAtendimentoId: string | null;
   recurrenceId: string | null; // agrupa eventos gerados na mesma série (consulta ou bloqueio)
   // Minutos antes do início pra lembrar (ex.: [10, 60] = 10min e 1h antes).
   // Disparo é só client-side (toast) enquanto o app está aberto — sem push/e-mail.
@@ -157,20 +161,37 @@ export type RecurrenceFreq = "none" | "daily" | "weekly" | "monthly";
 
 // Configuração da agenda (duração do slot, expediente) — antes só em
 // localStorage por token, agora persistida por médico (Doctor.calendarSettings).
+// Teto de simultaneidade (PM-12, HANDOVER_AGENDA_v2.md Parte 1) — fixo em
+// código, não é mais configurável por médico. Qualquer sobreposição de
+// consulta exige confirmação explícita a partir da 1ª; acima do teto o
+// servidor recusa sem oferecer confirmação.
+export const MAX_PARALLEL_CONSULTAS = 3;
+
+// Como o canvas colore uma consulta — bloqueio/evento pessoal nunca usa
+// isso, sempre a cor da própria categoria (UX-12/UX-15).
+export type ColorMode = "paciente" | "status" | "tipo";
+
+export const DEFAULT_STATUS_COLORS: Record<AppointmentStatus, string> = {
+  agendada: "#64748b",
+  confirmada: "#0d9488",
+  realizada: "#22c55e",
+  faltou: "#ef4444",
+};
+
 export type CalendarSettings = {
   slotMinutes: 15 | 20 | 30 | 45 | 60;
   startHour: number; // 0-23
   endHour: number; // 1-24
-  // Quantas consultas (kind="consulta") podem se sobrepor no mesmo horário
-  // antes do servidor recusar o agendamento (BUG-3) — bloqueio não conta.
-  maxParallel: 1 | 2 | 3;
+  colorMode: ColorMode;
+  statusColors: Record<AppointmentStatus, string>;
 };
 
 export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
   slotMinutes: 30,
   startHour: 8,
   endHour: 19,
-  maxParallel: 1,
+  colorMode: "paciente",
+  statusColors: DEFAULT_STATUS_COLORS,
 };
 
 // Categoria/cor de eventos pessoais (agenda, PRO-XX) — nunca se aplica a
@@ -179,6 +200,19 @@ export type EventCategory = {
   id: string;
   doctorId: string;
   nome: string;
+  cor: string; // hex
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Tipo de Atendimento (UX-15, HANDOVER_AGENDA_v2.md Parte 4.2) — entidade
+// nova, exclusiva de consulta, separada de EventCategory (que é exclusiva de
+// bloqueio/evento pessoal). Nunca hard delete — mesmo princípio de snapshot.
+export type AppointmentType = {
+  id: string;
+  doctorId: string;
+  nome: string; // "Telemedicina", "Exame Rápido", "Retorno"...
   cor: string; // hex
   ativo: boolean;
   createdAt: string;
