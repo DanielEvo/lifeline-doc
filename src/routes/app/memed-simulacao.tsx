@@ -28,7 +28,7 @@ import {
   MemedPrescriptionWidget,
   type MemedWidgetApi,
 } from "@/components/clinic/memed-prescription-widget";
-import { getMemedSandboxConfig } from "@/lib/api/clinic.functions";
+import { checkMemedKeys, getMemedSandboxConfig } from "@/lib/api/clinic.functions";
 import {
   harvestMemedProtocolIds,
   listMyMemedCatalog,
@@ -82,6 +82,10 @@ function MemedSimulacao() {
   const [termo, setTermo] = useState("");
   const [novo, setNovo] = useState({ nome: "", via: "", controlClass: "" });
   const apiRef = useRef<MemedWidgetApi | null>(null);
+
+  const keyCheck = useMutation({
+    mutationFn: () => checkMemedKeys({ data: { token } }),
+  });
 
   const sandbox = useMutation({
     mutationFn: () => getMemedSandboxConfig({ data: { token } }),
@@ -215,6 +219,37 @@ function MemedSimulacao() {
           Monte cenários clínicos completos, injete no módulo oficial e compare a previsão de
           agrupamento do LifeLine com os documentos que a Memed realmente gera.
         </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={keyCheck.isPending}
+            onClick={() => keyCheck.mutate()}
+          >
+            {keyCheck.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Verificar chaves Memed
+          </Button>
+          {keyCheck.data && (
+            <span
+              className={`text-xs ${
+                keyCheck.data.ok && keyCheck.data.result.ok
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-red-700 dark:text-red-400"
+              }`}
+            >
+              {!keyCheck.data.ok
+                ? "Sessão expirada."
+                : keyCheck.data.result.ok
+                  ? "Par de chaves ativo na Memed."
+                  : keyCheck.data.result.error === "not_configured"
+                    ? "Memed não configurada neste ambiente."
+                    : keyCheck.data.result.error === "network_error"
+                      ? "Sem resposta da Memed (provável indisponibilidade do ambiente)."
+                      : `Chaves inválidas — ${keyCheck.data.result.detail ?? "verifique o par configurado"}.`}
+            </span>
+          )}
+        </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* ── COLUNA ESQUERDA — bancada ─────────────────────────────── */}

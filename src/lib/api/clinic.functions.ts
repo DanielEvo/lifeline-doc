@@ -62,6 +62,8 @@ import {
 } from "../agenda.server";
 import { createCharge, listCharges, setChargePaymentUrl, setChargeStatus } from "../billing.server";
 import {
+  checkMemedKeyPair,
+  getMemedDigitalPrescriptionLink,
   getMemedPrescriberToken,
   getMemedSandboxToken,
   invalidateMemedToken,
@@ -966,6 +968,17 @@ export const getMemedStatus = createServerFn({ method: "POST" })
     };
   });
 
+// Diagnóstico manual (§2.5 do handover): confirma se o par de chaves
+// configurado no ambiente está ativo na Memed, sem depender de nenhum
+// médico/paciente específico — só exige sessão autenticada.
+export const checkMemedKeys = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    return { ok: true as const, result: await checkMemedKeyPair() };
+  });
+
 export const saveMemedProfile = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
@@ -1102,12 +1115,26 @@ export const confirmMemedPrescription = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     const patient = await getPatient(doctor.id, data.patientId);
     if (!patient) return { ok: false as const, error: "not_found" as const };
+    // Link oficial + código de desbloqueio (§3.3/§10 do handover): busca
+    // best-effort — o token do prescritor deve estar quente no cache desde
+    // a abertura do widget, então isto normalmente não bate na Memed de
+    // novo. Se falhar por qualquer motivo, segue com o fallback local
+    // (data.pdfUrl / /receita/{id}) em vez de derrubar a confirmação —
+    // a receita já foi assinada na Memed, não faz sentido perder o registro
+    // no prontuário por causa de uma chamada auxiliar.
+    let unlockCode: string | null = null;
+    const tokenResult = await getMemedPrescriberToken(doctor);
+    if (tokenResult.ok) {
+      const digital = await getMemedDigitalPrescriptionLink(tokenResult.token, data.memedPrescricaoId);
+      if (digital) unlockCode = digital.unlockCode;
+    }
     const result = await prescribeEvolutionMemed(
       doctor.id,
       data.evolutionId,
       data.memedPrescricaoId,
       data.medsResumo,
       data.pdfUrl ?? null,
+      unlockCode,
     );
     if ("error" in result) return { ok: false as const, error: result.error };
     return { ok: true as const, evolution: result };
