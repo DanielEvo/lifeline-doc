@@ -123,6 +123,10 @@ async function resolveMemedCidadeId(cidade: string, uf: string): Promise<number 
     const res = await memedFetch(`${memedApiBase()}/cidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
+    // 5xx/HTML (homologação fora do ar) NÃO pode virar cache negativo: o
+    // isolate ficaria preso a "cidade não existe" mesmo depois do ambiente
+    // voltar, e a receita sairia sem o relacionamento de cidade.
+    if (!res.ok) return null;
     const json: any = await res.json().catch(() => null);
     const first = Array.isArray(json?.data) ? json.data[0] : null;
     const id = first?.id != null ? Number(first.id) : null;
@@ -142,6 +146,7 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
     const res = await memedFetch(`${memedApiBase()}/especialidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
+    if (!res.ok) return null;
     const json: any = await res.json().catch(() => null);
     const first = Array.isArray(json?.data) ? json.data[0] : null;
     const id = first?.id != null ? Number(first.id) : null;
@@ -152,6 +157,7 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
     return null;
   }
 }
+
 
 /** yyyy-mm-dd (formato interno) → dd/mm/YYYY (formato exigido pela Memed). */
 function toMemedDate(isoDate: string): string {
