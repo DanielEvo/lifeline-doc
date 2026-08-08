@@ -154,6 +154,24 @@ export type Database = {
           },
         ]
       }
+      kv_collections: {
+        Row: {
+          name: string
+          rows: Json
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          rows?: Json
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          rows?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           created_at: string
