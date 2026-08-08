@@ -57,18 +57,21 @@ function verify(creds: AdminCredentials, password: string): boolean {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
-/** Lê a credencial de admin, semeando lifelineadm/lifelineadm na primeira
- *  leitura (hash gerado aqui — a senha em texto plano nunca é gravada). */
+/** Lê a credencial de admin. Semeia a partir de ADMIN_LOGIN/ADMIN_PASSWORD;
+ *  se não estiverem configurados, semeia uma senha aleatória inutilizável
+ *  (o painel fica fechado até os secrets serem definidos). */
 async function getCredentials(): Promise<AdminCredentials> {
   const existing = await readRows<AdminCredentials>(CREDENTIALS);
   if (existing[0]) return existing[0];
+  const login = adminConfigured() ? seedLogin() : crypto.randomBytes(16).toString("hex");
+  const password = adminConfigured() ? seedPassword() : crypto.randomBytes(32).toString("hex");
   let seeded: AdminCredentials | undefined;
   await mutateRows<AdminCredentials>(CREDENTIALS, (rows) => {
     if (rows[0]) {
       seeded = rows[0];
       return rows;
     }
-    seeded = makeCredentials(SEED_LOGIN, SEED_PASSWORD);
+    seeded = makeCredentials(login, password);
     return [seeded];
   });
   return seeded!;
