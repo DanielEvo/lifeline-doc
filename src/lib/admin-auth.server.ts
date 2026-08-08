@@ -27,8 +27,20 @@ const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
-const SEED_LOGIN = "lifelineadm";
-const SEED_PASSWORD = "lifelineadm";
+// SEC — nunca semear credencial padrão conhecida. A credencial inicial vem
+// exclusivamente das variáveis de ambiente ADMIN_LOGIN/ADMIN_PASSWORD. Sem
+// elas, o registro é semeado com uma senha aleatória impossível de adivinhar
+// (e nunca revelada), o que deixa o /admin efetivamente fechado até o
+// operador configurar os secrets.
+function seedLogin(): string {
+  return (process.env.ADMIN_LOGIN ?? "").trim();
+}
+function seedPassword(): string {
+  return process.env.ADMIN_PASSWORD ?? "";
+}
+function adminConfigured(): boolean {
+  return seedLogin().length >= 3 && seedPassword().length >= 8;
+}
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
