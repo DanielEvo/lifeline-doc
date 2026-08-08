@@ -67,7 +67,7 @@ import {
   invalidateMemedToken,
   isMemedConfigured,
   isMemedLikelyOffline,
-  MEMED_SCRIPT_URL,
+  memedScriptUrl,
   memedEnvironment,
 } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
@@ -1025,7 +1025,7 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       token: result.token,
-      scriptUrl: MEMED_SCRIPT_URL,
+      scriptUrl: memedScriptUrl(),
       likelyOffline: isMemedLikelyOffline(),
       environment: memedEnvironment(),
       patient: {
@@ -1090,8 +1090,11 @@ export const confirmMemedPrescription = createServerFn({ method: "POST" })
       evolutionId: z.string().min(1),
       patientId: z.string().min(1),
       memedPrescricaoId: z.string().min(1),
-      medsResumo: z.array(z.string().max(200)).max(30),
-      pdfUrl: z.string().url().nullish(),
+      medsResumo: z.array(z.string().max(200)).max(60),
+      // A Memed nem sempre devolve URL absoluta aqui; z.string().url()
+      // rejeitava o payload inteiro e a receita assinada não era registrada
+      // no prontuário. Guarda como texto e deixa a UI tratar.
+      pdfUrl: z.string().max(500).nullish(),
     }),
   )
   .handler(async ({ data }) => {
@@ -1123,7 +1126,7 @@ export const getMemedSandboxConfig = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       token: result.token,
-      scriptUrl: MEMED_SCRIPT_URL,
+      scriptUrl: memedScriptUrl(),
       patient: {
         idExterno: "sandbox-patient",
         nome: "Paciente Teste",

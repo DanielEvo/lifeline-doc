@@ -2798,7 +2798,12 @@ function ReceitaDialog({
 
   const memedErrorToastedRef = useRef(false);
   useEffect(() => {
-    const isMemedError = widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error";
+    const isMemedError =
+      widgetConfig.data?.ok === false &&
+      (widgetConfig.data.error === "memed_error" ||
+        widgetConfig.data.error === "memed_offline" ||
+        widgetConfig.data.error === "invalid_credentials");
+
     if (isMemedError && !memedErrorToastedRef.current) {
       toast.error("Memed indisponível agora — use a receita local abaixo.");
       memedErrorToastedRef.current = true;
@@ -2878,23 +2883,43 @@ function ReceitaDialog({
     cancelMemed.mutate({ memedPrescricaoId: id });
   };
 
+  // O payload de prescricaoImpressa não tem forma única: dependendo da versão
+  // do SDK os medicamentos vêm na raiz ou dentro de `prescricao`, e o PDF ora
+  // é `url`, ora `link`. Antes só a primeira forma era lida — a receita era
+  // salva no prontuário sem nenhum medicamento e sem link.
   const handlePrescricaoImpressa = (raw: unknown) => {
+    type Item = { nome?: string; name?: string; descricao?: string } | string;
     const data = raw as {
-      prescricao?: { id?: string | number; url?: string };
-      medicamentos?: Array<{ nome?: string } | string>;
+      prescricao?: {
+        id?: string | number;
+        url?: string;
+        link?: string;
+        medicamentos?: Item[];
+      };
+      medicamentos?: Item[];
     };
     const memedPrescricaoId = data?.prescricao?.id != null ? String(data.prescricao.id) : null;
     if (!memedPrescricaoId) {
       toast.error("Memed não retornou o id da prescrição — não consegui salvar no prontuário.");
       return;
     }
-    const medsResumo = Array.isArray(data.medicamentos)
+    const itens: Item[] = Array.isArray(data.medicamentos)
       ? data.medicamentos
-          .map((m) => (typeof m === "string" ? m : (m?.nome ?? "")))
-          .filter((n): n is string => n.length > 0)
-      : [];
-    confirmMemed.mutate({ memedPrescricaoId, medsResumo, pdfUrl: data?.prescricao?.url || null });
+      : Array.isArray(data.prescricao?.medicamentos)
+        ? data.prescricao.medicamentos
+        : [];
+    const medsResumo = itens
+      .map((m) => (typeof m === "string" ? m : (m?.nome ?? m?.name ?? m?.descricao ?? "")))
+      .map((n) => n.trim().slice(0, 200))
+      .filter((n) => n.length > 0)
+      .slice(0, 60);
+    confirmMemed.mutate({
+      memedPrescricaoId,
+      medsResumo,
+      pdfUrl: data?.prescricao?.url || data?.prescricao?.link || null,
+    });
   };
+
 
   if (showWidget && widgetConfig.data?.ok) {
     return (
@@ -3042,6 +3067,20 @@ function ReceitaDialog({
             Não consegui conectar ao módulo da Memed agora — use a receita local abaixo.
           </p>
         )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_offline" && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900">
+            O serviço de prescrição digital está fora do ar neste momento (indisponibilidade do
+            provedor, não é problema no seu cadastro). Use a receita local abaixo e tente de novo
+            mais tarde.
+          </p>
+        )}
+        {widgetConfig.data?.ok === false && widgetConfig.data.error === "invalid_credentials" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+            As credenciais de prescrição digital deste ambiente foram recusadas — a receita local
+            abaixo continua funcionando enquanto isso é corrigido.
+          </p>
+        )}
+
         {widgetConfig.data?.ok === false && widgetConfig.data.error === "prescritor_inativo" && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
             Seu cadastro de prescritor está inativo na Memed — fale com o suporte deles para
@@ -3188,9 +3227,13 @@ function ReceitaDialog({
             className="brand-gradient text-primary-foreground"
           >
             {gerar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error"
+            {widgetConfig.data?.ok === false &&
+            (widgetConfig.data.error === "memed_error" ||
+              widgetConfig.data.error === "memed_offline" ||
+              widgetConfig.data.error === "invalid_credentials")
               ? "Gerar receita local (sem Memed)"
               : "Gerar receita"}
+
           </Button>
         </DialogFooter>
       </DialogContent>

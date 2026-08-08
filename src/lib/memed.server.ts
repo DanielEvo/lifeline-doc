@@ -7,17 +7,26 @@
 
 import type { Doctor } from "./auth.server";
 
-const MEMED_API_BASE =
-  process.env.MEMED_API_URL || "https://integrations.api.memed.com.br/v1";
+// IMPORTANTE: no runtime de edge as env vars só existem por requisição —
+// ler process.env em escopo de módulo devolve undefined e faria
+// MEMED_API_URL/MEMED_SCRIPT_URL configurados serem silenciosamente
+// ignorados. Por isso tudo aqui é lido dentro de função.
+function memedApiBase(): string {
+  return process.env["MEMED_API_URL"] || "https://integrations.api.memed.com.br/v1";
+}
 
-export const MEMED_SCRIPT_URL =
-  process.env.MEMED_SCRIPT_URL ||
-  "https://integrations.memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js";
+export function memedScriptUrl(): string {
+  return (
+    process.env["MEMED_SCRIPT_URL"] ||
+    "https://integrations.memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js"
+  );
+}
 
 /** Timeout de rede: a homologação da Memed às vezes pendura a conexão. */
 const MEMED_TIMEOUT_MS = 8_000;
 /** JWT do prescritor vale bem mais que isso; 50min dá folga de renovação. */
 const TOKEN_TTL_MS = 50 * 60 * 1000;
+
 
 /**
  * Ambiente em uso. As chaves de homologação são compartilhadas entre
@@ -66,7 +75,13 @@ export type MemedTokenResult =
   | { ok: true; token: string }
   | {
       ok: false;
-      error: "not_configured" | "missing_profile" | "prescritor_inativo" | "memed_error";
+      error:
+        | "not_configured"
+        | "missing_profile"
+        | "prescritor_inativo"
+        | "memed_offline"
+        | "invalid_credentials"
+        | "memed_error";
       detail?: string;
     };
 
@@ -111,9 +126,13 @@ async function resolveMemedCidadeId(cidade: string, uf: string): Promise<number 
   if (cidadeIdCache.has(key)) return cidadeIdCache.get(key)!;
   try {
     const qs = `filter[q]=${encodeURIComponent(cidade)}&filter[uf]=${encodeURIComponent(uf)}`;
-    const res = await memedFetch(`${MEMED_API_BASE}/cidades?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/cidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
+    // 5xx/HTML (homologação fora do ar) NÃO pode virar cache negativo: o
+    // isolate ficaria preso a "cidade não existe" mesmo depois do ambiente
+    // voltar, e a receita sairia sem o relacionamento de cidade.
+    if (!res.ok) return null;
     const json: any = await res.json().catch(() => null);
     const first = Array.isArray(json?.data) ? json.data[0] : null;
     const id = first?.id != null ? Number(first.id) : null;
@@ -130,9 +149,10 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
   if (especialidadeIdCache.has(key)) return especialidadeIdCache.get(key)!;
   try {
     const qs = `filter[q]=${encodeURIComponent(especialidade)}`;
-    const res = await memedFetch(`${MEMED_API_BASE}/especialidades?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/especialidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
+    if (!res.ok) return null;
     const json: any = await res.json().catch(() => null);
     const first = Array.isArray(json?.data) ? json.data[0] : null;
     const id = first?.id != null ? Number(first.id) : null;
@@ -143,6 +163,7 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
     return null;
   }
 }
+
 
 /** yyyy-mm-dd (formato interno) → dd/mm/YYYY (formato exigido pela Memed). */
 function toMemedDate(isoDate: string): string {
@@ -180,7 +201,7 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   ]);
 
   try {
-    const res = await memedFetch(`${MEMED_API_BASE}/sinapse-prescricao/usuarios?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/sinapse-prescricao/usuarios?${qs}`, {
       method: "POST",
       headers: { Accept: "application/vnd.api+json", "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -209,6 +230,17 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
         },
       }),
     });
+    // Homologação fora do ar responde HTML 502/503 do nginx — .json() falha
+    // e virava "memed_error" genérico. Classificado à parte para a UI poder
+    // dizer o que de fato aconteceu (e não sugerir revisar cadastro à toa).
+    if (res.status >= 500 || res.status === 429) {
+      console.error("[memed] indisponivel", { status: res.status, doctorId: doctor.id });
+      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}` };
+    }
+    if (res.status === 401 || res.status === 403) {
+      console.error("[memed] credenciais_invalidas", { status: res.status });
+      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}` };
+    }
     const json: any = await res.json().catch(() => null);
     const jwtToken = json?.data?.attributes?.token;
     const status = json?.data?.attributes?.status as string | undefined;
@@ -221,6 +253,7 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
       console.error("[memed] token_error", { status: res.status, doctorId: doctor.id, detail });
       return { ok: false, error: "memed_error", detail };
     }
+
     tokenCache.set(doctor.id, { token: jwtToken, expiresAt: Date.now() + TOKEN_TTL_MS });
     return { ok: true, token: jwtToken };
   } catch (e) {
