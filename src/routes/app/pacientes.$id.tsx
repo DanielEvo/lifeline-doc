@@ -2911,7 +2911,8 @@ function ReceitaDialog({
     const medsResumo = itens
       .map((m) => (typeof m === "string" ? m : (m?.nome ?? m?.name ?? m?.descricao ?? "")))
       .map((n) => n.trim().slice(0, 200))
-      .filter((n) => n.length > 0);
+      .filter((n) => n.length > 0)
+      .slice(0, 60);
     confirmMemed.mutate({
       memedPrescricaoId,
       medsResumo,
