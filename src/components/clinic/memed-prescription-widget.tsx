@@ -181,8 +181,27 @@ export function MemedPrescriptionWidget({
       // fechar o dialog ou trocar de paciente.
       cancelled = true;
       if (pollId) clearInterval(pollId);
+      // Sem logout + limpeza do DOM, o SDK deixava o iframe e o estado do
+      // prescritor anterior na página: ao reabrir a receita (ou trocar de
+      // paciente) o módulo reaparecia com o paciente antigo, ou nem
+      // inicializava porque o MdHub já se considerava montado.
+      try {
+        void window.MdHub?.command.send("plataforma.sdk", "logout");
+      } catch {
+        // SDK pode nem ter carregado — nada a desfazer nesse caso
+      }
       document.getElementById("memed-sinapse-script")?.remove();
+      document
+        .querySelectorAll(
+          '#memed-container, [id^="memed"], iframe[src*="memed"], [class^="md-"], #mdhub-container',
+        )
+        .forEach((el) => {
+          if (el.id !== "memed-sinapse-script") el.remove();
+        });
+      delete window.MdHub;
+      delete window.MdSinapsePrescricao;
     };
+
     // Remonta quando muda o prescritor (token) ou o paciente — antes o embed
     // ficava preso ao primeiro paciente montado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
