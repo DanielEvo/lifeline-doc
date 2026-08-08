@@ -34,7 +34,6 @@ export type Database = {
           recurrence_id: string | null
           request_id: string | null
           status: string
-          tipo_atendimento_id: string | null
           updated_at: string
         }
         Insert: {
@@ -56,7 +55,6 @@ export type Database = {
           recurrence_id?: string | null
           request_id?: string | null
           status?: string
-          tipo_atendimento_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -78,7 +76,6 @@ export type Database = {
           recurrence_id?: string | null
           request_id?: string | null
           status?: string
-          tipo_atendimento_id?: string | null
           updated_at?: string
         }
         Relationships: []
