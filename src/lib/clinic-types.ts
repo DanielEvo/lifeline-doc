@@ -787,6 +787,8 @@ export type Evolution = {
     createdAt: string;
     /** Preenchido quando a Memed emite o evento prescricaoExcluida. */
     canceledAt?: string | null;
+    /** Código de desbloqueio do link de receita digital (obrigatório junto do link — sem ele o paciente não consegue abrir a receita). */
+    unlockCode?: string | null;
   } | null;
   // Snapshot de nome/preço no momento do registro — se o serviço mudar ou for
   // desativado depois, a evolução já salva não muda (mesma lógica do selo).

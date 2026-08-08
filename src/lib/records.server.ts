@@ -172,6 +172,7 @@ export async function prescribeEvolutionMemed(
   memedPrescricaoId: string,
   medsResumo: string[],
   pdfUrl: string | null,
+  unlockCode: string | null = null,
 ): Promise<Evolution | { error: "not_found" }> {
   let updated: Evolution | null = null;
   await mutateRows<Evolution>(FILE, (rows) => {
@@ -189,6 +190,7 @@ export async function prescribeEvolutionMemed(
       url: pdfUrl ?? `/receita/${memedPrescricaoId}`,
       createdAt: nowIso(),
       canceledAt: null,
+      unlockCode,
     };
     e.updatedAt = nowIso();
     updated = { ...e };

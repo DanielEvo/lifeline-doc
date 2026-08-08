@@ -106,7 +106,8 @@ import type { EvolutionTemplate } from "@/lib/templates.server";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
-import { MemedPrescriptionWidget } from "@/components/clinic/memed-prescription-widget";
+import { MemedPrescriptionWidget, type MemedWidgetApi } from "@/components/clinic/memed-prescription-widget";
+import { listMyMemedCatalog } from "@/lib/api/memed-catalog.functions";
 import {
   ageFrom,
   ANAMNESE_TEMPLATE,
@@ -2691,6 +2692,22 @@ function EvolucaoCard({
           >
             Ver receita /receita/{e.prescription.code}
           </a>
+          {e.prescription.unlockCode && !e.prescription.canceledAt && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-violet-200 pt-1.5 text-violet-900 dark:border-violet-900 dark:text-violet-300">
+              <span>
+                Código de desbloqueio: <strong className="font-mono">{e.prescription.unlockCode}</strong>
+              </span>
+              <WhatsAppButton
+                telefone={patient.telefone}
+                title="Enviar receita por WhatsApp"
+                text={`Olá ${patient.nome}, aqui está sua receita: ${
+                  e.prescription.url && !e.prescription.url.startsWith("https://memed.com.br/r/")
+                    ? e.prescription.url
+                    : `${typeof window !== "undefined" ? window.location.origin : ""}/receita/${e.prescription.code}`
+                }\nCódigo de desbloqueio: ${e.prescription.unlockCode}`}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -2792,8 +2809,23 @@ function ReceitaDialog({
     if (widgetConfig.data?.ok) setShowWidget(true);
   }, [widgetConfig.data]);
 
+  // Catálogo colhido/salvo pelo médico (protocolos + medicações manuais) —
+  // permite adicionar item ao módulo real com um clique em vez de digitar
+  // tudo de novo toda receita. Mesmo padrão usado na bancada /app/memed-simulacao.
+  const [widgetApi, setWidgetApi] = useState<MemedWidgetApi | null>(null);
+  const catalogo = useQuery({
+    queryKey: ["memed-catalog"],
+    queryFn: () => listMyMemedCatalog({ data: { token } }),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const catalogEntries = catalogo.data?.ok ? catalogo.data.itens : [];
+
   useEffect(() => {
-    if (!open) setShowWidget(false);
+    if (!open) {
+      setShowWidget(false);
+      setWidgetApi(null);
+    }
   }, [open]);
 
   const memedErrorToastedRef = useRef(false);
@@ -2944,12 +2976,49 @@ function ReceitaDialog({
               receita local.
             </p>
           )}
+          {catalogEntries.length > 0 && (
+            <div className="space-y-1.5 rounded-lg bg-muted/50 px-3 py-2">
+              <Label className="text-[11px] text-muted-foreground">Sugestões (mais usados)</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {catalogEntries.slice(0, 20).map((entry) => (
+                  <Button
+                    key={entry.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!widgetApi}
+                    onClick={async () => {
+                      try {
+                        await widgetApi?.addItem(
+                          entry.memedId
+                            ? { id: entry.memedId, posologia: entry.posologiaPadrao ?? "" }
+                            : { nome: entry.nome, posologia: entry.posologiaPadrao ?? "" },
+                        );
+                        toast.success(`${entry.nome} adicionado.`);
+                      } catch {
+                        toast.error("Não consegui adicionar este item.");
+                      }
+                    }}
+                  >
+                    {entry.nome}
+                  </Button>
+                ))}
+              </div>
+              {!widgetApi && (
+                <p className="text-[10px] text-muted-foreground">
+                  Disponível assim que o módulo acima terminar de carregar.
+                </p>
+              )}
+            </div>
+          )}
           <MemedPrescriptionWidget
             key={`${patientId}-${widgetConfig.data.token.slice(-12)}`}
             token={widgetConfig.data.token}
             scriptUrl={widgetConfig.data.scriptUrl}
             patient={widgetConfig.data.patient}
             workplace={widgetConfig.data.workplace}
+            onReady={setWidgetApi}
             onPrescricaoImpressa={handlePrescricaoImpressa}
             onPrescricaoExcluida={handlePrescricaoExcluida}
           />

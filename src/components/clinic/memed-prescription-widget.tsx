@@ -142,6 +142,11 @@ export function MemedPrescriptionWidget({
               guidesOnboarding: false,
               enableAlerts: true,
               setPatientAllergy: true,
+              // O link de compartilhamento nativo da Memed pula o código de
+              // desbloqueio (§10 do handover) — o envio ao paciente é feito
+              // pelo LifeLine via get-digital-prescription-link, que sempre
+              // acompanha o link com o código.
+              allowShareModal: false,
             });
           } catch {
             // toggles são um ajuste fino: falha aqui não invalida o módulo

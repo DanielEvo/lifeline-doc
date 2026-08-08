@@ -11,8 +11,22 @@ import type { Doctor } from "./auth.server";
 // ler process.env em escopo de módulo devolve undefined e faria
 // MEMED_API_URL/MEMED_SCRIPT_URL configurados serem silenciosamente
 // ignorados. Por isso tudo aqui é lido dentro de função.
+//
+// O host muda por ambiente (§2.2/§2.3 do handover): homologação é
+// integrations.api.memed.com.br, produção é api.memed.com.br — hosts
+// DIFERENTES, não só credenciais diferentes no mesmo host. Antes o fallback
+// era sempre o de homologação, então um deploy com MEMED_ENV=live e as
+// chaves MEMED_LIVE_* configuradas, mas sem sobrescrever MEMED_API_URL na
+// mão, continuava batendo no host de teste com credenciais de produção —
+// a Memed responde 401/403 (tratado como invalid_credentials) e a causa
+// real (host errado) fica invisível. memedKeys() já resolvia por ambiente;
+// isto espelha a mesma lógica para a URL.
 function memedApiBase(): string {
-  return process.env["MEMED_API_URL"] || "https://integrations.api.memed.com.br/v1";
+  const explicit = process.env["MEMED_API_URL"];
+  if (explicit) return explicit;
+  return memedEnvironment() === "live"
+    ? "https://api.memed.com.br/v1"
+    : "https://integrations.api.memed.com.br/v1";
 }
 
 export function memedScriptUrl(): string {
@@ -259,6 +273,66 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   } catch (e) {
     console.error("[memed] token_network_error", { doctorId: doctor.id, error: String(e) });
     return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+// Link + código de desbloqueio da receita digital assinada (§3.3, §10 do
+// handover). São FIXOS por prescrição — podem ser guardados no prontuário
+// e reenviados quantas vezes for preciso, sem bater na Memed de novo.
+//
+// Por que isto existe: o evento prescricaoImpressa do widget traz um campo
+// de URL cujo formato o handover explicitamente NÃO garante ("a estrutura é
+// um array único a ser agrupado pelo parceiro" — não um contrato fixo).
+// Este endpoint dedicado é a fonte confiável. E, diferente do link puro, a
+// Memed exige informar o código de desbloqueio junto — sem ele o paciente
+// abre o link e não consegue ver a receita.
+export async function getMemedDigitalPrescriptionLink(
+  prescriberToken: string,
+  memedPrescricaoId: string,
+): Promise<{ link: string; unlockCode: string } | null> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/prescricoes/${encodeURIComponent(memedPrescricaoId)}/get-digital-prescription-link?token=${encodeURIComponent(prescriberToken)}`,
+      { headers: { Accept: "application/vnd.api+json" } },
+    );
+    if (!res.ok) return null;
+    const json: any = await res.json().catch(() => null);
+    const attrs = json?.data?.attributes ?? json?.data ?? json;
+    // A doc não fixa o nome exato do atributo em todo lugar — cobre as
+    // variações mais prováveis (link/url, unlock_code/code/unlockCode) em
+    // vez de travar a leitura a um único nome de campo.
+    const link = attrs?.link ?? attrs?.url ?? attrs?.digital_prescription_link ?? null;
+    const unlockCode =
+      attrs?.unlock_code ?? attrs?.unlockCode ?? attrs?.code ?? attrs?.codigo_desbloqueio ?? null;
+    if (!link || !unlockCode) return null;
+    return { link: String(link), unlockCode: String(unlockCode) };
+  } catch (e) {
+    console.error("[memed] digital_prescription_link_error", { memedPrescricaoId, error: String(e) });
+    return null;
+  }
+}
+
+/**
+ * Confirma se o par de chaves configurado está ativo na Memed (§2.5).
+ * A doc titula a seção como PATCH mas o exemplo funcional em cURL usa GET —
+ * contradição na própria documentação; GET é o que de fato responde.
+ * Só diagnóstico — nunca chamado no fluxo real de prescrição.
+ */
+export async function checkMemedKeyPair(): Promise<
+  { ok: true } | { ok: false; error: "not_configured" | "invalid" | "network_error"; detail?: string }
+> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const { apiKey, secretKey } = memedKeys();
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/sinapse-prescricao/check-key?api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) return { ok: true };
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: "invalid", detail: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+  } catch (e) {
+    return { ok: false, error: "network_error", detail: String(e) };
   }
 }
 
