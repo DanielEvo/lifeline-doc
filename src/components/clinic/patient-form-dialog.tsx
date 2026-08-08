@@ -45,7 +45,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   consumePresentialAccessToken,
-  linkMyPatientToGlobalId,
   lookupPatientByCode,
   requestPatientAccess,
   searchPatientGlobal,
@@ -154,9 +153,19 @@ export function PatientFormDialog({
   // ----- Estado do intake (só relevante no modo criação) -----
   const { token, nome: doctorNome } = useClinic();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [idInput, setIdInput] = useState("");
-  const [lookupDone, setLookupDone] = useState(false);
+  // Busca unificada — um único campo cobre tanto o dedupe local (código
+  // LFL-XXXX de um paciente que este médico já cadastrou) quanto a busca
+  // pela identidade global LifeLine (nome/CPF/e-mail/RG/LifeLine ID). Antes
+  // eram duas caixas de busca separadas; um clique em "Buscar" agora tenta
+  // as duas em sequência (local primeiro, global como fallback).
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchDone, setSearchDone] = useState(false);
   const [foundPatient, setFoundPatient] = useState<Patient | null>(null);
+  const [globalResults, setGlobalResults] = useState<GlobalSearchResult[] | null>(null);
+  const [globalStatusOverride, setGlobalStatusOverride] = useState<Record<string, VinculoStatus>>(
+    {},
+  );
+  const [globalBusyId, setGlobalBusyId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
 
@@ -172,9 +181,12 @@ export function PatientFormDialog({
   const autodeclarado = isEdit && vinculo === "com_acesso";
 
   const resetIntake = () => {
-    setIdInput("");
-    setLookupDone(false);
+    setSearchQuery("");
+    setSearchDone(false);
     setFoundPatient(null);
+    setGlobalResults(null);
+    setGlobalStatusOverride({});
+    setGlobalBusyId(null);
     setFiles([]);
     setDragging(false);
     setLinkOverride(null);
@@ -210,14 +222,42 @@ export function PatientFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, patient]);
 
-  const lookupMut = useMutation({
-    mutationFn: () => lookupPatientByCode({ data: { token, code: idInput } }),
+  // Tenta o dedupe local (código LFL-XXXX, escopado a este médico) primeiro;
+  // se não achar, cai pra busca global por identidade LifeLine (nome, CPF,
+  // e-mail, RG ou LifeLine ID) — um único "Buscar" cobre os dois casos.
+  const buscarMut = useMutation({
+    mutationFn: async () => {
+      const q = searchQuery.trim();
+      const codeR = await lookupPatientByCode({ data: { token, code: q } });
+      if (!codeR.ok) return { kind: "error" as const };
+      if (codeR.patient) return { kind: "local" as const, patient: codeR.patient };
+      const globalR = await searchPatientGlobal({ data: { token, query: q } });
+      if (!globalR.ok) return { kind: "error" as const };
+      return { kind: "global" as const, results: globalR.results };
+    },
     onSuccess: (r) => {
-      setLookupDone(true);
-      if (!r.ok) return toast.error("Sessão expirada.");
-      setFoundPatient(r.patient);
+      setSearchDone(true);
+      if (r.kind === "error") {
+        toast.error("Sessão expirada.");
+        return;
+      }
+      if (r.kind === "local") {
+        setFoundPatient(r.patient);
+        setGlobalResults(null);
+      } else {
+        setFoundPatient(null);
+        setGlobalResults(r.results);
+        setGlobalStatusOverride({});
+      }
     },
   });
+
+  const vincularGlobal = async (globalIdToLink: string) => {
+    // Cadastro novo: só seleciona a identidade — o vínculo real acontece
+    // quando o paciente for criado (intake.globalId).
+    setGlobalStatusOverride((s) => ({ ...s, [globalIdToLink]: "sem_acesso" }));
+    setLinkOverride({ globalId: globalIdToLink, vinculo: "sem_acesso" });
+  };
 
   function processFiles(fileList: FileList) {
     const entries: FileEntry[] = Array.from(fileList).map((file) => {
@@ -270,7 +310,7 @@ export function PatientFormDialog({
           <DialogDescription>
             {isEdit
               ? "Contato, convênio e status podem mudar. Identidade (nome, nascimento, sexo, CPF) é fixa após o cadastro."
-              : "Busque por ID para reencontrar um paciente, ou cadastre um novo. Anexe exames se tiver."}
+              : "Busque por nome, CPF, e-mail, RG ou ID pra reencontrar um paciente, ou cadastre um novo. Anexe exames se tiver."}
           </DialogDescription>
         </DialogHeader>
 
@@ -316,46 +356,49 @@ export function PatientFormDialog({
           </div>
         )}
 
-        {/* Bloco de busca por ID — só no modo criação */}
+        {/* Busca unificada — só no modo criação. Um campo só: tenta achar um
+            paciente que este médico já cadastrou (por código LFL-XXXX) e,
+            se não achar, busca a identidade LifeLine global (nome, CPF,
+            e-mail, RG ou LifeLine ID) pra oferecer vínculo. */}
         {!isEdit && (
           <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <Label className="text-xs font-medium">ID do paciente (opcional)</Label>
-            <div className="mt-1.5 flex gap-2">
-              <Input
-                value={idInput}
-                onChange={(e) => {
-                  setIdInput(e.target.value.toUpperCase());
-                  setLookupDone(false);
-                  setFoundPatient(null);
-                }}
-                placeholder="LFL-XXXX"
-                className="font-mono uppercase"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (idInput.trim().length >= 3) lookupMut.mutate();
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={idInput.trim().length < 3 || lookupMut.isPending}
-                onClick={() => lookupMut.mutate()}
-              >
-                {lookupMut.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
-                <span className="ml-1.5">Buscar</span>
-              </Button>
-            </div>
+            <Label className="text-xs font-medium">Buscar paciente (opcional)</Label>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Nome, CPF, e-mail, RG, LifeLine ID ou código do paciente.
+            </p>
 
-            {lookupDone && !foundPatient && (
-              <p className="mt-2 text-[12px] text-amber-600 dark:text-amber-400">
-                Nenhum paciente com esse ID — preencha o cadastro abaixo.
-              </p>
+            {!foundPatient && !globalId && (
+              <div className="mt-1.5 flex gap-2">
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSearchDone(false);
+                    setFoundPatient(null);
+                    setGlobalResults(null);
+                  }}
+                  placeholder="Nome, CPF, e-mail, RG, LifeLine ID ou LFL-XXXX"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (searchQuery.trim().length >= 2) buscarMut.mutate();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={searchQuery.trim().length < 2 || buscarMut.isPending}
+                  onClick={() => buscarMut.mutate()}
+                >
+                  {buscarMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  <span className="ml-1.5">Buscar</span>
+                </Button>
+              </div>
             )}
 
             {foundPatient && (
@@ -385,16 +428,83 @@ export function PatientFormDialog({
                 </button>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Identidade LifeLine — busca global no cadastro de paciente NOVO.
-            Sem paciente ainda criado, "Vincular" apenas seleciona o globalId,
-            que é aplicado na criação (intake.globalId). */}
-        {!isEdit && !foundPatient && (
-          <>
-            {globalId ? (
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
+            {!foundPatient && !globalId && globalResults && globalResults.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {globalResults.map((r) => {
+                  const status = globalStatusOverride[r.globalId] ?? r.vinculoStatus;
+                  const busy = globalBusyId === r.globalId;
+                  return (
+                    <li
+                      key={r.globalId}
+                      className="rounded-lg border border-border bg-card p-2.5 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="font-medium">{r.nomeParcial}</span>
+                          {r.idade !== null && (
+                            <span className="text-muted-foreground"> · {r.idade} anos</span>
+                          )}
+                        </div>
+                        {status === "com_acesso" && (
+                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                            ✓ Acesso liberado
+                          </span>
+                        )}
+                        {status === "sem_acesso" && (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                            Sem acesso
+                          </span>
+                        )}
+                      </div>
+
+                      {status === "sem_vinculo" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busy}
+                          onClick={async () => {
+                            setGlobalBusyId(r.globalId);
+                            try {
+                              await vincularGlobal(r.globalId);
+                            } finally {
+                              setGlobalBusyId(null);
+                            }
+                          }}
+                          className="mt-1.5 w-full brand-gradient text-primary-foreground"
+                        >
+                          {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                          Vincular
+                        </Button>
+                      )}
+                      {status === "sem_acesso" && (
+                        <AccessActions
+                          token={token}
+                          globalId={r.globalId}
+                          onGranted={() =>
+                            setGlobalStatusOverride((s) => ({ ...s, [r.globalId]: "com_acesso" }))
+                          }
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {!foundPatient &&
+              !globalId &&
+              searchDone &&
+              (!globalResults || globalResults.length === 0) && (
+                <p className="mt-2 text-[12px] text-amber-600 dark:text-amber-400">
+                  Nenhum paciente encontrado — preencha o cadastro abaixo.
+                </p>
+              )}
+
+            {/* Identidade LifeLine já vinculada nesta sessão do dialog (BKL-37) —
+                substitui a busca até o médico limpar (resetIntake). */}
+            {!foundPatient && globalId && (
+              <div className="mt-3">
                 {vinculo === "com_acesso" ? (
                   <p className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                     <ShieldCheck className="h-3 w-3" /> Identidade LifeLine — acesso liberado
@@ -412,14 +522,8 @@ export function PatientFormDialog({
                   </>
                 )}
               </div>
-            ) : (
-              <GlobalLinkSearch
-                token={token}
-                patientId={null}
-                onLinked={(gid) => setLinkOverride({ globalId: gid, vinculo: "sem_acesso" })}
-              />
             )}
-          </>
+          </div>
         )}
 
         {/* Campos de cadastro — escondidos quando achou paciente por ID.
@@ -876,146 +980,3 @@ function AccessActions({
   );
 }
 
-function GlobalLinkSearch({
-  token,
-  patientId,
-  onLinked,
-}: {
-  token: string;
-  /** null no cadastro NOVO: o vínculo é aplicado na criação do paciente. */
-  patientId: string | null;
-  onLinked: (globalId: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GlobalSearchResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [statusOverride, setStatusOverride] = useState<Record<string, VinculoStatus>>({});
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const search = async () => {
-    if (query.trim().length < 2) return;
-    setSearching(true);
-    setStatusOverride({});
-    try {
-      const r = await searchPatientGlobal({ data: { token, query: query.trim() } });
-      if (!r.ok) {
-        toast.error("Não consegui buscar agora.");
-        return;
-      }
-      setResults(r.results);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const vincular = async (globalId: string) => {
-    if (!patientId) {
-      // Cadastro novo: só seleciona a identidade; o vínculo real acontece
-      // quando o paciente for criado.
-      setStatusOverride((s) => ({ ...s, [globalId]: "sem_acesso" }));
-      onLinked(globalId);
-      return;
-    }
-    setBusyId(globalId);
-    try {
-      const r = await linkMyPatientToGlobalId({ data: { token, patientId, globalId } });
-      if (!r.ok) {
-        toast.error("Não consegui vincular.");
-        return;
-      }
-      setStatusOverride((s) => ({ ...s, [globalId]: "sem_acesso" }));
-      onLinked(globalId);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-border bg-muted/30 p-3">
-      <Label className="text-xs font-medium">Buscar identidade LifeLine</Label>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        Nome, CPF, e-mail, RG ou LifeLine ID.
-      </p>
-      <div className="mt-2 flex gap-2">
-        <Input
-          placeholder="Buscar por nome, CPF, e-mail, RG ou LifeLine ID"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              search();
-            }
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={query.trim().length < 2 || searching}
-          onClick={search}
-        >
-          {searching ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Search className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </div>
-
-      {results && (
-        <ul className="mt-2 space-y-1.5">
-          {results.length === 0 && (
-            <li className="text-[11px] text-muted-foreground">Nenhum resultado.</li>
-          )}
-          {results.map((r) => {
-            const status = statusOverride[r.globalId] ?? r.vinculoStatus;
-            const busy = busyId === r.globalId;
-            return (
-              <li key={r.globalId} className="rounded-lg border border-border bg-card p-2.5 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="font-medium">{r.nomeParcial}</span>
-                    {r.idade !== null && (
-                      <span className="text-muted-foreground"> · {r.idade} anos</span>
-                    )}
-                  </div>
-                  {status === "com_acesso" && (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      ✓ Acesso liberado
-                    </span>
-                  )}
-                  {status === "sem_acesso" && (
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                      Sem acesso
-                    </span>
-                  )}
-                </div>
-
-                {status === "sem_vinculo" && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => vincular(r.globalId)}
-                    className="mt-1.5 w-full brand-gradient text-primary-foreground"
-                  >
-                    {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                    Vincular
-                  </Button>
-                )}
-                {status === "sem_acesso" && (
-                  <AccessActions
-                    token={token}
-                    globalId={r.globalId}
-                    onGranted={() => setStatusOverride((s) => ({ ...s, [r.globalId]: "com_acesso" }))}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}

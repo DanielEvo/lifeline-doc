@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ExternalLink,
   Loader2,
   Lock,
@@ -1289,26 +1290,18 @@ export function AppointmentCalendar({
             <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="ap-data" className="text-xs">
-                    Data
-                  </Label>
-                  <Input
-                    id="ap-data"
-                    type="date"
+                  <Label className="text-xs">Data</Label>
+                  <DateField
                     value={pendingDate}
-                    onChange={(e) => setPendingDateTime(e.target.value, pendingTime)}
+                    onChange={(v) => setPendingDateTime(v, pendingTime)}
+                    appointments={appointments}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="ap-hora" className="text-xs">
-                    Hora
-                  </Label>
-                  <Input
-                    id="ap-hora"
-                    type="time"
-                    step={300}
+                  <Label className="text-xs">Hora</Label>
+                  <TimeField
                     value={pendingTime}
-                    onChange={(e) => setPendingDateTime(pendingDate, e.target.value)}
+                    onChange={(v) => setPendingDateTime(pendingDate, v)}
                   />
                 </div>
               </div>
@@ -1557,6 +1550,119 @@ export function AppointmentCalendar({
         />
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Seleção de dia/hora no diálogo de confirmação — mesmo padrão do Google
+// Agenda: um botão mostrando a data/hora escolhida que abre um popover pra
+// trocar (mini-calendário pra data, lista de horários pro campo de hora),
+// em vez dos inputs nativos de date/time do navegador.
+
+function DateField({
+  value,
+  onChange,
+  appointments,
+}: {
+  value: string; // yyyy-mm-dd
+  onChange: (ymdValue: string) => void;
+  appointments: Appointment[];
+}) {
+  const [open, setOpen] = useState(false);
+  const dateObj = value ? fromYmd(value) : new Date();
+  const label = dateObj.toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm capitalize transition hover:bg-muted/50"
+        >
+          {label}
+          <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2" align="start">
+        <MiniMonthPicker
+          cursor={dateObj}
+          appointments={appointments}
+          onPick={(d) => {
+            onChange(ymd(d));
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Lista de horários em intervalos de `stepMin` — mesmo idiom do menu de
+ *  horário do Google Agenda (dropdown com a lista inteira do dia, item
+ *  selecionado com scroll automático até ele ao abrir). */
+function TIME_OPTIONS(stepMin: number): string[] {
+  const opts: string[] = [];
+  for (let m = 0; m < 24 * 60; m += stepMin) {
+    opts.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  return opts;
+}
+
+function TimeField({
+  value,
+  onChange,
+  stepMin = 15,
+}: {
+  value: string; // HH:mm
+  onChange: (hhmm: string) => void;
+  stepMin?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => TIME_OPTIONS(stepMin), [stepMin]);
+  const selectedRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    selectedRef.current?.scrollIntoView({ block: "center" });
+  }, [open]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm transition hover:bg-muted/50"
+        >
+          {value || "--:--"}
+          <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="max-h-64 w-32 overflow-y-auto p-1" align="start">
+        {options.map((t) => (
+          <button
+            key={t}
+            ref={t === value ? selectedRef : undefined}
+            type="button"
+            onClick={() => {
+              onChange(t);
+              setOpen(false);
+            }}
+            className={`block w-full rounded px-2 py-1.5 text-left text-sm transition ${
+              t === value
+                ? "bg-primary/10 font-medium text-primary"
+                : "text-foreground hover:bg-muted"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -3152,6 +3258,16 @@ function DayColumn({
     }));
     return { visibleBlocks: visible, overflowGroups: groups };
   }, [layouted]);
+
+  // Linha vermelha de "agora" — sem isso, ela ficava parada no minuto em
+  // que o componente montou/re-renderizou por outro motivo, em vez de
+  // acompanhar o relógio enquanto a agenda fica aberta.
+  const [, forceNowTick] = useState(0);
+  useEffect(() => {
+    if (!isToday) return;
+    const id = setInterval(() => forceNowTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [isToday]);
 
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
