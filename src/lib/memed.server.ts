@@ -75,7 +75,13 @@ export type MemedTokenResult =
   | { ok: true; token: string }
   | {
       ok: false;
-      error: "not_configured" | "missing_profile" | "prescritor_inativo" | "memed_error";
+      error:
+        | "not_configured"
+        | "missing_profile"
+        | "prescritor_inativo"
+        | "memed_offline"
+        | "invalid_credentials"
+        | "memed_error";
       detail?: string;
     };
 
