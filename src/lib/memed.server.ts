@@ -7,17 +7,26 @@
 
 import type { Doctor } from "./auth.server";
 
-const MEMED_API_BASE =
-  process.env.MEMED_API_URL || "https://integrations.api.memed.com.br/v1";
+// IMPORTANTE: no runtime de edge as env vars só existem por requisição —
+// ler process.env em escopo de módulo devolve undefined e faria
+// MEMED_API_URL/MEMED_SCRIPT_URL configurados serem silenciosamente
+// ignorados. Por isso tudo aqui é lido dentro de função.
+function memedApiBase(): string {
+  return process.env["MEMED_API_URL"] || "https://integrations.api.memed.com.br/v1";
+}
 
-export const MEMED_SCRIPT_URL =
-  process.env.MEMED_SCRIPT_URL ||
-  "https://integrations.memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js";
+export function memedScriptUrl(): string {
+  return (
+    process.env["MEMED_SCRIPT_URL"] ||
+    "https://integrations.memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js"
+  );
+}
 
 /** Timeout de rede: a homologação da Memed às vezes pendura a conexão. */
 const MEMED_TIMEOUT_MS = 8_000;
 /** JWT do prescritor vale bem mais que isso; 50min dá folga de renovação. */
 const TOKEN_TTL_MS = 50 * 60 * 1000;
+
 
 /**
  * Ambiente em uso. As chaves de homologação são compartilhadas entre
