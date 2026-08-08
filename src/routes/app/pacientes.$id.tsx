@@ -3207,9 +3207,13 @@ function ReceitaDialog({
             className="brand-gradient text-primary-foreground"
           >
             {gerar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error"
+            {widgetConfig.data?.ok === false &&
+            (widgetConfig.data.error === "memed_error" ||
+              widgetConfig.data.error === "memed_offline" ||
+              widgetConfig.data.error === "invalid_credentials")
               ? "Gerar receita local (sem Memed)"
               : "Gerar receita"}
+
           </Button>
         </DialogFooter>
       </DialogContent>
