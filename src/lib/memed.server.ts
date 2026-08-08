@@ -120,7 +120,7 @@ async function resolveMemedCidadeId(cidade: string, uf: string): Promise<number 
   if (cidadeIdCache.has(key)) return cidadeIdCache.get(key)!;
   try {
     const qs = `filter[q]=${encodeURIComponent(cidade)}&filter[uf]=${encodeURIComponent(uf)}`;
-    const res = await memedFetch(`${MEMED_API_BASE}/cidades?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/cidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
     const json: any = await res.json().catch(() => null);
@@ -139,7 +139,7 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
   if (especialidadeIdCache.has(key)) return especialidadeIdCache.get(key)!;
   try {
     const qs = `filter[q]=${encodeURIComponent(especialidade)}`;
-    const res = await memedFetch(`${MEMED_API_BASE}/especialidades?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/especialidades?${qs}`, {
       headers: { Accept: "application/vnd.api+json" },
     });
     const json: any = await res.json().catch(() => null);
@@ -189,7 +189,7 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   ]);
 
   try {
-    const res = await memedFetch(`${MEMED_API_BASE}/sinapse-prescricao/usuarios?${qs}`, {
+    const res = await memedFetch(`${memedApiBase()}/sinapse-prescricao/usuarios?${qs}`, {
       method: "POST",
       headers: { Accept: "application/vnd.api+json", "Content-Type": "application/json" },
       body: JSON.stringify({

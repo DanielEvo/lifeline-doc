@@ -67,7 +67,7 @@ import {
   invalidateMemedToken,
   isMemedConfigured,
   isMemedLikelyOffline,
-  MEMED_SCRIPT_URL,
+  memedScriptUrl,
   memedEnvironment,
 } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
@@ -1025,7 +1025,7 @@ export const getMemedWidgetConfig = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       token: result.token,
-      scriptUrl: MEMED_SCRIPT_URL,
+      scriptUrl: memedScriptUrl(),
       likelyOffline: isMemedLikelyOffline(),
       environment: memedEnvironment(),
       patient: {
@@ -1123,7 +1123,7 @@ export const getMemedSandboxConfig = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       token: result.token,
-      scriptUrl: MEMED_SCRIPT_URL,
+      scriptUrl: memedScriptUrl(),
       patient: {
         idExterno: "sandbox-patient",
         nome: "Paciente Teste",
