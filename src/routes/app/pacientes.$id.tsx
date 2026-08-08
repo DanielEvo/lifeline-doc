@@ -2798,7 +2798,12 @@ function ReceitaDialog({
 
   const memedErrorToastedRef = useRef(false);
   useEffect(() => {
-    const isMemedError = widgetConfig.data?.ok === false && widgetConfig.data.error === "memed_error";
+    const isMemedError =
+      widgetConfig.data?.ok === false &&
+      (widgetConfig.data.error === "memed_error" ||
+        widgetConfig.data.error === "memed_offline" ||
+        widgetConfig.data.error === "invalid_credentials");
+
     if (isMemedError && !memedErrorToastedRef.current) {
       toast.error("Memed indisponível agora — use a receita local abaixo.");
       memedErrorToastedRef.current = true;
