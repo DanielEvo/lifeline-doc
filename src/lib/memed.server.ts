@@ -224,6 +224,17 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
         },
       }),
     });
+    // Homologação fora do ar responde HTML 502/503 do nginx — .json() falha
+    // e virava "memed_error" genérico. Classificado à parte para a UI poder
+    // dizer o que de fato aconteceu (e não sugerir revisar cadastro à toa).
+    if (res.status >= 500 || res.status === 429) {
+      console.error("[memed] indisponivel", { status: res.status, doctorId: doctor.id });
+      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}` };
+    }
+    if (res.status === 401 || res.status === 403) {
+      console.error("[memed] credenciais_invalidas", { status: res.status });
+      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}` };
+    }
     const json: any = await res.json().catch(() => null);
     const jwtToken = json?.data?.attributes?.token;
     const status = json?.data?.attributes?.status as string | undefined;
@@ -236,6 +247,7 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
       console.error("[memed] token_error", { status: res.status, doctorId: doctor.id, detail });
       return { ok: false, error: "memed_error", detail };
     }
+
     tokenCache.set(doctor.id, { token: jwtToken, expiresAt: Date.now() + TOKEN_TTL_MS });
     return { ok: true, token: jwtToken };
   } catch (e) {
