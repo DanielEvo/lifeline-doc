@@ -6,11 +6,14 @@ export type MemedPatientPayload = {
   nome: string;
   sexo?: "Masculino" | "Feminino";
   cpf?: string;
+  // RDC 1000/25: paciente estrangeiro entra por passaporte no lugar do CPF.
+  passaporte?: string;
   withoutCpf?: boolean;
   data_nascimento?: string; // formato dd/mm/aaaa
   telefone?: string;
   email?: string;
 };
+
 
 export type MemedWorkplacePayload = {
   city?: string;
