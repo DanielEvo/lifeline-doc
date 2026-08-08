@@ -27,8 +27,20 @@ const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
-const SEED_LOGIN = "lifelineadm";
-const SEED_PASSWORD = "lifelineadm";
+// SEC — nunca semear credencial padrão conhecida. A credencial inicial vem
+// exclusivamente das variáveis de ambiente ADMIN_LOGIN/ADMIN_PASSWORD. Sem
+// elas, o registro é semeado com uma senha aleatória impossível de adivinhar
+// (e nunca revelada), o que deixa o /admin efetivamente fechado até o
+// operador configurar os secrets.
+function seedLogin(): string {
+  return (process.env.ADMIN_LOGIN ?? "").trim();
+}
+function seedPassword(): string {
+  return process.env.ADMIN_PASSWORD ?? "";
+}
+function adminConfigured(): boolean {
+  return seedLogin().length >= 3 && seedPassword().length >= 8;
+}
 
 function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
@@ -45,18 +57,24 @@ function verify(creds: AdminCredentials, password: string): boolean {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
-/** Lê a credencial de admin, semeando lifelineadm/lifelineadm na primeira
- *  leitura (hash gerado aqui — a senha em texto plano nunca é gravada). */
+/** Lê a credencial de admin. Semeia a partir de ADMIN_LOGIN/ADMIN_PASSWORD;
+ *  se não estiverem configurados, semeia uma senha aleatória inutilizável
+ *  (o painel fica fechado até os secrets serem definidos). */
 async function getCredentials(): Promise<AdminCredentials> {
   const existing = await readRows<AdminCredentials>(CREDENTIALS);
-  if (existing[0]) return existing[0];
+  // Credencial padrão legada gravada antes desta correção é descartada e
+  // substituída pela dos secrets (ou por uma aleatória inutilizável).
+  if (existing[0] && !verify(existing[0], "lifelineadm")) return existing[0];
+  if (existing[0]) await mutateRows<AdminCredentials>(CREDENTIALS, () => []);
+  const login = adminConfigured() ? seedLogin() : crypto.randomBytes(16).toString("hex");
+  const password = adminConfigured() ? seedPassword() : crypto.randomBytes(32).toString("hex");
   let seeded: AdminCredentials | undefined;
   await mutateRows<AdminCredentials>(CREDENTIALS, (rows) => {
     if (rows[0]) {
       seeded = rows[0];
       return rows;
     }
-    seeded = makeCredentials(SEED_LOGIN, SEED_PASSWORD);
+    seeded = makeCredentials(login, password);
     return [seeded];
   });
   return seeded!;
@@ -122,6 +140,8 @@ export async function loginAdmin(
 ): Promise<{ ok: true; token: string } | { ok: false; error: "locked" | "invalid" }> {
   if (isLocked(login)) return { ok: false, error: "locked" };
   const creds = await getCredentials();
+  // Bloqueia qualquer credencial padrão legada gravada antes desta correção.
+  if (verify(creds, "lifelineadm")) return { ok: false, error: "invalid" };
   if (attemptKey(login) !== attemptKey(creds.login) || !verify(creds, senha)) {
     registerFailure(login);
     return { ok: false, error: "invalid" };
