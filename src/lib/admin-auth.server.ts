@@ -62,7 +62,10 @@ function verify(creds: AdminCredentials, password: string): boolean {
  *  (o painel fica fechado até os secrets serem definidos). */
 async function getCredentials(): Promise<AdminCredentials> {
   const existing = await readRows<AdminCredentials>(CREDENTIALS);
-  if (existing[0]) return existing[0];
+  // Credencial padrão legada gravada antes desta correção é descartada e
+  // substituída pela dos secrets (ou por uma aleatória inutilizável).
+  if (existing[0] && !verify(existing[0], "lifelineadm")) return existing[0];
+  if (existing[0]) await mutateRows<AdminCredentials>(CREDENTIALS, () => []);
   const login = adminConfigured() ? seedLogin() : crypto.randomBytes(16).toString("hex");
   const password = adminConfigured() ? seedPassword() : crypto.randomBytes(32).toString("hex");
   let seeded: AdminCredentials | undefined;
