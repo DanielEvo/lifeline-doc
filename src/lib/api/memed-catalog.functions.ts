@@ -10,7 +10,7 @@ import {
   upsertEntry,
   type CatalogEntry,
 } from "../memed-catalog.server";
-import { getMemedSandboxToken, isMemedConfigured } from "../memed.server";
+import { getMemedSandboxToken, isMemedConfigured, memedFetch } from "../memed.server";
 
 const token = z.string().min(1);
 const UNAUTH = { ok: false as const, error: "unauthorized" as const };
@@ -48,7 +48,12 @@ export const harvestMemedProtocolIds = createServerFn({ method: "POST" })
     }
 
     try {
-      const res = await fetch(
+      // fetch() cru aqui não tinha timeout — se o endpoint de protocolos da
+      // Memed travar (ambiente de homologação documentado como instável),
+      // essa chamada ficava pendurada pra sempre e o botão "Colher IDs"
+      // nunca saía do estado de loading. memedFetch já tem timeout de 8s +
+      // 1 retry, mesmo tratamento usado nas outras chamadas à Memed.
+      const res = await memedFetch(
         `${MEMED_API_BASE()}/protocolos?token=${encodeURIComponent(prescriber.token)}`,
         { headers: { Accept: "application/vnd.api+json" } },
       );
@@ -99,7 +104,12 @@ export const searchMemedIngredients = createServerFn({ method: "POST" })
       `&terms=${encodeURIComponent(data.termo)}&limit=10&order[field]=name&order[sort]=ASC`;
 
     try {
-      const res = await fetch(`${MEMED_API_BASE()}/drugs/ingredients?${qs}`, {
+      // Mesma correção: fetch() cru sem timeout — a bancada agora chama
+      // isso automaticamente pra CADA medicamento ao carregar um cenário
+      // (ver carregarNoMemed em memed-simulacao.tsx). Se travar sem
+      // timeout, o Promise.all de resolução de IDs nunca completa e nada
+      // é adicionado ao módulo, em silêncio total.
+      const res = await memedFetch(`${MEMED_API_BASE()}/drugs/ingredients?${qs}`, {
         headers: { Accept: "application/vnd.api+json" },
       });
       const json = (await res.json().catch(() => null)) as any;

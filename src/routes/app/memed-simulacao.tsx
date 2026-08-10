@@ -194,20 +194,38 @@ function MemedSimulacao() {
   // recarregado nesta sessão. Nomes inventados do fixture não existem no
   // catálogo da Memed por definição — essa busca resolve pro princípio
   // ativo mais próximo, que É um item real e catalogado.
-  const buscaMemedCacheRef = useRef<Map<string, string | null>>(new Map());
+  const buscaMemedCacheRef = useRef<Map<string, { id: string | null; motivo: string }>>(new Map());
 
-  async function resolverIdViaBuscaMemed(nome: string): Promise<string | null> {
+  // Antes isso devolvia só string|null — uma busca que FALHOU (rede,
+  // not_configured, erro da Memed) virava idêntica a "não achou nada",
+  // escondendo a causa real do mesmo jeito que o catch mudo de addItem
+  // escondia falhas antes. Agora carrega o motivo junto.
+  async function resolverIdViaBuscaMemed(
+    nome: string,
+  ): Promise<{ id: string | null; motivo: string }> {
     const cache = buscaMemedCacheRef.current;
     if (cache.has(nome)) return cache.get(nome)!;
+    let resultado: { id: string | null; motivo: string };
     try {
       const r = await searchMemedIngredients({ data: { token, termo: nome } });
-      const id = r.ok && r.itens.length > 0 ? r.itens[0]!.id : null;
-      cache.set(nome, id);
-      return id;
-    } catch {
-      cache.set(nome, null);
-      return null;
+      if (!r.ok) {
+        resultado = { id: null, motivo: `busca falhou (${r.error})` };
+      } else if (r.itens.length === 0) {
+        resultado = { id: null, motivo: "busca não retornou nenhum resultado" };
+      } else {
+        resultado = {
+          id: r.itens[0]!.id,
+          motivo: `achado via busca: "${r.itens[0]!.nome}" (${r.itens.length} candidato(s))`,
+        };
+      }
+    } catch (e) {
+      resultado = {
+        id: null,
+        motivo: `busca lançou exceção: ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
+    cache.set(nome, resultado);
+    return resultado;
   }
 
   async function carregarNoMemed(api: MemedWidgetApi, opts?: { warmupMs?: number }) {
@@ -229,7 +247,7 @@ function MemedSimulacao() {
     // endpoint de busca separado para exames/laboratoriais, então esses
     // continuam indo por texto livre como antes (não são substância
     // controlada — não deveria ter a mesma exigência de catálogo).
-    const idsPorItem = new Map<string, string | null>();
+    const idsPorItem = new Map<string, { id: string | null; motivo: string }>();
     await Promise.all(
       cenario.itens
         .filter((item) => item.tipo === "med")
@@ -237,7 +255,11 @@ function MemedSimulacao() {
           const match = entries.find(
             (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
           );
-          idsPorItem.set(item.key, match?.memedId ?? (await resolverIdViaBuscaMemed(item.nome)));
+          if (match?.memedId) {
+            idsPorItem.set(item.key, { id: match.memedId, motivo: "catálogo pessoal" });
+            return;
+          }
+          idsPorItem.set(item.key, await resolverIdViaBuscaMemed(item.nome));
         }),
     );
 
@@ -266,14 +288,14 @@ function MemedSimulacao() {
             textoLivre += 1;
           }
         } else {
-          const id = idsPorItem.get(item.key) ?? null;
-          if (id) {
-            payload = { id, posologia: item.posologia ?? "" };
-            origem = `Memed (${id})`;
+          const resolvido = idsPorItem.get(item.key);
+          if (resolvido?.id) {
+            payload = { id: resolvido.id, posologia: item.posologia ?? "" };
+            origem = `Memed (${resolvido.id}) — ${resolvido.motivo}`;
             comId += 1;
           } else {
             payload = { nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" };
-            origem = "texto livre — não encontrado na base da Memed";
+            origem = `texto livre — ${resolvido?.motivo ?? "sem tentativa de busca"}`;
             textoLivre += 1;
           }
         }

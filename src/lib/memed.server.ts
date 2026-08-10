@@ -138,7 +138,7 @@ export function invalidateMemedToken(doctorId: string): void {
   tokenCache.delete(doctorId);
 }
 
-async function memedFetch(url: string, init: RequestInit, attempt = 0): Promise<Response> {
+export async function memedFetch(url: string, init: RequestInit, attempt = 0): Promise<Response> {
   try {
     return await fetch(url, { ...init, signal: AbortSignal.timeout(MEMED_TIMEOUT_MS) });
   } catch (e) {
