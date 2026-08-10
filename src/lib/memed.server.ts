@@ -80,8 +80,20 @@ export function isMemedLikelyOffline(now = new Date()): boolean {
   return hour < 6;
 }
 
+export type MemedPrescriberInfo = {
+  externalId: string;
+  nome: string;
+  cpfMasked: string;
+  crm: string;
+  crmUf: string;
+  crmCidade: string;
+  especialidade: string;
+  dataNascimento: string;
+  email: string;
+};
+
 export type MemedTokenResult =
-  | { ok: true; token: string }
+  | { ok: true; token: string; prescriber?: MemedPrescriberInfo }
   | {
       ok: false;
       error:
@@ -92,7 +104,31 @@ export type MemedTokenResult =
         | "invalid_credentials"
         | "memed_error";
       detail?: string;
+      prescriber?: MemedPrescriberInfo;
     };
+
+/** Mascara o CPF mantendo prefixo/sufixo — suficiente para conferir se o
+ * dado enviado já é o atualizado, sem despejar o documento inteiro no log. */
+export function maskCpf(raw: string | null | undefined): string {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length !== 11) return d ? `${d} (inválido)` : "—";
+  return `${d.slice(0, 3)}.***.***-${d.slice(9)}`;
+}
+
+export function describeMemedPrescriber(doctor: Doctor): MemedPrescriberInfo {
+  return {
+    externalId: doctor.id,
+    nome: doctor.nome,
+    cpfMasked: maskCpf(doctor.cpfMedico),
+    crm: doctor.crm ?? "",
+    crmUf: doctor.crmUf ?? "",
+    crmCidade: doctor.crmCidade ?? "",
+    especialidade: doctor.especialidade ?? "",
+    dataNascimento: doctor.dataNascimento ?? "",
+    email: doctor.email ?? "",
+  };
+}
+
 
 // Cache de token por médico: antes cada abertura do dialog de receita batia
 // em POST /usuarios, o que é lento e conta para o rate-limit da Memed.
@@ -192,8 +228,12 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
     return { ok: false, error: "missing_profile" };
   }
 
+  // Espelho do que estamos enviando à Memed — vai para o log e para a UI,
+  // para dar pra conferir se o cadastro já é o dado atualizado.
+  const prescriber = describeMemedPrescriber(doctor);
+
   const cached = tokenCache.get(doctor.id);
-  if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token };
+  if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token, prescriber };
 
   const { apiKey, secretKey } = memedKeys();
   const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
@@ -242,31 +282,32 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
     // e virava "memed_error" genérico. Classificado à parte para a UI poder
     // dizer o que de fato aconteceu (e não sugerir revisar cadastro à toa).
     if (res.status >= 500 || res.status === 429) {
-      console.error("[memed] indisponivel", { status: res.status, doctorId: doctor.id });
-      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}` };
+      console.error("[memed] indisponivel", { status: res.status, prescriber });
+      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}`, prescriber };
     }
     if (res.status === 401 || res.status === 403) {
-      console.error("[memed] credenciais_invalidas", { status: res.status });
-      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}` };
+      console.error("[memed] credenciais_invalidas", { status: res.status, prescriber });
+      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}`, prescriber };
     }
     const json: any = await res.json().catch(() => null);
     const jwtToken = json?.data?.attributes?.token;
     const status = json?.data?.attributes?.status as string | undefined;
     if (status === "Inativo") {
-      console.error("[memed] prescritor_inativo", { doctorId: doctor.id });
-      return { ok: false, error: "prescritor_inativo" };
+      console.error("[memed] prescritor_inativo", { prescriber });
+      return { ok: false, error: "prescritor_inativo", prescriber };
     }
     if (!res.ok || !jwtToken) {
       const detail = JSON.stringify(json)?.slice(0, 300);
-      console.error("[memed] token_error", { status: res.status, doctorId: doctor.id, detail });
-      return { ok: false, error: "memed_error", detail };
+      console.error("[memed] token_error", { status: res.status, prescriber, detail });
+      return { ok: false, error: "memed_error", detail, prescriber };
     }
 
     tokenCache.set(doctor.id, { token: jwtToken, expiresAt: Date.now() + TOKEN_TTL_MS });
-    return { ok: true, token: jwtToken };
+    console.info("[memed] token_ok", { prescriber });
+    return { ok: true, token: jwtToken, prescriber };
   } catch (e) {
-    console.error("[memed] token_network_error", { doctorId: doctor.id, error: String(e) });
-    return { ok: false, error: "memed_error", detail: String(e) };
+    console.error("[memed] token_network_error", { prescriber, error: String(e) });
+    return { ok: false, error: "memed_error", detail: String(e), prescriber };
   }
 }
 
