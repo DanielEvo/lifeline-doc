@@ -334,16 +334,21 @@ export async function checkMemedKeyPair(): Promise<
 // sem exigir CRM cadastrado. Nunca usado no fluxo de prescrição de verdade.
 // external_id é FIXO de propósito: antes usava Date.now() e criava um
 // prescritor novo na base da Memed a cada carregamento da bancada.
+//
+// CPF: o antigo 52998224725 é um CPF de teste muito difundido e já estava
+// cadastrado na base da Memed sob OUTRO external_id (erro 400 "Medico ja
+// cadastrado para o parceiro com esse cpf"). Trocado por um CPF dedicado
+// desta conta. Pode ser sobrescrito por env sem alterar código.
 const SANDBOX_DOCTOR_ID = "lifeline-sandbox-prescritor";
 
 export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
   const fakeDoctor = {
-    id: SANDBOX_DOCTOR_ID,
+    id: process.env["MEMED_SANDBOX_EXTERNAL_ID"] || SANDBOX_DOCTOR_ID,
     nome: "Teste Simulação",
     crm: "483920",
     crmUf: "SP",
-    cpfMedico: "52998224725",
+    cpfMedico: process.env["MEMED_SANDBOX_CPF"] || "41162652845",
     especialidade: "Clínica Geral",
     crmCidade: "São Paulo",
     dataNascimento: "1990-01-01",
@@ -351,3 +356,4 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
   } as Doctor;
   return getMemedPrescriberToken(fakeDoctor);
 }
+
