@@ -518,7 +518,7 @@ function MemedSimulacao() {
               config.error !== "memed_offline" && (
                 <p className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
                   {MEMED_ERROR_MESSAGES[config.error] ?? `Erro: ${config.error}`}
-                  {config.detail ? ` — ${config.detail}` : ""}
+                  {"detail" in config && config.detail ? ` — ${config.detail}` : ""}
                 </p>
               )}
 
