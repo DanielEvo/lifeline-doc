@@ -43,6 +43,20 @@ import {
   type FixtureItem,
 } from "@/lib/prescription-fixtures";
 
+// Mensagem específica por tipo de erro devolvido pela Memed — o `detail` bruto
+// vai junto porque é onde aparece a causa real (ex.: "Cadastro do profissional
+// com CRM ... já existe").
+const MEMED_ERROR_MESSAGES: Record<string, string> = {
+  unauthorized: "Sessão expirada — entre novamente para usar a bancada.",
+  missing_profile:
+    "Perfil do prescritor de teste está incompleto — não deveria acontecer no sandbox.",
+  prescritor_inativo:
+    "O prescritor sintético da bancada está com status Inativo na Memed. É preciso contatar o suporte Memed.",
+  invalid_credentials:
+    "As chaves foram rejeitadas nesta chamada específica, mesmo com o par ativo no check-key.",
+  memed_error: "Erro inesperado ao falar com a Memed. Veja o detalhe abaixo.",
+};
+
 export const Route = createFileRoute("/app/memed-simulacao")({
   component: MemedSimulacao,
   head: () => ({
