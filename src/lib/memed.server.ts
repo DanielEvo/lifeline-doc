@@ -339,7 +339,7 @@ export async function checkMemedKeyPair(): Promise<
 // cadastrado na base da Memed sob OUTRO external_id (erro 400 "Medico ja
 // cadastrado para o parceiro com esse cpf"). Trocado por um CPF dedicado
 // desta conta. Pode ser sobrescrito por env sem alterar código.
-const SANDBOX_DOCTOR_ID = process.env["MEMED_SANDBOX_EXTERNAL_ID"] || "lifeline-sandbox-prescritor";
+const SANDBOX_DOCTOR_ID = "lifeline-sandbox-prescritor";
 
 export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
