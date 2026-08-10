@@ -129,7 +129,6 @@ export function describeMemedPrescriber(doctor: Doctor): MemedPrescriberInfo {
   };
 }
 
-
 // Cache de token por médico: antes cada abertura do dialog de receita batia
 // em POST /usuarios, o que é lento e conta para o rate-limit da Memed.
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -389,7 +388,7 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
     nome: "Teste Simulação",
     crm: "483920",
     crmUf: "SP",
-    cpfMedico: process.env["MEMED_SANDBOX_CPF"] || "41162652845",
+    cpfMedico: process.env["MEMED_SANDBOX_CPF"] || "00759909890",
     especialidade: "Clínica Geral",
     crmCidade: "São Paulo",
     dataNascimento: "1990-01-01",
@@ -397,4 +396,3 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
   } as Doctor;
   return getMemedPrescriberToken(fakeDoctor);
 }
-
