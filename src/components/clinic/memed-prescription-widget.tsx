@@ -34,7 +34,9 @@ declare global {
       // 3º argumento.
       command: { send: (module: string, command: string, payload?: unknown) => Promise<unknown> };
       event: { add: (name: string, cb: (data: unknown) => void) => void };
-      module: { show: (name: string) => Promise<unknown> };
+      // hide confirmado na doc oficial (doc.memed.com.br/docs/frontend/
+      // comandos-mdhub/) — MdHub.module.hide('plataforma.prescricao').
+      module: { show: (name: string) => Promise<unknown>; hide: (name: string) => Promise<unknown> };
     };
   }
 }
@@ -42,6 +44,7 @@ declare global {
 export type MemedWidgetApi = {
   addItem: (payload: Record<string, unknown>) => Promise<unknown>;
   newPrescription: () => Promise<unknown>;
+  hide: () => Promise<unknown>;
 };
 
 export function MemedPrescriptionWidget({
@@ -186,7 +189,7 @@ export function MemedPrescriptionWidget({
               errorMsgRef.current =
                 "A Memed não confirmou a abertura do módulo em 10s (module.show() ficou pendurado). " +
                 "O módulo pode ter aparecido na tela mesmo assim — mas sem essa confirmação não é " +
-                "seguro chamar addItem. Recarregue a página e tente de novo.";
+                "seguro chamar addItem.";
               setStatus("error");
             }, 10_000);
             window.MdHub!.module
@@ -201,6 +204,7 @@ export function MemedPrescriptionWidget({
                     window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
                   newPrescription: () =>
                     window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+                  hide: () => window.MdHub!.module.hide("plataforma.prescricao"),
                 });
               })
               .catch((err: unknown) => {
@@ -263,11 +267,38 @@ export function MemedPrescriptionWidget({
   }, [token, scriptUrl, patientKey]);
 
 
+  // Retry sem recarregar a página inteira: manda hide() pra tentar limpar
+  // qualquer estado preso do lado da Memed antes de tentar show() de novo.
+  // hide() usa o mesmo mecanismo de postMessage sem timeout do MdHub (ver
+  // command.send no código-fonte oficial) — por isso corre contra um
+  // timeout próprio de 2s aqui, pra não deixar o próprio botão de retry
+  // travado também.
+  async function tentarNovamente() {
+    try {
+      await Promise.race([
+        window.MdHub?.module.hide("plataforma.prescricao") ?? Promise.resolve(),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    } catch {
+      // módulo pode nem ter chegado a inicializar — nada a desfazer
+    }
+    setStatus("ready-to-show");
+  }
+
   if (status === "error") {
     return (
-      <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
-        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>{errorMsgRef.current}</span>
+      <div className="flex flex-col items-start gap-2.5 rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{errorMsgRef.current}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => void tentarNovamente()}
+          className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 dark:bg-red-800"
+        >
+          Tentar de novo
+        </button>
       </div>
     );
   }
