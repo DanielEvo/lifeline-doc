@@ -1155,7 +1155,13 @@ export const getMemedSandboxConfig = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
     const result = await getMemedSandboxToken();
-    if (!result.ok) return { ok: false as const, error: result.error, detail: result.detail };
+    if (!result.ok)
+      return {
+        ok: false as const,
+        error: result.error,
+        detail: result.detail,
+        likelyOffline: isMemedLikelyOffline(),
+      };
     return {
       ok: true as const,
       token: result.token,
