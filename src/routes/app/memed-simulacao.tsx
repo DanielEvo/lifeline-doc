@@ -485,13 +485,28 @@ function MemedSimulacao() {
                 a página.
               </p>
             )}
-            {config?.ok === false && config.error !== "not_configured" && (
+            {config?.ok === false && config.error === "memed_offline" && config.likelyOffline && (
               <p className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
                 Não consegui falar com a Memed agora. O ambiente de homologação (compartilhado entre
                 parceiros) fica indisponível fora do horário comercial — 0h–6h em dias úteis, e o
                 dia inteiro em fins de semana. Tente de novo dentro desse horário.
               </p>
             )}
+            {config?.ok === false && config.error === "memed_offline" && !config.likelyOffline && (
+              <p className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+                A Memed respondeu com erro de indisponibilidade (5xx/429), mas estamos dentro do
+                horário comercial. Provável falha pontual do lado da Memed. Tente novamente em
+                alguns minutos.
+              </p>
+            )}
+            {config?.ok === false &&
+              config.error !== "not_configured" &&
+              config.error !== "memed_offline" && (
+                <p className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900">
+                  {MEMED_ERROR_MESSAGES[config.error] ?? `Erro: ${config.error}`}
+                  {config.detail ? ` — ${config.detail}` : ""}
+                </p>
+              )}
 
             {loaded && config?.ok && (
               <MemedPrescriptionWidget
