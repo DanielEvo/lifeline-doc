@@ -200,25 +200,45 @@ function MemedSimulacao() {
   ): Promise<{ id: string | null; motivo: string }> {
     const cache = buscaMemedCacheRef.current;
     if (cache.has(nome)) return cache.get(nome)!;
-    let resultado: { id: string | null; motivo: string };
-    try {
-      const r = await searchMemedIngredients({ data: { token, termo: nome } });
-      if (!r.ok) {
-        const detalheBruto = "detail" in r && r.detail ? ` — ${r.detail}` : "";
-        resultado = { id: null, motivo: `busca falhou (${r.error})${detalheBruto}` };
-      } else if (r.itens.length === 0) {
-        resultado = { id: null, motivo: "busca não retornou nenhum resultado" };
-      } else {
+    // A Memed devolveu "Any ingredients match with terms..." pra
+    // "Amitriptilina 25mg" — /drugs/ingredients busca por PRINCÍPIO ATIVO,
+    // não pelo nome completo com dosagem. Tenta o nome cheio primeiro, e
+    // se não achar, tenta versões progressivamente mais curtas: sem a
+    // dosagem/forma (tudo antes do primeiro token com dígito), depois só
+    // a primeira palavra como último recurso.
+    const semDosagem = nome.replace(/\s+\S*\d\S*.*$/, "").trim();
+    const primeiraPalavra = nome.trim().split(/\s+/)[0] ?? nome;
+    const candidatos = Array.from(
+      new Set([nome.trim(), semDosagem, primeiraPalavra].filter((t) => t.length >= 2)),
+    );
+
+    let resultado: { id: string | null; motivo: string } = {
+      id: null,
+      motivo: "nenhum termo de busca válido",
+    };
+    for (const termo of candidatos) {
+      try {
+        const r = await searchMemedIngredients({ data: { token, termo } });
+        if (r.ok && r.itens.length > 0) {
+          resultado = {
+            id: r.itens[0]!.id,
+            motivo: `achado buscando "${termo}": "${r.itens[0]!.nome}" (${r.itens.length} candidato(s))`,
+          };
+          break;
+        }
+        const detalheBruto = !r.ok && "detail" in r && r.detail ? ` — ${r.detail}` : "";
         resultado = {
-          id: r.itens[0]!.id,
-          motivo: `achado via busca: "${r.itens[0]!.nome}" (${r.itens.length} candidato(s))`,
+          id: null,
+          motivo: r.ok
+            ? `"${termo}" não retornou resultado`
+            : `"${termo}" falhou (${r.error})${detalheBruto}`,
+        };
+      } catch (e) {
+        resultado = {
+          id: null,
+          motivo: `"${termo}" lançou exceção: ${e instanceof Error ? e.message : String(e)}`,
         };
       }
-    } catch (e) {
-      resultado = {
-        id: null,
-        motivo: `busca lançou exceção: ${e instanceof Error ? e.message : String(e)}`,
-      };
     }
     cache.set(nome, resultado);
     return resultado;
