@@ -26,7 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -481,103 +480,91 @@ function MemedSimulacao() {
               </div>
             )}
 
-            {/* O módulo da Memed sempre se comportou como um overlay de tela
-                cheia — no fluxo real (pacientes.$id.tsx) ele já vive dentro
-                de um Dialog, então isso nunca chamava atenção lá. Aqui na
-                bancada ele estava solto num Card, então o mesmo
-                comportamento aparecia como "tela cobrindo tudo". Reproduz o
-                mesmo tratamento (Dialog, max-w-3xl — mesma largura usada no
-                fluxo real) em vez de lutar contra o que a Memed já faz. */}
-            <Dialog
-              open={loaded && config?.ok === true}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setLoaded(false);
-                  apiRef.current = null;
-                  setWidgetApi(null);
-                  setModuleStatus("loading");
-                  setItensState("pendente");
-                }
-              }}
-            >
-              {/* DialogContent do shadcn não tem max-height/overflow por
-                  padrão. O módulo Memed sozinho já tem minHeight: 700 —
-                  somado ao cabeçalho e ao painel de diagnóstico, o conteúdo
-                  estoura a viewport em telas menores e, sem rolagem
-                  explícita, o diagnóstico fica cortado fora da área visível
-                  sem nenhum jeito de rolar até ele. */}
-              <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-y-auto">
-                {loaded && config?.ok && (
-                  <>
-                    <div className="flex items-center justify-between gap-2 pr-6">
-                      <p className="text-xs text-muted-foreground">
-                        Cenário: <span className="font-medium text-foreground">{cenario.nome}</span>
-                      </p>
-                      {moduleStatus === "ready" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={itensState === "carregando"}
-                          onClick={() => {
-                            if (apiRef.current) void carregarNoMemed(apiRef.current);
-                          }}
-                        >
-                          {itensState === "carregando" ? (
-                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="mr-1.5 h-4 w-4" />
-                          )}
-                          Recarregar itens
-                        </Button>
+            {/* NÃO usar Dialog/Radix aqui: o script da Memed injeta o iframe
+                direto no DOM global (ver cleanup em
+                memed-prescription-widget.tsx, que faz
+                document.querySelectorAll em seletores como [id^="memed"] —
+                não escopado a nenhum container React). Isso pôs os nós da
+                Memed FORA da subárvore do DialogContent no DOM real, então
+                o "fechar ao clicar fora" do Radix tratava qualquer clique
+                dentro do próprio módulo Memed como clique fora do dialog —
+                fechando-o, o que desmontava o widget e disparava o cleanup
+                (logout + remoção dos nós) NO MEIO do carregamento dos
+                itens. Por isso os itens paravam de carregar E qualquer
+                clique voltava pra tela da bancada. Renderizado solto aqui,
+                sem Dialog — a Memed vai continuar se comportando como um
+                overlay de tela cheia por conta própria (isso é inerente ao
+                SDK dela, não dá pra evitar de dentro do nosso container),
+                mas pelo menos não corta a própria sessão no meio. */}
+            {loaded && config?.ok && (
+              <Card className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Cenário: <span className="font-medium text-foreground">{cenario.nome}</span>
+                  </p>
+                  {moduleStatus === "ready" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={itensState === "carregando"}
+                      onClick={() => {
+                        if (apiRef.current) void carregarNoMemed(apiRef.current);
+                      }}
+                    >
+                      {itensState === "carregando" ? (
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-1.5 h-4 w-4" />
                       )}
-                    </div>
-                    {diagCarga.length > 0 && (
-                      <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs ring-1 ring-border">
-                        <p className="mb-1.5 font-medium text-foreground">
-                          Diagnóstico do último carregamento — resposta bruta que a Memed devolveu
-                          pra cada item (mesmo quando não deu erro, mas o item não apareceu):
-                        </p>
-                        <ul className="space-y-1 font-mono text-[11px]">
-                          {diagCarga.map((d, idx) => (
-                            <li
-                              key={idx}
-                              className={
-                                d.ok
-                                  ? "text-emerald-700 dark:text-emerald-400"
-                                  : "text-red-700 dark:text-red-400"
-                              }
-                            >
-                              {d.ok ? "✓" : "✗"} {d.item}: {d.detalhe || "(resposta vazia)"}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <MemedPrescriptionWidget
-                      token={config.token}
-                      scriptUrl={config.scriptUrl}
-                      patient={config.patient}
-                      openLabel={`Abrir e carregar: ${cenario.nome}`}
-                      openHint="Isso abre o módulo Memed e já injeta todos os itens do cenário selecionado — sem precisar clicar em mais nada."
-                      onStatusChange={setModuleStatus}
-                      onReady={(api) => {
-                        apiRef.current = api;
-                        setWidgetApi(api);
-                        void carregarNoMemed(api, { warmupMs: 800 });
-                      }}
-                      onPrescricaoImpressa={(data) => {
-                        setResultado(data);
-                        toast.success("Resultado recebido — nada foi salvo.");
-                      }}
-                      onPrescricaoExcluida={(data) => {
-                        console.log("[bancada] prescricaoExcluida", data);
-                        toast.message("Prescrição excluída no módulo.");
-                      }}
-                    />
-                  </>
+                      Recarregar itens
+                    </Button>
+                  )}
+                </div>
+                {diagCarga.length > 0 && (
+                  <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs ring-1 ring-border">
+                    <p className="mb-1.5 font-medium text-foreground">
+                      Diagnóstico do último carregamento — resposta bruta que a Memed devolveu pra
+                      cada item (mesmo quando não deu erro, mas o item não apareceu):
+                    </p>
+                    <ul className="space-y-1 font-mono text-[11px]">
+                      {diagCarga.map((d, idx) => (
+                        <li
+                          key={idx}
+                          className={
+                            d.ok
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-red-700 dark:text-red-400"
+                          }
+                        >
+                          {d.ok ? "✓" : "✗"} {d.item}: {d.detalhe || "(resposta vazia)"}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
-              </DialogContent>
-            </Dialog>
+                <MemedPrescriptionWidget
+                  token={config.token}
+                  scriptUrl={config.scriptUrl}
+                  patient={config.patient}
+                  openLabel={`Abrir e carregar: ${cenario.nome}`}
+                  openHint="Isso abre o módulo Memed e já injeta todos os itens do cenário selecionado — sem precisar clicar em mais nada."
+                  onStatusChange={setModuleStatus}
+                  onReady={(api) => {
+                    apiRef.current = api;
+                    setWidgetApi(api);
+                    void carregarNoMemed(api, { warmupMs: 800 });
+                  }}
+                  onPrescricaoImpressa={(data) => {
+                    setResultado(data);
+                    toast.success("Resultado recebido — nada foi salvo.");
+                  }}
+                  onPrescricaoExcluida={(data) => {
+                    console.log("[bancada] prescricaoExcluida", data);
+                    toast.message("Prescrição excluída no módulo.");
+                  }}
+                />
+              </Card>
+            )}
           </div>
 
           {/* ── COLUNA C — resultado real ──────────────────────────────── */}
