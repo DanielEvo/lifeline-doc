@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -183,10 +184,19 @@ function MemedSimulacao() {
     },
   });
 
-  async function carregarNoMemed(api: MemedWidgetApi) {
+  async function carregarNoMemed(api: MemedWidgetApi, opts?: { warmupMs?: number }) {
     setItensState("carregando");
+    // Margem de segurança só no auto-carregamento (onReady): `module.show()`
+    // resolve quando a Memed ACEITA o comando de abrir, não necessariamente
+    // quando a UI interna do iframe já terminou de montar e está pronta pra
+    // aceitar addItem. No fluxo antigo de 2 cliques essa folga sempre existia
+    // de graça (o tempo entre abrir e a pessoa clicar em "carregar" à mão).
+    if (opts?.warmupMs) {
+      await new Promise((resolve) => setTimeout(resolve, opts.warmupMs));
+    }
     let doCatalogo = 0;
     let livres = 0;
+    let falhas = 0;
     for (const item of cenario.itens) {
       const match = entries.find(
         (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
@@ -204,11 +214,21 @@ function MemedSimulacao() {
           livres += 1;
         }
       } catch {
-        livres += 1;
+        // Antes isso caía no mesmo balde de "texto livre" — uma falha real
+        // de addItem virava sucesso mentiroso no toast, escondendo o
+        // problema. Agora falha é contada à parte e avisada.
+        falhas += 1;
       }
     }
     setItensState("carregado");
-    toast.success(`${doCatalogo} do catálogo, ${livres} como texto livre`);
+    if (falhas > 0) {
+      toast.error(
+        `${falhas} item(ns) não entraram no módulo — use "Recarregar itens" pra tentar de novo.`,
+      );
+    }
+    if (doCatalogo > 0 || livres > 0) {
+      toast.success(`${doCatalogo} do catálogo, ${livres} como texto livre`);
+    }
   }
 
   function exportarSessao() {
@@ -442,49 +462,75 @@ function MemedSimulacao() {
               </div>
             )}
 
-            {loaded && config?.ok && (
-              <Card className="p-4">
-                <MemedPrescriptionWidget
-                  token={config.token}
-                  scriptUrl={config.scriptUrl}
-                  patient={config.patient}
-                  openLabel={`Abrir e carregar: ${cenario.nome}`}
-                  openHint="Isso abre o módulo Memed e já injeta todos os itens do cenário selecionado — sem precisar clicar em mais nada."
-                  onStatusChange={setModuleStatus}
-                  onReady={(api) => {
-                    apiRef.current = api;
-                    setWidgetApi(api);
-                    void carregarNoMemed(api);
-                  }}
-                  onPrescricaoImpressa={(data) => {
-                    setResultado(data);
-                    toast.success("Resultado recebido — nada foi salvo.");
-                  }}
-                  onPrescricaoExcluida={(data) => {
-                    console.log("[bancada] prescricaoExcluida", data);
-                    toast.message("Prescrição excluída no módulo.");
-                  }}
-                />
-              </Card>
-            )}
-
-            {moduleStatus === "ready" && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={itensState === "carregando"}
-                onClick={() => {
-                  if (apiRef.current) void carregarNoMemed(apiRef.current);
-                }}
-              >
-                {itensState === "carregando" ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-1.5 h-4 w-4" />
+            {/* O módulo da Memed sempre se comportou como um overlay de tela
+                cheia — no fluxo real (pacientes.$id.tsx) ele já vive dentro
+                de um Dialog, então isso nunca chamava atenção lá. Aqui na
+                bancada ele estava solto num Card, então o mesmo
+                comportamento aparecia como "tela cobrindo tudo". Reproduz o
+                mesmo tratamento (Dialog, max-w-3xl — mesma largura usada no
+                fluxo real) em vez de lutar contra o que a Memed já faz. */}
+            <Dialog
+              open={loaded && config?.ok === true}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setLoaded(false);
+                  apiRef.current = null;
+                  setWidgetApi(null);
+                  setModuleStatus("loading");
+                  setItensState("pendente");
+                }
+              }}
+            >
+              <DialogContent className="max-w-3xl">
+                {loaded && config?.ok && (
+                  <>
+                    <div className="flex items-center justify-between gap-2 pr-6">
+                      <p className="text-xs text-muted-foreground">
+                        Cenário: <span className="font-medium text-foreground">{cenario.nome}</span>
+                      </p>
+                      {moduleStatus === "ready" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={itensState === "carregando"}
+                          onClick={() => {
+                            if (apiRef.current) void carregarNoMemed(apiRef.current);
+                          }}
+                        >
+                          {itensState === "carregando" ? (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1.5 h-4 w-4" />
+                          )}
+                          Recarregar itens
+                        </Button>
+                      )}
+                    </div>
+                    <MemedPrescriptionWidget
+                      token={config.token}
+                      scriptUrl={config.scriptUrl}
+                      patient={config.patient}
+                      openLabel={`Abrir e carregar: ${cenario.nome}`}
+                      openHint="Isso abre o módulo Memed e já injeta todos os itens do cenário selecionado — sem precisar clicar em mais nada."
+                      onStatusChange={setModuleStatus}
+                      onReady={(api) => {
+                        apiRef.current = api;
+                        setWidgetApi(api);
+                        void carregarNoMemed(api, { warmupMs: 800 });
+                      }}
+                      onPrescricaoImpressa={(data) => {
+                        setResultado(data);
+                        toast.success("Resultado recebido — nada foi salvo.");
+                      }}
+                      onPrescricaoExcluida={(data) => {
+                        console.log("[bancada] prescricaoExcluida", data);
+                        toast.message("Prescrição excluída no módulo.");
+                      }}
+                    />
+                  </>
                 )}
-                Recarregar itens de "{cenario.nome}" no Memed
-              </Button>
-            )}
+              </DialogContent>
+            </Dialog>
           </div>
 
           {/* ── COLUNA C — resultado real ──────────────────────────────── */}
