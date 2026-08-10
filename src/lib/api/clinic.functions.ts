@@ -1161,10 +1161,12 @@ export const getMemedSandboxConfig = createServerFn({ method: "POST" })
         error: result.error,
         detail: result.detail,
         likelyOffline: isMemedLikelyOffline(),
+        prescriber: result.prescriber,
       };
     return {
       ok: true as const,
       token: result.token,
+      prescriber: result.prescriber,
       scriptUrl: memedScriptUrl(),
       patient: {
         idExterno: "sandbox-patient",
