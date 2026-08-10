@@ -4,30 +4,35 @@
 // de documentos com o RESULTADO REAL devolvido pela Memed.
 // Nada aqui grava em prontuário real.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ChevronDown,
+  Code2,
   Copy,
   Download,
   ExternalLink,
   FlaskConical,
   Loader2,
+  RefreshCw,
   Search,
-  Sparkles,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   MemedPrescriptionWidget,
   type MemedWidgetApi,
 } from "@/components/clinic/memed-prescription-widget";
+import { PrescricaoStepper, type PrescricaoStep } from "@/components/clinic/prescricao-stepper";
 import { checkMemedKeys, getMemedSandboxConfig } from "@/lib/api/clinic.functions";
 import {
   harvestMemedProtocolIds,
@@ -87,12 +92,19 @@ type CatalogEntryView = {
   usos: number;
 };
 
+type ItensState = "pendente" | "carregando" | "carregado";
+type ModuleStatus = "loading" | "ready-to-show" | "ready" | "error";
+
 function MemedSimulacao() {
   const { token } = useClinic();
   const [loaded, setLoaded] = useState(false);
   const [scenarioIdx, setScenarioIdx] = useState(0);
   const [widgetApi, setWidgetApi] = useState<MemedWidgetApi | null>(null);
+  const [moduleStatus, setModuleStatus] = useState<ModuleStatus>("loading");
+  const [itensState, setItensState] = useState<ItensState>("pendente");
   const [resultado, setResultado] = useState<unknown>(null);
+  const [verJson, setVerJson] = useState(false);
+  const [ferramentasAbertas, setFerramentasAbertas] = useState(false);
   const [termo, setTermo] = useState("");
   const [novo, setNovo] = useState({ nome: "", via: "", controlClass: "" });
   const apiRef = useRef<MemedWidgetApi | null>(null);
@@ -126,6 +138,14 @@ function MemedSimulacao() {
     }
     return grupos;
   }, [cenario]);
+
+  // Cenário trocado com o módulo já aberto: os itens carregados eram do
+  // cenário anterior, então sinaliza que é preciso recarregar em vez de
+  // deixar o passo "itens carregados" mentindo sobre o que está no módulo.
+  useEffect(() => {
+    setItensState("pendente");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioIdx]);
 
   const harvest = useMutation({
     mutationFn: () => harvestMemedProtocolIds({ data: { token } }),
@@ -164,9 +184,8 @@ function MemedSimulacao() {
     },
   });
 
-  async function carregarNoMemed() {
-    const api = apiRef.current;
-    if (!api) return;
+  async function carregarNoMemed(api: MemedWidgetApi) {
+    setItensState("carregando");
     let doCatalogo = 0;
     let livres = 0;
     for (const item of cenario.itens) {
@@ -189,6 +208,7 @@ function MemedSimulacao() {
         livres += 1;
       }
     }
+    setItensState("carregado");
     toast.success(`${doCatalogo} do catálogo, ${livres} como texto livre`);
   }
 
@@ -217,6 +237,23 @@ function MemedSimulacao() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const currentStep: PrescricaoStep = !loaded || moduleStatus === "loading" || moduleStatus === "error"
+    ? "carregando"
+    : moduleStatus === "ready-to-show"
+      ? "pronto-pra-abrir"
+      : itensState === "pendente"
+        ? "aberto"
+        : itensState === "carregando"
+          ? "itens-carregados"
+          : !resultado
+            ? "aguardando-geracao"
+            : "resultado-comparado";
+
+  const stepSpinning =
+    currentStep === "carregando" ||
+    (currentStep === "itens-carregados" && itensState === "carregando") ||
+    currentStep === "aguardando-geracao";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -265,224 +302,72 @@ function MemedSimulacao() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          {/* ── COLUNA ESQUERDA — bancada ─────────────────────────────── */}
-          <div className="space-y-4">
-            <Card className="space-y-3 p-4">
-              <Label className="text-xs">Cenário</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {SCENARIOS.map((s, i) => (
-                  <Button
-                    key={s.nome}
-                    variant={i === scenarioIdx ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setScenarioIdx(i)}
-                  >
-                    {s.nome}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-[11px] leading-snug text-muted-foreground">{cenario.desc}</p>
+        <Card className="p-3">
+          <PrescricaoStepper current={currentStep} spinning={stepSpinning} />
+        </Card>
 
-              <div className="space-y-2">
-                {cenario.itens.map((item) => {
-                  const kind = predictRx(item);
-                  return (
-                    <div key={item.key} className="rounded-lg border p-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{item.nome}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {item.posologia ?? item.indicacoes ?? item.justificativa ?? "—"}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(item.nome);
-                            toast.success("Copiado");
-                          }}
-                          aria-label={`Copiar ${item.nome}`}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                      <Badge variant="secondary" className="mt-1.5 text-[10px]">
-                        {RX_LABEL[kind].label}
-                        {RX_LABEL[kind].sub ? ` · ${RX_LABEL[kind].sub}` : ""}
-                      </Badge>
-                      {item.aviso && (
-                        <div className="mt-1.5 flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
-                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                          <span>{item.aviso}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <Button
-                className="w-full"
-                disabled={!widgetApi}
-                onClick={() => void carregarNoMemed()}
-              >
-                <Sparkles className="mr-1.5 h-4 w-4" />
-                Carregar no Memed
-              </Button>
-              {!widgetApi && (
-                <p className="text-[11px] text-muted-foreground">
-                  Disponível assim que o módulo ao lado terminar de carregar.
-                </p>
-              )}
-            </Card>
-
-            <Card className="space-y-2 p-4">
-              <Label className="text-xs">Sugestões (mais usados)</Label>
-              {entries.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Catálogo vazio — colha os IDs dos protocolos ou salve um medicamento seu.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {entries.slice(0, 20).map((e) => (
-                    <Button
-                      key={e.id}
-                      variant="outline"
-                      size="sm"
-                      disabled={!widgetApi}
-                      onClick={async () => {
-                        try {
-                          await apiRef.current?.addItem(
-                            e.memedId
-                              ? { id: e.memedId, posologia: e.posologiaPadrao ?? "" }
-                              : { nome: e.nome, posologia: e.posologiaPadrao ?? "" },
-                          );
-                          toast.success(`${e.nome} adicionado.`);
-                        } catch {
-                          toast.error("Não consegui adicionar este item.");
-                        }
-                      }}
-                    >
-                      {e.nome}
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </Card>
-
-            <Card className="space-y-2 p-4">
-              <Label className="text-xs">Colher IDs dos protocolos</Label>
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                Monte o cenário no módulo ao lado, salve como Protocolo, e clique aqui para importar
-                os IDs reais da Memed.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={harvest.isPending}
-                onClick={() => harvest.mutate()}
-              >
-                {harvest.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                Colher IDs dos protocolos
-              </Button>
-            </Card>
-
-            <Card className="space-y-3 p-4">
-              <Label className="text-xs">Não encontrei o item</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={termo}
-                  onChange={(e) => setTermo(e.target.value)}
-                  placeholder="Buscar princípio ativo"
-                  className="text-sm"
-                />
+        {/* ── GRID PRINCIPAL — cenário / módulo Memed / resultado ────────── */}
+        <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_300px]">
+          {/* ── COLUNA A — cenário ─────────────────────────────────────── */}
+          <Card className="space-y-3 p-4">
+            <Label className="text-xs">Cenário</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {SCENARIOS.map((s, i) => (
                 <Button
-                  variant="outline"
-                  size="icon"
-                  disabled={termo.trim().length < 2 || busca.isPending}
-                  onClick={() => busca.mutate(termo.trim())}
-                  aria-label="Buscar princípio ativo"
+                  key={s.nome}
+                  variant={i === scenarioIdx ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setScenarioIdx(i)}
                 >
-                  {busca.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4" />
-                  )}
+                  {s.nome}
                 </Button>
-              </div>
-              {busca.data?.ok && (
-                <ul className="space-y-1">
-                  {busca.data.itens.length === 0 && (
-                    <li className="text-[11px] text-muted-foreground">Nada encontrado.</li>
-                  )}
-                  {busca.data.itens.map((i: { id: string; nome: string }) => (
-                    <li key={i.id} className="text-xs">
-                      {i.nome}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {busca.data && !busca.data.ok && (
-                <p className="text-[11px] text-muted-foreground">
-                  Busca indisponível neste ambiente.
-                </p>
-              )}
+              ))}
+            </div>
+            <p className="text-[11px] leading-snug text-muted-foreground">{cenario.desc}</p>
 
-              <div className="space-y-2 border-t pt-3">
-                <Label className="text-xs">Salvar um medicamento seu</Label>
-                <Input
-                  value={novo.nome}
-                  onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
-                  placeholder="Nome"
-                  className="text-sm"
-                />
-                <div className="flex gap-2">
-                  <Input
-                    value={novo.via}
-                    onChange={(e) => setNovo({ ...novo, via: e.target.value })}
-                    placeholder="Via"
-                    className="text-sm"
-                  />
-                  <Input
-                    value={novo.controlClass}
-                    onChange={(e) => setNovo({ ...novo, controlClass: e.target.value })}
-                    placeholder="Classe (C1, B1…)"
-                    className="text-sm"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    disabled={novo.nome.trim().length < 2 || salvarMed.isPending}
-                    onClick={() => salvarMed.mutate()}
-                  >
-                    {salvarMed.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                    Salvar no catálogo
-                  </Button>
-                  {novo.nome.trim().length >= 2 && (
-                    <Button variant="ghost" size="sm" asChild>
-                      <a
-                        href={`https://www.google.com/search?q=${encodeURIComponent(
-                          `${novo.nome} bula anvisa portaria 344`,
-                        )}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+            <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+              {cenario.itens.map((item) => {
+                const kind = predictRx(item);
+                return (
+                  <div key={item.key} className="rounded-lg border p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.nome}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {item.posologia ?? item.indicacoes ?? item.justificativa ?? "—"}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.nome);
+                          toast.success("Copiado");
+                        }}
+                        aria-label={`Copiar ${item.nome}`}
                       >
-                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                        Conferir classe
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <Badge variant="secondary" className="mt-1.5 text-[10px]">
+                      {RX_LABEL[kind].label}
+                      {RX_LABEL[kind].sub ? ` · ${RX_LABEL[kind].sub}` : ""}
+                    </Badge>
+                    {item.aviso && (
+                      <div className="mt-1.5 flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>{item.aviso}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
 
-          {/* ── COLUNA DIREITA — widget + resultado ───────────────────── */}
-          <div className="space-y-4">
+          {/* ── COLUNA B — módulo Memed ────────────────────────────────── */}
+          <div className="space-y-3">
             {!loaded && (
               <Button onClick={() => sandbox.mutate()} disabled={sandbox.isPending}>
                 {sandbox.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
@@ -548,39 +433,244 @@ function MemedSimulacao() {
               </div>
             )}
 
-
             {loaded && config?.ok && (
-              <MemedPrescriptionWidget
-                token={config.token}
-                scriptUrl={config.scriptUrl}
-                patient={config.patient}
-                onReady={(api) => {
-                  apiRef.current = api;
-                  setWidgetApi(api);
-                }}
-                onPrescricaoImpressa={(data) => {
-                  setResultado(data);
-                  toast.success("Resultado recebido — nada foi salvo.");
-                }}
-                onPrescricaoExcluida={(data) => {
-                  console.log("[bancada] prescricaoExcluida", data);
-                  toast.message("Prescrição excluída no módulo.");
-                }}
-              />
+              <Card className="p-4">
+                <MemedPrescriptionWidget
+                  token={config.token}
+                  scriptUrl={config.scriptUrl}
+                  patient={config.patient}
+                  openLabel={`Abrir e carregar: ${cenario.nome}`}
+                  openHint="Isso abre o módulo Memed e já injeta todos os itens do cenário selecionado — sem precisar clicar em mais nada."
+                  onStatusChange={setModuleStatus}
+                  onReady={(api) => {
+                    apiRef.current = api;
+                    setWidgetApi(api);
+                    void carregarNoMemed(api);
+                  }}
+                  onPrescricaoImpressa={(data) => {
+                    setResultado(data);
+                    toast.success("Resultado recebido — nada foi salvo.");
+                  }}
+                  onPrescricaoExcluida={(data) => {
+                    console.log("[bancada] prescricaoExcluida", data);
+                    toast.message("Prescrição excluída no módulo.");
+                  }}
+                />
+              </Card>
             )}
 
-            <Card className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs">Resultado real da Memed</Label>
-                <Button variant="outline" size="sm" onClick={exportarSessao}>
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Exportar sessão
-                </Button>
-              </div>
-              <ResultadoReal data={resultado} />
-            </Card>
+            {moduleStatus === "ready" && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={itensState === "carregando"}
+                onClick={() => {
+                  if (apiRef.current) void carregarNoMemed(apiRef.current);
+                }}
+              >
+                {itensState === "carregando" ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1.5 h-4 w-4" />
+                )}
+                Recarregar itens de "{cenario.nome}" no Memed
+              </Button>
+            )}
           </div>
+
+          {/* ── COLUNA C — resultado real ──────────────────────────────── */}
+          <Card className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Resultado real da Memed</Label>
+              <Button variant="outline" size="sm" onClick={exportarSessao}>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Exportar
+              </Button>
+            </div>
+            <ResultadoReal data={resultado} />
+            {resultado != null && (
+              <Collapsible open={verJson} onOpenChange={setVerJson}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="w-full justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Code2 className="h-3.5 w-3.5" />
+                      Ver JSON completo
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${verJson ? "rotate-180" : ""}`}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <pre className="mt-2 max-h-72 overflow-auto rounded bg-muted p-2 text-[10px]">
+                    {JSON.stringify(resultado, null, 2)}
+                  </pre>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </Card>
         </div>
+
+        {/* ── FERRAMENTAS SECUNDÁRIAS DO CATÁLOGO ─────────────────────── */}
+        <Collapsible open={ferramentasAbertas} onOpenChange={setFerramentasAbertas}>
+          <Card className="p-4">
+            <CollapsibleTrigger asChild>
+              <button type="button" className="flex w-full items-center justify-between text-left">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <Wrench className="h-4 w-4 text-muted-foreground" />
+                  Ferramentas do catálogo
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    ferramentasAbertas ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="text-xs">Sugestões (mais usados)</Label>
+                {entries.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Catálogo vazio — colha os IDs dos protocolos ou salve um medicamento seu.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {entries.slice(0, 20).map((e) => (
+                      <Button
+                        key={e.id}
+                        variant="outline"
+                        size="sm"
+                        disabled={!widgetApi}
+                        onClick={async () => {
+                          try {
+                            await apiRef.current?.addItem(
+                              e.memedId
+                                ? { id: e.memedId, posologia: e.posologiaPadrao ?? "" }
+                                : { nome: e.nome, posologia: e.posologiaPadrao ?? "" },
+                            );
+                            toast.success(`${e.nome} adicionado.`);
+                          } catch {
+                            toast.error("Não consegui adicionar este item.");
+                          }
+                        }}
+                      >
+                        {e.nome}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-2 border-t pt-3">
+                  <Label className="text-xs">Colher IDs dos protocolos</Label>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    Monte o cenário no módulo, salve como Protocolo, e clique aqui para importar os
+                    IDs reais da Memed.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={harvest.isPending}
+                    onClick={() => harvest.mutate()}
+                  >
+                    {harvest.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                    Colher IDs dos protocolos
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Não encontrei o item</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={termo}
+                    onChange={(e) => setTermo(e.target.value)}
+                    placeholder="Buscar princípio ativo"
+                    className="text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    disabled={termo.trim().length < 2 || busca.isPending}
+                    onClick={() => busca.mutate(termo.trim())}
+                    aria-label="Buscar princípio ativo"
+                  >
+                    {busca.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {busca.data?.ok && (
+                  <ul className="space-y-1">
+                    {busca.data.itens.length === 0 && (
+                      <li className="text-[11px] text-muted-foreground">Nada encontrado.</li>
+                    )}
+                    {busca.data.itens.map((i: { id: string; nome: string }) => (
+                      <li key={i.id} className="text-xs">
+                        {i.nome}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {busca.data && !busca.data.ok && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Busca indisponível neste ambiente.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Salvar um medicamento seu</Label>
+                <Input
+                  value={novo.nome}
+                  onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
+                  placeholder="Nome"
+                  className="text-sm"
+                />
+                <div className="flex gap-2">
+                  <Input
+                    value={novo.via}
+                    onChange={(e) => setNovo({ ...novo, via: e.target.value })}
+                    placeholder="Via"
+                    className="text-sm"
+                  />
+                  <Input
+                    value={novo.controlClass}
+                    onChange={(e) => setNovo({ ...novo, controlClass: e.target.value })}
+                    placeholder="Classe (C1, B1…)"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={novo.nome.trim().length < 2 || salvarMed.isPending}
+                    onClick={() => salvarMed.mutate()}
+                  >
+                    {salvarMed.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                    Salvar no catálogo
+                  </Button>
+                  {novo.nome.trim().length >= 2 && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <a
+                        href={`https://www.google.com/search?q=${encodeURIComponent(
+                          `${novo.nome} bula anvisa portaria 344`,
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                        Conferir classe
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </div>
     </div>
   );

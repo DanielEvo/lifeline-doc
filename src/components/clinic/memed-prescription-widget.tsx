@@ -52,6 +52,8 @@ export function MemedPrescriptionWidget({
   onPrescricaoImpressa,
   onPrescricaoExcluida,
   onReady,
+  openLabel,
+  openHint,
 }: {
   token: string;
   scriptUrl: string;
@@ -60,12 +62,21 @@ export function MemedPrescriptionWidget({
   onPrescricaoImpressa: (data: unknown) => void;
   onPrescricaoExcluida?: (data: unknown) => void;
   onReady?: (api: MemedWidgetApi) => void;
+  // Customização opcional do estado "pronto pra abrir" — usado pela bancada
+  // de teste para deixar claro que abrir também vai carregar o cenário.
+  // Sem esses props o texto padrão ("Abrir prescrição Memed") é preservado,
+  // então o fluxo real de prescrição não é afetado.
+  openLabel?: string;
+  openHint?: string;
+  // Notifica cada transição de status — opcional, usado pela bancada de
+  // teste para alimentar o indicador de progresso. Não afeta o fluxo real.
+  onStatusChange?: (status: "loading" | "ready-to-show" | "ready" | "error") => void;
 }) {
   // "ready-to-show": módulo inicializado (setPaciente/setWorkplace feitos),
   // mas MdHub.module.show ainda não foi chamado — a doc pede explicitamente
   // que `show` rode no clique de um botão, não sozinho dentro do listener
   // de core:moduleInit.
-  const [status, setStatus] = useState<"loading" | "ready-to-show" | "ready" | "error">("loading");
+  const [status, _setStatus] = useState<"loading" | "ready-to-show" | "ready" | "error">("loading");
   const errorMsgRef = useRef<string>("Não consegui carregar o módulo da Memed.");
   const containerRef = useRef<HTMLDivElement>(null);
   const abrirRef = useRef<() => void>(() => {});
@@ -73,9 +84,15 @@ export function MemedPrescriptionWidget({
   const impressaRef = useRef(onPrescricaoImpressa);
   const excluidaRef = useRef(onPrescricaoExcluida);
   const readyRef = useRef(onReady);
+  const statusChangeRef = useRef(onStatusChange);
   impressaRef.current = onPrescricaoImpressa;
   excluidaRef.current = onPrescricaoExcluida;
   readyRef.current = onReady;
+  statusChangeRef.current = onStatusChange;
+  const setStatus = (next: "loading" | "ready-to-show" | "ready" | "error") => {
+    _setStatus(next);
+    statusChangeRef.current?.(next);
+  };
   // Evita despachar duas vezes o mesmo evento quando a Memed reemite.
   const handledRef = useRef<Set<string>>(new Set());
 
@@ -232,25 +249,28 @@ export function MemedPrescriptionWidget({
       {status === "ready-to-show" && (
         <div className="flex min-h-[300px] flex-col items-center justify-center gap-3">
           <p className="text-sm text-muted-foreground">
-            Prescritor e paciente carregados — pronto para prescrever.
+            {openHint ?? "Prescritor e paciente carregados — pronto para prescrever."}
           </p>
           <button
             type="button"
             onClick={() => abrirRef.current()}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
           >
-            Abrir prescrição Memed
+            {openLabel ?? "Abrir prescrição Memed"}
           </button>
         </div>
       )}
-      {/* min-width 820px é exigência conhecida do embed Memed — não reduzir.
+      {/* min-width 640px está EM TESTE (era 820px). O handover técnico da
+          Memed (Lacuna #4) registra que o valor de 820 nunca foi confirmado
+          em nenhuma página oficial da doc — se o iframe cortar conteúdo ou
+          quebrar em algum navegador, volte para 820 aqui.
           O wrapper rola horizontalmente para não estourar o dialog em telas
-          menores que 900px (notebook), em vez de cortar o módulo. Fica
-          sempre montado no DOM (a Memed pode depender disso pra encontrar
-          onde inserir o iframe) — só escondido visualmente até o clique em
-          "Abrir prescrição", que é quando `MdHub.module.show` de fato roda. */}
+          estreitas, em vez de cortar o módulo. Fica sempre montado no DOM (a
+          Memed pode depender disso pra encontrar onde inserir o iframe) — só
+          escondido visualmente até o clique em "Abrir prescrição", que é
+          quando `MdHub.module.show` de fato roda. */}
       <div className={`w-full overflow-x-auto ${status === "ready" ? "" : "hidden"}`}>
-        <div ref={containerRef} style={{ minWidth: 820, minHeight: 700 }} className="w-full" />
+        <div ref={containerRef} style={{ minWidth: 640, minHeight: 700 }} className="w-full" />
       </div>
     </div>
   );
