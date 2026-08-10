@@ -500,7 +500,13 @@ function MemedSimulacao() {
                 }
               }}
             >
-              <DialogContent className="max-w-3xl">
+              {/* DialogContent do shadcn não tem max-height/overflow por
+                  padrão. O módulo Memed sozinho já tem minHeight: 700 —
+                  somado ao cabeçalho e ao painel de diagnóstico, o conteúdo
+                  estoura a viewport em telas menores e, sem rolagem
+                  explícita, o diagnóstico fica cortado fora da área visível
+                  sem nenhum jeito de rolar até ele. */}
+              <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-y-auto">
                 {loaded && config?.ok && (
                   <>
                     <div className="flex items-center justify-between gap-2 pr-6">
