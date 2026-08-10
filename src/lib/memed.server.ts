@@ -228,8 +228,12 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
     return { ok: false, error: "missing_profile" };
   }
 
+  // Espelho do que estamos enviando à Memed — vai para o log e para a UI,
+  // para dar pra conferir se o cadastro já é o dado atualizado.
+  const prescriber = describeMemedPrescriber(doctor);
+
   const cached = tokenCache.get(doctor.id);
-  if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token };
+  if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token, prescriber };
 
   const { apiKey, secretKey } = memedKeys();
   const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
