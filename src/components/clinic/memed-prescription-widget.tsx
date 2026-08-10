@@ -273,7 +273,7 @@ export function MemedPrescriptionWidget({
   }
 
   return (
-    <div>
+    <div className="relative">
       {status === "loading" && (
         <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando módulo Memed…
@@ -297,21 +297,23 @@ export function MemedPrescriptionWidget({
           a pedido do usuário — era originalmente 820x700, e o handover
           técnico da Memed (Lacuna #4) registra que 820 nunca foi confirmado
           em nenhuma página oficial da doc.
-          RESSALVA IMPORTANTE: descobrimos (na investigação do bug do Dialog)
-          que a Memed injeta o iframe/overlay dela direto no DOM global,
-          fora de qualquer container React que a gente controle — então é
-          bem possível que esse valor só afete o placeholder ANTES do
-          módulo abrir (estados "loading"/"ready-to-show"), e não o módulo
-          já aberto em si, que provavelmente continua ocupando a tela
-          inteira por conta própria independente do que a gente configura
-          aqui. Só teste ao vivo confirma. Se cortar conteúdo ou quebrar,
-          volte para 640x700 (ou 820x700, o valor original).
-          O wrapper rola horizontalmente para não estourar o layout em telas
-          estreitas, em vez de cortar o módulo. Fica sempre montado no DOM (a
-          Memed pode depender disso pra encontrar onde inserir o iframe) — só
-          escondido visualmente até o clique em "Abrir prescrição", que é
-          quando `MdHub.module.show` de fato roda. */}
-      <div className={`w-full overflow-x-auto ${status === "ready" ? "" : "hidden"}`}>
+          MUDANÇA IMPORTANTE: antes esse container ficava com `hidden`
+          (display:none) até status virar "ready". Suspeita nova, motivada
+          pelo diagnóstico confirmado de que module.show() trava sem nunca
+          resolver: se a Memed tenta medir/inicializar o iframe dela dentro
+          (ou perto d)o nosso container no momento exato em que chamamos
+          show(), um elemento com display:none tem 0×0 de dimensão e não
+          participa de layout/paint — isso é uma causa clássica de SDKs de
+          terceiro travarem esperando uma condição de visibilidade que
+          nunca chega. Trocado por `absolute` fora da tela (mantém
+          dimensões reais, só tira da área visível) em vez de display:none.
+          Ainda é uma hipótese, não confirmada — se não resolver o
+          travamento, volte para a versão com `hidden`. */}
+      <div
+        className={`w-full overflow-x-auto ${
+          status === "ready" ? "" : "invisible absolute left-0 top-0 -z-10"
+        }`}
+      >
         <div ref={containerRef} style={{ minWidth: 320, minHeight: 350 }} className="w-full" />
       </div>
     </div>
