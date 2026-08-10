@@ -41,12 +41,7 @@ import {
   searchMemedIngredients,
 } from "@/lib/api/memed-catalog.functions";
 import { useClinic } from "@/lib/clinic-context";
-import {
-  predictRx,
-  RX_LABEL,
-  SCENARIOS,
-  type FixtureItem,
-} from "@/lib/prescription-fixtures";
+import { predictRx, RX_LABEL, SCENARIOS, type FixtureItem } from "@/lib/prescription-fixtures";
 
 // Mensagem específica por tipo de erro devolvido pela Memed — o `detail` bruto
 // vai junto porque é onde aparece a causa real (ex.: "Cadastro do profissional
@@ -303,7 +298,22 @@ function MemedSimulacao() {
         // "com sucesso" sem o item de fato aparecer no módulo — sem isso,
         // não teríamos como distinguir "resolveu vazio" de "resolveu com o
         // item confirmado" só olhando o toast de sucesso.
-        const resposta = await api.addItem(payload);
+        //
+        // addItem usa MdHub.command.send por baixo — confirmado no
+        // código-fonte oficial (src/command.js) que esse mecanismo NÃO TEM
+        // NENHUM TIMEOUT: se a resposta via postMessage nunca chegar, a
+        // promise fica pendurada pra sempre. Sem esse timeout aqui, o
+        // primeiro item que travasse parava o loop inteiro — nenhum item
+        // seguinte seria tentado, o painel de diagnóstico nunca apareceria
+        // (o loop nunca chegava no fim) e itensState ficaria preso em
+        // "carregando" pra sempre. É o mesmo problema que já corrigimos
+        // pra module.show(), só que faltava aplicar aqui também.
+        const addItemTimeoutMsg =
+          "addItem não respondeu em 8s (comando MdHub sem timeout nativo travou)";
+        const resposta = await Promise.race([
+          api.addItem(payload),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(addItemTimeoutMsg)), 8_000)),
+        ]);
         diag.push({
           item: item.nome,
           ok: true,
@@ -551,7 +561,8 @@ function MemedSimulacao() {
                   <dd className="font-mono">{config.prescriber.cpfMasked}</dd>
                   <dt>CRM</dt>
                   <dd className="font-mono">
-                    {config.prescriber.crm}/{config.prescriber.crmUf} · {config.prescriber.crmCidade}
+                    {config.prescriber.crm}/{config.prescriber.crmUf} ·{" "}
+                    {config.prescriber.crmCidade}
                   </dd>
                   <dt>Especialidade</dt>
                   <dd>{config.prescriber.especialidade}</dd>
