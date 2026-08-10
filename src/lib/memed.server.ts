@@ -278,31 +278,32 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
     // e virava "memed_error" genérico. Classificado à parte para a UI poder
     // dizer o que de fato aconteceu (e não sugerir revisar cadastro à toa).
     if (res.status >= 500 || res.status === 429) {
-      console.error("[memed] indisponivel", { status: res.status, doctorId: doctor.id });
-      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}` };
+      console.error("[memed] indisponivel", { status: res.status, prescriber });
+      return { ok: false, error: "memed_offline", detail: `HTTP ${res.status}`, prescriber };
     }
     if (res.status === 401 || res.status === 403) {
-      console.error("[memed] credenciais_invalidas", { status: res.status });
-      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}` };
+      console.error("[memed] credenciais_invalidas", { status: res.status, prescriber });
+      return { ok: false, error: "invalid_credentials", detail: `HTTP ${res.status}`, prescriber };
     }
     const json: any = await res.json().catch(() => null);
     const jwtToken = json?.data?.attributes?.token;
     const status = json?.data?.attributes?.status as string | undefined;
     if (status === "Inativo") {
-      console.error("[memed] prescritor_inativo", { doctorId: doctor.id });
-      return { ok: false, error: "prescritor_inativo" };
+      console.error("[memed] prescritor_inativo", { prescriber });
+      return { ok: false, error: "prescritor_inativo", prescriber };
     }
     if (!res.ok || !jwtToken) {
       const detail = JSON.stringify(json)?.slice(0, 300);
-      console.error("[memed] token_error", { status: res.status, doctorId: doctor.id, detail });
-      return { ok: false, error: "memed_error", detail };
+      console.error("[memed] token_error", { status: res.status, prescriber, detail });
+      return { ok: false, error: "memed_error", detail, prescriber };
     }
 
     tokenCache.set(doctor.id, { token: jwtToken, expiresAt: Date.now() + TOKEN_TTL_MS });
-    return { ok: true, token: jwtToken };
+    console.info("[memed] token_ok", { prescriber });
+    return { ok: true, token: jwtToken, prescriber };
   } catch (e) {
-    console.error("[memed] token_network_error", { doctorId: doctor.id, error: String(e) });
-    return { ok: false, error: "memed_error", detail: String(e) };
+    console.error("[memed] token_network_error", { prescriber, error: String(e) });
+    return { ok: false, error: "memed_error", detail: String(e), prescriber };
   }
 }
 
