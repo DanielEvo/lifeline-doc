@@ -170,16 +170,48 @@ export function MemedPrescriptionWidget({
             // toggles são um ajuste fino: falha aqui não invalida o módulo
           }
           abrirRef.current = () => {
-            void window.MdHub!.module.show("plataforma.prescricao").then(() => {
-              if (cancelled) return;
-              setStatus("ready");
-              readyRef.current?.({
-                addItem: (payload) =>
-                  window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
-                newPrescription: () =>
-                  window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+            // Antes isso não tinha .catch() nem timeout: se a promise de
+            // show() rejeitasse OU simplesmente nunca resolvesse (a Memed
+            // desenha a tela dela direto no DOM, independente de nós — ela
+            // pode aparecer visualmente mesmo sem essa promise nunca
+            // confirmar nada pro nosso lado), o botão ficava preso em
+            // "ready-to-show" pra sempre, sem nenhum sinal de erro. Isso
+            // batia exatamente com o sintoma relatado: módulo abre
+            // visualmente, mas addItem nunca dispara porque onReady nunca
+            // chegou a ser chamado.
+            let settled = false;
+            const timeoutId = setTimeout(() => {
+              if (settled || cancelled) return;
+              settled = true;
+              errorMsgRef.current =
+                "A Memed não confirmou a abertura do módulo em 10s (module.show() ficou pendurado). " +
+                "O módulo pode ter aparecido na tela mesmo assim — mas sem essa confirmação não é " +
+                "seguro chamar addItem. Recarregue a página e tente de novo.";
+              setStatus("error");
+            }, 10_000);
+            window.MdHub!.module
+              .show("plataforma.prescricao")
+              .then(() => {
+                if (settled || cancelled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                setStatus("ready");
+                readyRef.current?.({
+                  addItem: (payload) =>
+                    window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
+                  newPrescription: () =>
+                    window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+                });
+              })
+              .catch((err: unknown) => {
+                if (settled || cancelled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                errorMsgRef.current = `A Memed rejeitou a abertura do módulo: ${
+                  err instanceof Error ? err.message : String(err)
+                }`;
+                setStatus("error");
               });
-            });
           };
           if (!cancelled) setStatus("ready-to-show");
         } catch {
