@@ -144,7 +144,6 @@ function MemedSimulacao() {
   // deixar o passo "itens carregados" mentindo sobre o que está no módulo.
   useEffect(() => {
     setItensState("pendente");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarioIdx]);
 
   const harvest = useMutation({

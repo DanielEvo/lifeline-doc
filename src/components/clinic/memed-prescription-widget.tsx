@@ -54,6 +54,7 @@ export function MemedPrescriptionWidget({
   onReady,
   openLabel,
   openHint,
+  onStatusChange,
 }: {
   token: string;
   scriptUrl: string;
