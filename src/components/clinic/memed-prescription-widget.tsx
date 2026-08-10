@@ -261,17 +261,26 @@ export function MemedPrescriptionWidget({
           </button>
         </div>
       )}
-      {/* min-width 640px está EM TESTE (era 820px). O handover técnico da
-          Memed (Lacuna #4) registra que o valor de 820 nunca foi confirmado
-          em nenhuma página oficial da doc — se o iframe cortar conteúdo ou
-          quebrar em algum navegador, volte para 820 aqui.
-          O wrapper rola horizontalmente para não estourar o dialog em telas
+      {/* min-width/height reduzidos pela metade de novo (640x700 → 320x350)
+          a pedido do usuário — era originalmente 820x700, e o handover
+          técnico da Memed (Lacuna #4) registra que 820 nunca foi confirmado
+          em nenhuma página oficial da doc.
+          RESSALVA IMPORTANTE: descobrimos (na investigação do bug do Dialog)
+          que a Memed injeta o iframe/overlay dela direto no DOM global,
+          fora de qualquer container React que a gente controle — então é
+          bem possível que esse valor só afete o placeholder ANTES do
+          módulo abrir (estados "loading"/"ready-to-show"), e não o módulo
+          já aberto em si, que provavelmente continua ocupando a tela
+          inteira por conta própria independente do que a gente configura
+          aqui. Só teste ao vivo confirma. Se cortar conteúdo ou quebrar,
+          volte para 640x700 (ou 820x700, o valor original).
+          O wrapper rola horizontalmente para não estourar o layout em telas
           estreitas, em vez de cortar o módulo. Fica sempre montado no DOM (a
           Memed pode depender disso pra encontrar onde inserir o iframe) — só
           escondido visualmente até o clique em "Abrir prescrição", que é
           quando `MdHub.module.show` de fato roda. */}
       <div className={`w-full overflow-x-auto ${status === "ready" ? "" : "hidden"}`}>
-        <div ref={containerRef} style={{ minWidth: 640, minHeight: 700 }} className="w-full" />
+        <div ref={containerRef} style={{ minWidth: 320, minHeight: 350 }} className="w-full" />
       </div>
     </div>
   );
