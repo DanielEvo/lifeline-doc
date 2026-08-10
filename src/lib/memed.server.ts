@@ -24,9 +24,7 @@ import type { Doctor } from "./auth.server";
 function memedApiBase(): string {
   const explicit = process.env["MEMED_API_URL"];
   if (explicit) return explicit;
-  return memedEnvironment() === "live"
-    ? "https://api.memed.com.br/v1"
-    : "https://integrations.api.memed.com.br/v1";
+  return memedEnvironment() === "live" ? "https://api.memed.com.br/v1" : "https://integrations.api.memed.com.br/v1";
 }
 
 export function memedScriptUrl(): string {
@@ -40,7 +38,6 @@ export function memedScriptUrl(): string {
 const MEMED_TIMEOUT_MS = 8_000;
 /** JWT do prescritor vale bem mais que isso; 50min dá folga de renovação. */
 const TOKEN_TTL_MS = 50 * 60 * 1000;
-
 
 /**
  * Ambiente em uso. As chaves de homologação são compartilhadas entre
@@ -59,11 +56,9 @@ export function memedEnvironment(): "sandbox" | "live" {
 function memedKeys(): { apiKey?: string; secretKey?: string } {
   const live = memedEnvironment() === "live";
   const apiKey =
-    (live ? process.env.MEMED_LIVE_API_KEY : process.env.MEMED_SANDBOX_API_KEY) ||
-    process.env.MEMED_API_KEY;
+    (live ? process.env.MEMED_LIVE_API_KEY : process.env.MEMED_SANDBOX_API_KEY) || process.env.MEMED_API_KEY;
   const secretKey =
-    (live ? process.env.MEMED_LIVE_SECRET_KEY : process.env.MEMED_SANDBOX_SECRET_KEY) ||
-    process.env.MEMED_SECRET_KEY;
+    (live ? process.env.MEMED_LIVE_SECRET_KEY : process.env.MEMED_SANDBOX_SECRET_KEY) || process.env.MEMED_SECRET_KEY;
   return { apiKey, secretKey };
 }
 
@@ -177,7 +172,6 @@ async function resolveMemedEspecialidadeId(especialidade: string): Promise<numbe
     return null;
   }
 }
-
 
 /** yyyy-mm-dd (formato interno) → dd/mm/YYYY (formato exigido pela Memed). */
 function toMemedDate(isoDate: string): string {
@@ -302,8 +296,7 @@ export async function getMemedDigitalPrescriptionLink(
     // variações mais prováveis (link/url, unlock_code/code/unlockCode) em
     // vez de travar a leitura a um único nome de campo.
     const link = attrs?.link ?? attrs?.url ?? attrs?.digital_prescription_link ?? null;
-    const unlockCode =
-      attrs?.unlock_code ?? attrs?.unlockCode ?? attrs?.code ?? attrs?.codigo_desbloqueio ?? null;
+    const unlockCode = attrs?.unlock_code ?? attrs?.unlockCode ?? attrs?.code ?? attrs?.codigo_desbloqueio ?? null;
     if (!link || !unlockCode) return null;
     return { link: String(link), unlockCode: String(unlockCode) };
   } catch (e) {
@@ -348,7 +341,7 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
   const fakeDoctor = {
     id: SANDBOX_DOCTOR_ID,
     nome: "Teste Simulação",
-    crm: "12345",
+    crm: "483920",
     crmUf: "SP",
     cpfMedico: "11144477735",
     especialidade: "Clínica Geral",
