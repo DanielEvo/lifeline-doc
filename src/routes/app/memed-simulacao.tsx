@@ -104,6 +104,11 @@ function MemedSimulacao() {
   const [moduleStatus, setModuleStatus] = useState<ModuleStatus>("loading");
   const [itensState, setItensState] = useState<ItensState>("pendente");
   const [resultado, setResultado] = useState<unknown>(null);
+  // Diagnóstico da última tentativa de carregar itens — mostrado direto na
+  // tela (não só no console) porque addItem pode simplesmente RESOLVER sem
+  // o item aparecer de fato no módulo, sem lançar nenhuma exceção. Nesse
+  // caso um painel que só aparece "quando há erro" nunca apareceria.
+  const [diagCarga, setDiagCarga] = useState<{ item: string; ok: boolean; detalhe: string }[]>([]);
   const [verJson, setVerJson] = useState(false);
   const [ferramentasAbertas, setFerramentasAbertas] = useState(false);
   const [termo, setTermo] = useState("");
@@ -145,6 +150,7 @@ function MemedSimulacao() {
   // deixar o passo "itens carregados" mentindo sobre o que está no módulo.
   useEffect(() => {
     setItensState("pendente");
+    setDiagCarga([]);
   }, [scenarioIdx]);
 
   const harvest = useMutation({
@@ -186,6 +192,7 @@ function MemedSimulacao() {
 
   async function carregarNoMemed(api: MemedWidgetApi, opts?: { warmupMs?: number }) {
     setItensState("carregando");
+    setDiagCarga([]);
     // Margem de segurança só no auto-carregamento (onReady): `module.show()`
     // resolve quando a Memed ACEITA o comando de abrir, não necessariamente
     // quando a UI interna do iframe já terminou de montar e está pronta pra
@@ -197,37 +204,49 @@ function MemedSimulacao() {
     let doCatalogo = 0;
     let livres = 0;
     let falhas = 0;
+    const diag: { item: string; ok: boolean; detalhe: string }[] = [];
     for (const item of cenario.itens) {
       const match = entries.find(
         (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
       );
       try {
+        let payload: Record<string, unknown>;
         if (match?.memedId) {
-          await api.addItem(
+          payload =
             item.tipo === "lab" || item.tipo === "imagem"
               ? { id: match.memedId, indicacoes: item.indicacoes ?? item.justificativa ?? "" }
-              : { id: match.memedId, posologia: item.posologia ?? "" },
-          );
+              : { id: match.memedId, posologia: item.posologia ?? "" };
           doCatalogo += 1;
         } else {
-          await api.addItem({ nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" });
+          payload = { nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" };
           livres += 1;
         }
-      } catch {
+        // Guardado mesmo quando NÃO lança exceção: addItem pode resolver
+        // "com sucesso" sem o item de fato aparecer no módulo — sem isso,
+        // não teríamos como distinguir "resolveu vazio" de "resolveu com o
+        // item confirmado" só olhando o toast de sucesso.
+        const resposta = await api.addItem(payload);
+        diag.push({ item: item.nome, ok: true, detalhe: JSON.stringify(resposta ?? null) });
+      } catch (e) {
         // Antes isso caía no mesmo balde de "texto livre" — uma falha real
         // de addItem virava sucesso mentiroso no toast, escondendo o
-        // problema. Agora falha é contada à parte e avisada.
+        // problema.
         falhas += 1;
+        const detalhe = e instanceof Error ? e.message : JSON.stringify(e);
+        diag.push({ item: item.nome, ok: false, detalhe });
       }
     }
     setItensState("carregado");
+    setDiagCarga(diag);
+    console.info("[bancada] diagnóstico do carregamento", diag);
     if (falhas > 0) {
       toast.error(
-        `${falhas} item(ns) não entraram no módulo — use "Recarregar itens" pra tentar de novo.`,
+        `${falhas} item(ns) não entraram no módulo — veja o diagnóstico abaixo do botão "Recarregar itens".`,
       );
-    }
-    if (doCatalogo > 0 || livres > 0) {
-      toast.success(`${doCatalogo} do catálogo, ${livres} como texto livre`);
+    } else {
+      toast.success(
+        `${doCatalogo} do catálogo, ${livres} como texto livre — confira o diagnóstico abaixo.`,
+      );
     }
   }
 
@@ -506,6 +525,28 @@ function MemedSimulacao() {
                         </Button>
                       )}
                     </div>
+                    {diagCarga.length > 0 && (
+                      <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs ring-1 ring-border">
+                        <p className="mb-1.5 font-medium text-foreground">
+                          Diagnóstico do último carregamento — resposta bruta que a Memed devolveu
+                          pra cada item (mesmo quando não deu erro, mas o item não apareceu):
+                        </p>
+                        <ul className="space-y-1 font-mono text-[11px]">
+                          {diagCarga.map((d, idx) => (
+                            <li
+                              key={idx}
+                              className={
+                                d.ok
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-red-700 dark:text-red-400"
+                              }
+                            >
+                              {d.ok ? "✓" : "✗"} {d.item}: {d.detalhe || "(resposta vazia)"}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <MemedPrescriptionWidget
                       token={config.token}
                       scriptUrl={config.scriptUrl}
