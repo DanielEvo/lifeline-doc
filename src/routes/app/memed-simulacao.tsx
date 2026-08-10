@@ -301,6 +301,18 @@ function MemedSimulacao() {
         }),
     );
 
+    // addItem usa MdHub.command.send por baixo — confirmado no código-fonte
+    // oficial (src/command.js) que esse mecanismo NÃO TEM NENHUM TIMEOUT: se
+    // a resposta via postMessage nunca chegar, a promise fica pendurada pra
+    // sempre. Sem esse timeout, um item travado parava o loop inteiro.
+    async function tentarAddItem(payload: Record<string, unknown>): Promise<unknown> {
+      const timeoutMsg = "addItem não respondeu em 8s (comando MdHub sem timeout nativo travou)";
+      return Promise.race([
+        api.addItem(payload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMsg)), 8_000)),
+      ]);
+    }
+
     let comId = 0;
     let textoLivre = 0;
     let falhas = 0;
@@ -309,6 +321,16 @@ function MemedSimulacao() {
       try {
         let payload: Record<string, unknown>;
         let origem: string;
+        // Só o id do catálogo PESSOAL do médico (colhido de um protocolo
+        // real salvo dentro da Memed) é garantidamente uma apresentação
+        // comercial exata. O id de uma busca por princípio ativo às vezes
+        // é só o ingrediente genérico — confirmado ao vivo: a Memed
+        // recusa com "Não foi possível inserir o item na prescrição"
+        // quando isso acontece. Só nesse caso vale tentar de novo em
+        // texto livre — id do catálogo pessoal falhando é um problema
+        // real que não deveria ser escondido por um fallback silencioso.
+        let fallbackTextoLivre: Record<string, unknown> | null = null;
+
         if (item.tipo === "lab" || item.tipo === "imagem") {
           const match = entries.find(
             (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
@@ -319,14 +341,16 @@ function MemedSimulacao() {
               indicacoes: item.indicacoes ?? item.justificativa ?? "",
             };
             origem = `catálogo (${match.memedId})`;
-            comId += 1;
           } else {
             payload = { nome: item.nome, posologia: item.indicacoes ?? item.justificativa ?? "" };
             origem = "texto livre";
-            textoLivre += 1;
           }
         } else {
           const resolvido = idsPorItem.get(item.key);
+          const textoLivrePadrao = {
+            nome: item.nome,
+            posologia: item.posologia ?? item.indicacoes ?? "",
+          };
           if (resolvido?.id) {
             // id vindo de busca é do princípio ativo, não necessariamente
             // da apresentação exata — repõe a dosagem na posologia pra não
@@ -339,33 +363,30 @@ function MemedSimulacao() {
               : (item.posologia ?? "");
             payload = { id: resolvido.id, posologia: posologiaComDosagem };
             origem = `Memed (${resolvido.id}) — ${resolvido.motivo}`;
-            comId += 1;
+            if (resolvido.viaBusca) fallbackTextoLivre = textoLivrePadrao;
           } else {
-            payload = { nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" };
+            payload = textoLivrePadrao;
             origem = `texto livre — ${resolvido?.motivo ?? "sem tentativa de busca"}`;
-            textoLivre += 1;
           }
         }
+
         // Guardado mesmo quando NÃO lança exceção: addItem pode resolver
         // "com sucesso" sem o item de fato aparecer no módulo — sem isso,
         // não teríamos como distinguir "resolveu vazio" de "resolveu com o
         // item confirmado" só olhando o toast de sucesso.
-        //
-        // addItem usa MdHub.command.send por baixo — confirmado no
-        // código-fonte oficial (src/command.js) que esse mecanismo NÃO TEM
-        // NENHUM TIMEOUT: se a resposta via postMessage nunca chegar, a
-        // promise fica pendurada pra sempre. Sem esse timeout aqui, o
-        // primeiro item que travasse parava o loop inteiro — nenhum item
-        // seguinte seria tentado, o painel de diagnóstico nunca apareceria
-        // (o loop nunca chegava no fim) e itensState ficaria preso em
-        // "carregando" pra sempre. É o mesmo problema que já corrigimos
-        // pra module.show(), só que faltava aplicar aqui também.
-        const addItemTimeoutMsg =
-          "addItem não respondeu em 8s (comando MdHub sem timeout nativo travou)";
-        const resposta = await Promise.race([
-          api.addItem(payload),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(addItemTimeoutMsg)), 8_000)),
-        ]);
+        let resposta: unknown;
+        try {
+          resposta = await tentarAddItem(payload);
+          if ("id" in payload) comId += 1;
+          else textoLivre += 1;
+        } catch (eId) {
+          if (!fallbackTextoLivre) throw eId;
+          resposta = await tentarAddItem(fallbackTextoLivre);
+          origem = `texto livre — id rejeitado pela Memed: ${
+            eId instanceof Error ? eId.message : String(eId)
+          }`;
+          textoLivre += 1;
+        }
         diag.push({
           item: item.nome,
           ok: true,
