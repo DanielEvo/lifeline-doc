@@ -109,7 +109,7 @@ export type MemedTokenResult =
 
 /** Mascara o CPF mantendo prefixo/sufixo — suficiente para conferir se o
  * dado enviado já é o atualizado, sem despejar o documento inteiro no log. */
-export function maskCpf(raw: string | undefined): string {
+export function maskCpf(raw: string | null | undefined): string {
   const d = (raw ?? "").replace(/\D/g, "");
   if (d.length !== 11) return d ? `${d} (inválido)` : "—";
   return `${d.slice(0, 3)}.***.***-${d.slice(9)}`;
