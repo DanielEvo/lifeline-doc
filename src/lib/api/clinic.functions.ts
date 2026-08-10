@@ -960,12 +960,12 @@ export const getMemedStatus = createServerFn({ method: "POST" })
     }
     const result = await getMemedPrescriberToken(doctor);
     if (!result.ok)
-+      return {
-+        ok: false as const,
-+        error: result.error,
-+        detail: result.detail,
-+        likelyOffline: isMemedLikelyOffline(),
-+      };
+      return {
+        ok: false as const,
+        error: result.error,
+        detail: result.detail,
+        likelyOffline: isMemedLikelyOffline(),
+      };
     return {
       ok: true as const,
       state: "ready" as const,
