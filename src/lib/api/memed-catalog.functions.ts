@@ -10,13 +10,16 @@ import {
   upsertEntry,
   type CatalogEntry,
 } from "../memed-catalog.server";
-import { getMemedSandboxToken, isMemedConfigured, memedFetch } from "../memed.server";
+import {
+  getMemedSandboxToken,
+  isMemedConfigured,
+  memedApiBase as MEMED_API_BASE,
+  memedFetch,
+  memedKeys,
+} from "../memed.server";
 
 const token = z.string().min(1);
 const UNAUTH = { ok: false as const, error: "unauthorized" as const };
-
-const MEMED_API_BASE = () =>
-  process.env["MEMED_API_URL"] || "https://integrations.api.memed.com.br/v1";
 
 export const listMyMemedCatalog = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token }))
@@ -97,10 +100,17 @@ export const searchMemedIngredients = createServerFn({ method: "POST" })
     if (!doctor) return UNAUTH;
     if (!isMemedConfigured()) return { ok: false as const, error: "not_configured" as const };
 
-    const apiKey = process.env["MEMED_API_KEY"]!;
-    const secretKey = process.env["MEMED_SECRET_KEY"]!;
+    // Antes lia process.env["MEMED_API_KEY"]/MEMED_SECRET_KEY direto — as
+    // variáveis LEGADAS, ignorando o MEMED_SANDBOX_API_KEY/SECRET_KEY que
+    // memedKeys() resolve por ambiente (mesma resolução que já funciona em
+    // checkMemedKeyPair e getMemedPrescriberToken). Se só as variáveis de
+    // sandbox estivessem configuradas, isMemedConfigured() acima passava
+    // (ele já usa memedKeys()), mas a chamada real ia com api-key/secret-key
+    // undefined — a Memed rejeitava, e TODA busca falhava com
+    // "memed_error" sem exceção, disfarçado de "não achou no catálogo".
+    const { apiKey, secretKey } = memedKeys();
     const qs =
-      `api-key=${encodeURIComponent(apiKey)}&secret-key=${encodeURIComponent(secretKey)}` +
+      `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}` +
       `&terms=${encodeURIComponent(data.termo)}&limit=10&order[field]=name&order[sort]=ASC`;
 
     try {

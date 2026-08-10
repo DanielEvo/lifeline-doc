@@ -21,7 +21,7 @@ import type { Doctor } from "./auth.server";
 // a Memed responde 401/403 (tratado como invalid_credentials) e a causa
 // real (host errado) fica invisível. memedKeys() já resolvia por ambiente;
 // isto espelha a mesma lógica para a URL.
-function memedApiBase(): string {
+export function memedApiBase(): string {
   const explicit = process.env["MEMED_API_URL"];
   if (explicit) return explicit;
   return memedEnvironment() === "live" ? "https://api.memed.com.br/v1" : "https://integrations.api.memed.com.br/v1";
@@ -53,7 +53,7 @@ export function memedEnvironment(): "sandbox" | "live" {
  * quando existirem, com fallback para o par legado MEMED_API_KEY/SECRET_KEY.
  * Evita emitir receita de teste com chave de produção e vice-versa.
  */
-function memedKeys(): { apiKey?: string; secretKey?: string } {
+export function memedKeys(): { apiKey?: string; secretKey?: string } {
   const live = memedEnvironment() === "live";
   const apiKey =
     (live ? process.env.MEMED_LIVE_API_KEY : process.env.MEMED_SANDBOX_API_KEY) || process.env.MEMED_API_KEY;

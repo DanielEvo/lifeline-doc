@@ -204,7 +204,8 @@ function MemedSimulacao() {
     try {
       const r = await searchMemedIngredients({ data: { token, termo: nome } });
       if (!r.ok) {
-        resultado = { id: null, motivo: `busca falhou (${r.error})` };
+        const detalheBruto = "detail" in r && r.detail ? ` — ${r.detail}` : "";
+        resultado = { id: null, motivo: `busca falhou (${r.error})${detalheBruto}` };
       } else if (r.itens.length === 0) {
         resultado = { id: null, motivo: "busca não retornou nenhum resultado" };
       } else {
