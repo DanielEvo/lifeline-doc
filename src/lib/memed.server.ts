@@ -80,8 +80,20 @@ export function isMemedLikelyOffline(now = new Date()): boolean {
   return hour < 6;
 }
 
+export type MemedPrescriberInfo = {
+  externalId: string;
+  nome: string;
+  cpfMasked: string;
+  crm: string;
+  crmUf: string;
+  crmCidade: string;
+  especialidade: string;
+  dataNascimento: string;
+  email: string;
+};
+
 export type MemedTokenResult =
-  | { ok: true; token: string }
+  | { ok: true; token: string; prescriber?: MemedPrescriberInfo }
   | {
       ok: false;
       error:
@@ -92,7 +104,31 @@ export type MemedTokenResult =
         | "invalid_credentials"
         | "memed_error";
       detail?: string;
+      prescriber?: MemedPrescriberInfo;
     };
+
+/** Mascara o CPF mantendo prefixo/sufixo — suficiente para conferir se o
+ * dado enviado já é o atualizado, sem despejar o documento inteiro no log. */
+export function maskCpf(raw: string | undefined): string {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length !== 11) return d ? `${d} (inválido)` : "—";
+  return `${d.slice(0, 3)}.***.***-${d.slice(9)}`;
+}
+
+export function describeMemedPrescriber(doctor: Doctor): MemedPrescriberInfo {
+  return {
+    externalId: doctor.id,
+    nome: doctor.nome,
+    cpfMasked: maskCpf(doctor.cpfMedico),
+    crm: doctor.crm ?? "",
+    crmUf: doctor.crmUf ?? "",
+    crmCidade: doctor.crmCidade ?? "",
+    especialidade: doctor.especialidade ?? "",
+    dataNascimento: doctor.dataNascimento ?? "",
+    email: doctor.email ?? "",
+  };
+}
+
 
 // Cache de token por médico: antes cada abertura do dialog de receita batia
 // em POST /usuarios, o que é lento e conta para o rate-limit da Memed.
