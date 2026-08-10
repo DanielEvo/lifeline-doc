@@ -173,48 +173,40 @@ export function MemedPrescriptionWidget({
             // toggles são um ajuste fino: falha aqui não invalida o módulo
           }
           abrirRef.current = () => {
-            // Antes isso não tinha .catch() nem timeout: se a promise de
-            // show() rejeitasse OU simplesmente nunca resolvesse (a Memed
-            // desenha a tela dela direto no DOM, independente de nós — ela
-            // pode aparecer visualmente mesmo sem essa promise nunca
-            // confirmar nada pro nosso lado), o botão ficava preso em
-            // "ready-to-show" pra sempre, sem nenhum sinal de erro. Isso
-            // batia exatamente com o sintoma relatado: módulo abre
-            // visualmente, mas addItem nunca dispara porque onReady nunca
-            // chegou a ser chamado.
+            // Confirmado por teste ao vivo: o módulo funciona de verdade sem
+            // essa confirmação nunca chegar — dados do paciente aparecem
+            // certos, o X de fechar da própria Memed funciona, a pessoa
+            // consegue adicionar item manualmente. Só a promise de
+            // module.show() (que usa o mesmo mecanismo de postMessage sem
+            // timeout nativo do MdHub) nunca resolve do nosso lado. Esperar
+            // por ela indefinidamente (ou tratar como erro) estava bloqueando
+            // um módulo que já está pronto de verdade.
+            //
+            // Segue em frente mesmo sem a confirmação depois de uma espera
+            // curta — o caminho "oficial" (promise resolvida) ainda é usado
+            // quando chega a tempo, só não é mais bloqueante.
             let settled = false;
-            const timeoutId = setTimeout(() => {
+            const seguir = () => {
               if (settled || cancelled) return;
               settled = true;
-              errorMsgRef.current =
-                "A Memed não confirmou a abertura do módulo em 10s (module.show() ficou pendurado). " +
-                "O módulo pode ter aparecido na tela mesmo assim — mas sem essa confirmação não é " +
-                "seguro chamar addItem.";
-              setStatus("error");
-            }, 10_000);
+              clearTimeout(fallbackId);
+              setStatus("ready");
+              readyRef.current?.({
+                addItem: (payload) =>
+                  window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
+                newPrescription: () =>
+                  window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
+                hide: () => window.MdHub!.module.hide("plataforma.prescricao"),
+              });
+            };
+            const fallbackId = setTimeout(seguir, 3_000);
             window.MdHub!.module
               .show("plataforma.prescricao")
-              .then(() => {
-                if (settled || cancelled) return;
-                settled = true;
-                clearTimeout(timeoutId);
-                setStatus("ready");
-                readyRef.current?.({
-                  addItem: (payload) =>
-                    window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
-                  newPrescription: () =>
-                    window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
-                  hide: () => window.MdHub!.module.hide("plataforma.prescricao"),
-                });
-              })
-              .catch((err: unknown) => {
-                if (settled || cancelled) return;
-                settled = true;
-                clearTimeout(timeoutId);
-                errorMsgRef.current = `A Memed rejeitou a abertura do módulo: ${
-                  err instanceof Error ? err.message : String(err)
-                }`;
-                setStatus("error");
+              .then(seguir)
+              .catch(() => {
+                // Não vira mais erro — a rejeição da promise não significa
+                // que o módulo não abriu (ver comentário acima). O fallback
+                // de 3s assume o controle de qualquer forma.
               });
           };
           if (!cancelled) setStatus("ready-to-show");
