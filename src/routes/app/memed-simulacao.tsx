@@ -522,6 +522,33 @@ function MemedSimulacao() {
                 </p>
               )}
 
+            {config && "prescriber" in config && config.prescriber && (
+              <div className="rounded-lg bg-muted/40 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground ring-1 ring-border">
+                <p className="mb-1 font-medium text-foreground">
+                  Dados enviados do prescritor de simulação
+                </p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                  <dt>ID externo</dt>
+                  <dd className="font-mono">{config.prescriber.externalId}</dd>
+                  <dt>Nome</dt>
+                  <dd>{config.prescriber.nome}</dd>
+                  <dt>CPF</dt>
+                  <dd className="font-mono">{config.prescriber.cpfMasked}</dd>
+                  <dt>CRM</dt>
+                  <dd className="font-mono">
+                    {config.prescriber.crm}/{config.prescriber.crmUf} · {config.prescriber.crmCidade}
+                  </dd>
+                  <dt>Especialidade</dt>
+                  <dd>{config.prescriber.especialidade}</dd>
+                  <dt>Nascimento</dt>
+                  <dd className="font-mono">{config.prescriber.dataNascimento}</dd>
+                  <dt>E-mail</dt>
+                  <dd className="font-mono">{config.prescriber.email}</dd>
+                </dl>
+              </div>
+            )}
+
+
             {loaded && config?.ok && (
               <MemedPrescriptionWidget
                 token={config.token}
