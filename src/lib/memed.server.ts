@@ -343,7 +343,7 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
     nome: "Teste Simulação",
     crm: "483920",
     crmUf: "SP",
-    cpfMedico: "11144477735",
+    cpfMedico: "52998224725",
     especialidade: "Clínica Geral",
     crmCidade: "São Paulo",
     dataNascimento: "1990-01-01",
