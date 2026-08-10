@@ -189,6 +189,27 @@ function MemedSimulacao() {
     },
   });
 
+  // Cache de buscas por nome na base real da Memed (/v1/drugs/ingredients),
+  // pra não repetir a mesma busca de rede toda vez que o cenário é
+  // recarregado nesta sessão. Nomes inventados do fixture não existem no
+  // catálogo da Memed por definição — essa busca resolve pro princípio
+  // ativo mais próximo, que É um item real e catalogado.
+  const buscaMemedCacheRef = useRef<Map<string, string | null>>(new Map());
+
+  async function resolverIdViaBuscaMemed(nome: string): Promise<string | null> {
+    const cache = buscaMemedCacheRef.current;
+    if (cache.has(nome)) return cache.get(nome)!;
+    try {
+      const r = await searchMemedIngredients({ data: { token, termo: nome } });
+      const id = r.ok && r.itens.length > 0 ? r.itens[0]!.id : null;
+      cache.set(nome, id);
+      return id;
+    } catch {
+      cache.set(nome, null);
+      return null;
+    }
+  }
+
   async function carregarNoMemed(api: MemedWidgetApi, opts?: { warmupMs?: number }) {
     setItensState("carregando");
     setDiagCarga([]);
@@ -200,32 +221,72 @@ function MemedSimulacao() {
     if (opts?.warmupMs) {
       await new Promise((resolve) => setTimeout(resolve, opts.warmupMs));
     }
-    let doCatalogo = 0;
-    let livres = 0;
+
+    // Resolve os IDs reais de TODOS os medicamentos em paralelo, antes do
+    // loop de addItem (que precisa ser sequencial) — catálogo pessoal do
+    // médico tem prioridade; sem match ali, busca a base real da Memed.
+    // Só medicamentos passam por isso: a doc da Memed não lista nenhum
+    // endpoint de busca separado para exames/laboratoriais, então esses
+    // continuam indo por texto livre como antes (não são substância
+    // controlada — não deveria ter a mesma exigência de catálogo).
+    const idsPorItem = new Map<string, string | null>();
+    await Promise.all(
+      cenario.itens
+        .filter((item) => item.tipo === "med")
+        .map(async (item) => {
+          const match = entries.find(
+            (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
+          );
+          idsPorItem.set(item.key, match?.memedId ?? (await resolverIdViaBuscaMemed(item.nome)));
+        }),
+    );
+
+    let comId = 0;
+    let textoLivre = 0;
     let falhas = 0;
     const diag: { item: string; ok: boolean; detalhe: string }[] = [];
     for (const item of cenario.itens) {
-      const match = entries.find(
-        (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
-      );
       try {
         let payload: Record<string, unknown>;
-        if (match?.memedId) {
-          payload =
-            item.tipo === "lab" || item.tipo === "imagem"
-              ? { id: match.memedId, indicacoes: item.indicacoes ?? item.justificativa ?? "" }
-              : { id: match.memedId, posologia: item.posologia ?? "" };
-          doCatalogo += 1;
+        let origem: string;
+        if (item.tipo === "lab" || item.tipo === "imagem") {
+          const match = entries.find(
+            (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
+          );
+          if (match?.memedId) {
+            payload = {
+              id: match.memedId,
+              indicacoes: item.indicacoes ?? item.justificativa ?? "",
+            };
+            origem = `catálogo (${match.memedId})`;
+            comId += 1;
+          } else {
+            payload = { nome: item.nome, posologia: item.indicacoes ?? item.justificativa ?? "" };
+            origem = "texto livre";
+            textoLivre += 1;
+          }
         } else {
-          payload = { nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" };
-          livres += 1;
+          const id = idsPorItem.get(item.key) ?? null;
+          if (id) {
+            payload = { id, posologia: item.posologia ?? "" };
+            origem = `Memed (${id})`;
+            comId += 1;
+          } else {
+            payload = { nome: item.nome, posologia: item.posologia ?? item.indicacoes ?? "" };
+            origem = "texto livre — não encontrado na base da Memed";
+            textoLivre += 1;
+          }
         }
         // Guardado mesmo quando NÃO lança exceção: addItem pode resolver
         // "com sucesso" sem o item de fato aparecer no módulo — sem isso,
         // não teríamos como distinguir "resolveu vazio" de "resolveu com o
         // item confirmado" só olhando o toast de sucesso.
         const resposta = await api.addItem(payload);
-        diag.push({ item: item.nome, ok: true, detalhe: JSON.stringify(resposta ?? null) });
+        diag.push({
+          item: item.nome,
+          ok: true,
+          detalhe: `[${origem}] ${JSON.stringify(resposta ?? null)}`,
+        });
       } catch (e) {
         // Antes isso caía no mesmo balde de "texto livre" — uma falha real
         // de addItem virava sucesso mentiroso no toast, escondendo o
@@ -244,7 +305,7 @@ function MemedSimulacao() {
       );
     } else {
       toast.success(
-        `${doCatalogo} do catálogo, ${livres} como texto livre — confira o diagnóstico abaixo.`,
+        `${comId} com id real da Memed, ${textoLivre} como texto livre — confira o diagnóstico abaixo.`,
       );
     }
   }
