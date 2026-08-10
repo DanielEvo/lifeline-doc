@@ -238,22 +238,32 @@ function MemedSimulacao() {
     URL.revokeObjectURL(url);
   }
 
-  const currentStep: PrescricaoStep = !loaded || moduleStatus === "loading" || moduleStatus === "error"
-    ? "carregando"
-    : moduleStatus === "ready-to-show"
-      ? "pronto-pra-abrir"
-      : itensState === "pendente"
-        ? "aberto"
-        : itensState === "carregando"
-          ? "itens-carregados"
-          : !resultado
-            ? "aguardando-geracao"
-            : "resultado-comparado";
+  // config?.ok === false tem prioridade sobre tudo — sem isso, `loaded`
+  // nunca vira true numa falha e o passo fica preso em "carregando" com o
+  // spinner girando pra sempre, mesmo com o card de erro já visível.
+  const attemptFailed = config?.ok === false;
+
+  const currentStep: PrescricaoStep = attemptFailed
+    ? "erro"
+    : !loaded || moduleStatus === "loading"
+      ? "carregando"
+      : moduleStatus === "error"
+        ? "erro"
+        : moduleStatus === "ready-to-show"
+          ? "pronto-pra-abrir"
+          : itensState === "pendente"
+            ? "aberto"
+            : itensState === "carregando"
+              ? "itens-carregados"
+              : !resultado
+                ? "aguardando-geracao"
+                : "resultado-comparado";
 
   const stepSpinning =
-    currentStep === "carregando" ||
-    (currentStep === "itens-carregados" && itensState === "carregando") ||
-    currentStep === "aguardando-geracao";
+    !attemptFailed &&
+    (currentStep === "carregando" ||
+      (currentStep === "itens-carregados" && itensState === "carregando") ||
+      currentStep === "aguardando-geracao");
 
   return (
     <div className="flex min-h-screen flex-col">

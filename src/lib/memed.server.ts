@@ -214,6 +214,36 @@ function toMemedDate(isoDate: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/**
+ * GET /usuarios/{external_id} — tentado ANTES do POST de criação. Evita o
+ * erro "Medico ja cadastrado para o parceiro com esse id externo", que
+ * acontece sempre que o cadastro já existe na Memed mas o cache local de
+ * token foi perdido (cold start do isolate, redeploy) — o cadastro na
+ * Memed é permanente, o tokenCache local não. Retorna null (sem tratar
+ * como erro) quando o usuário simplesmente ainda não existe — nesse caso
+ * o fluxo normal de POST segue adiante.
+ */
+async function fetchExistingMemedUser(
+  externalId: string,
+  apiKey: string,
+  secretKey: string,
+): Promise<{ token: string } | null> {
+  try {
+    const qs = `api-key=${encodeURIComponent(apiKey)}&secret-key=${encodeURIComponent(secretKey)}`;
+    const res = await memedFetch(
+      `${memedApiBase()}/sinapse-prescricao/usuarios/${encodeURIComponent(externalId)}?${qs}`,
+      { headers: { Accept: "application/vnd.api+json" } },
+    );
+    if (!res.ok) return null; // 404 = não existe ainda; outros erros seguem pro POST normalmente
+    const json: any = await res.json().catch(() => null);
+    const token = json?.data?.attributes?.token;
+    return token ? { token: String(token) } : null;
+  } catch (e) {
+    console.error("[memed] get_existing_user_error", { externalId, error: String(e) });
+    return null;
+  }
+}
+
 export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
   if (
@@ -235,6 +265,17 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   if (cached && cached.expiresAt > Date.now()) return { ok: true, token: cached.token, prescriber };
 
   const { apiKey, secretKey } = memedKeys();
+
+  // Usuário pode já existir na Memed de uma sessão anterior — GET evita o
+  // 400 "já cadastrado" do POST e é o caminho recomendado pela doc quando
+  // o external_id já existe (§3.1 do handover).
+  const existing = await fetchExistingMemedUser(doctor.id, apiKey!, secretKey!);
+  if (existing) {
+    tokenCache.set(doctor.id, { token: existing.token, expiresAt: Date.now() + TOKEN_TTL_MS });
+    console.info("[memed] token_ok_via_get", { prescriber });
+    return { ok: true, token: existing.token, prescriber };
+  }
+
   const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
   const [nome, ...resto] = doctor.nome.trim().split(/\s+/);
   const sobrenome = resto.join(" ") || nome;
