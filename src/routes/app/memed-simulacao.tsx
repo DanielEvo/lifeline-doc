@@ -189,15 +189,29 @@ function MemedSimulacao() {
   // recarregado nesta sessão. Nomes inventados do fixture não existem no
   // catálogo da Memed por definição — essa busca resolve pro princípio
   // ativo mais próximo, que É um item real e catalogado.
-  const buscaMemedCacheRef = useRef<Map<string, { id: string | null; motivo: string }>>(new Map());
+  const buscaMemedCacheRef = useRef<
+    Map<string, { id: string | null; motivo: string; viaBusca: boolean }>
+  >(new Map());
 
   // Antes isso devolvia só string|null — uma busca que FALHOU (rede,
   // not_configured, erro da Memed) virava idêntica a "não achou nada",
   // escondendo a causa real do mesmo jeito que o catch mudo de addItem
   // escondia falhas antes. Agora carrega o motivo junto.
+  // A busca (/drugs/ingredients) devolve o PRINCÍPIO ATIVO, não a
+  // apresentação — o `id` encontrado pode não ser específico pra essa
+  // dosagem (diferente de um id vindo do catálogo pessoal do médico, que é
+  // sempre uma apresentação exata). Sem repetir a dosagem em algum lugar,
+  // a prescrição pode sair sem indicar "25mg" em canto nenhum. Extrai a
+  // parte removida na busca (tudo a partir do primeiro token com dígito)
+  // pra recolocar na posologia quando o id vier da busca.
+  function extrairDosagem(nome: string): string {
+    const m = nome.match(/\s+(\S*\d[\s\S]*)$/);
+    return m ? m[1]!.trim() : "";
+  }
+
   async function resolverIdViaBuscaMemed(
     nome: string,
-  ): Promise<{ id: string | null; motivo: string }> {
+  ): Promise<{ id: string | null; motivo: string; viaBusca: boolean }> {
     const cache = buscaMemedCacheRef.current;
     if (cache.has(nome)) return cache.get(nome)!;
     // A Memed devolveu "Any ingredients match with terms..." pra
@@ -212,9 +226,10 @@ function MemedSimulacao() {
       new Set([nome.trim(), semDosagem, primeiraPalavra].filter((t) => t.length >= 2)),
     );
 
-    let resultado: { id: string | null; motivo: string } = {
+    let resultado: { id: string | null; motivo: string; viaBusca: boolean } = {
       id: null,
       motivo: "nenhum termo de busca válido",
+      viaBusca: true,
     };
     for (const termo of candidatos) {
       try {
@@ -223,6 +238,7 @@ function MemedSimulacao() {
           resultado = {
             id: r.itens[0]!.id,
             motivo: `achado buscando "${termo}": "${r.itens[0]!.nome}" (${r.itens.length} candidato(s))`,
+            viaBusca: true,
           };
           break;
         }
@@ -232,11 +248,13 @@ function MemedSimulacao() {
           motivo: r.ok
             ? `"${termo}" não retornou resultado`
             : `"${termo}" falhou (${r.error})${detalheBruto}`,
+          viaBusca: true,
         };
       } catch (e) {
         resultado = {
           id: null,
           motivo: `"${termo}" lançou exceção: ${e instanceof Error ? e.message : String(e)}`,
+          viaBusca: true,
         };
       }
     }
@@ -263,7 +281,7 @@ function MemedSimulacao() {
     // endpoint de busca separado para exames/laboratoriais, então esses
     // continuam indo por texto livre como antes (não são substância
     // controlada — não deveria ter a mesma exigência de catálogo).
-    const idsPorItem = new Map<string, { id: string | null; motivo: string }>();
+    const idsPorItem = new Map<string, { id: string | null; motivo: string; viaBusca: boolean }>();
     await Promise.all(
       cenario.itens
         .filter((item) => item.tipo === "med")
@@ -272,7 +290,11 @@ function MemedSimulacao() {
             (e) => e.nome.trim().toLowerCase() === item.nome.trim().toLowerCase() && e.memedId,
           );
           if (match?.memedId) {
-            idsPorItem.set(item.key, { id: match.memedId, motivo: "catálogo pessoal" });
+            idsPorItem.set(item.key, {
+              id: match.memedId,
+              motivo: "catálogo pessoal",
+              viaBusca: false,
+            });
             return;
           }
           idsPorItem.set(item.key, await resolverIdViaBuscaMemed(item.nome));
@@ -306,7 +328,16 @@ function MemedSimulacao() {
         } else {
           const resolvido = idsPorItem.get(item.key);
           if (resolvido?.id) {
-            payload = { id: resolvido.id, posologia: item.posologia ?? "" };
+            // id vindo de busca é do princípio ativo, não necessariamente
+            // da apresentação exata — repõe a dosagem na posologia pra não
+            // sair uma prescrição de "Amitriptilina" sem dizer "25mg" em
+            // lugar nenhum. id do catálogo pessoal já é uma apresentação
+            // específica, então não precisa disso.
+            const dosagem = resolvido.viaBusca ? extrairDosagem(item.nome) : "";
+            const posologiaComDosagem = dosagem
+              ? `${dosagem} — ${item.posologia ?? ""}`
+              : (item.posologia ?? "");
+            payload = { id: resolvido.id, posologia: posologiaComDosagem };
             origem = `Memed (${resolvido.id}) — ${resolvido.motivo}`;
             comId += 1;
           } else {
