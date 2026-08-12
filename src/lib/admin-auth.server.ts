@@ -17,7 +17,15 @@ import { mutateRows, nowIso, readRows } from "./db.server";
 // localStorage não é visível durante o SSR/loader.
 const ADMIN_COOKIE = "lifeline_admin_session";
 
-type AdminCredentials = { login: string; passHash: string; salt: string; updatedAt: string };
+type AdminCredentials = {
+  login: string;
+  passHash: string;
+  salt: string;
+  updatedAt: string;
+  /** Impressão digital dos secrets que geraram este registro. Quando os
+   *  secrets ADMIN_LOGIN/ADMIN_PASSWORD mudam, o registro é re-semeado. */
+  seedFingerprint?: string;
+};
 type AdminSession = { token: string; login: string; createdAt: string; expiresAt: string };
 
 const CREDENTIALS = "admin_credentials.json";
@@ -46,9 +54,19 @@ function hashPassword(password: string, salt: string) {
   return crypto.createHash("sha256").update(`${salt}:${password}`).digest("hex");
 }
 
-function makeCredentials(login: string, password: string): AdminCredentials {
+function makeCredentials(
+  login: string,
+  password: string,
+  seedFingerprint?: string,
+): AdminCredentials {
   const salt = crypto.randomBytes(12).toString("hex");
-  return { login, passHash: hashPassword(password, salt), salt, updatedAt: nowIso() };
+  return {
+    login,
+    passHash: hashPassword(password, salt),
+    salt,
+    updatedAt: nowIso(),
+    seedFingerprint,
+  };
 }
 
 function verify(creds: AdminCredentials, password: string): boolean {
@@ -57,27 +75,41 @@ function verify(creds: AdminCredentials, password: string): boolean {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
+/** Impressão digital dos secrets atuais (nunca revela os valores). */
+function currentFingerprint(): string {
+  return crypto
+    .createHash("sha256")
+    .update(`${seedLogin().toLowerCase()}\u0000${seedPassword()}`)
+    .digest("hex");
+}
+
 /** Lê a credencial de admin. Semeia a partir de ADMIN_LOGIN/ADMIN_PASSWORD;
  *  se não estiverem configurados, semeia uma senha aleatória inutilizável
- *  (o painel fica fechado até os secrets serem definidos). */
+ *  (o painel fica fechado até os secrets serem definidos). Quando os secrets
+ *  mudam (ou são definidos pela primeira vez depois de um seed aleatório), o
+ *  registro é substituído pela credencial dos secrets. */
 async function getCredentials(): Promise<AdminCredentials> {
+  const fingerprint = adminConfigured() ? currentFingerprint() : null;
   const existing = await readRows<AdminCredentials>(CREDENTIALS);
-  // Credencial padrão legada gravada antes desta correção é descartada e
-  // substituída pela dos secrets (ou por uma aleatória inutilizável).
-  if (existing[0] && !verify(existing[0], "lifelineadm")) return existing[0];
-  if (existing[0]) await mutateRows<AdminCredentials>(CREDENTIALS, () => []);
-  const login = adminConfigured() ? seedLogin() : crypto.randomBytes(16).toString("hex");
-  const password = adminConfigured() ? seedPassword() : crypto.randomBytes(32).toString("hex");
-  let seeded: AdminCredentials | undefined;
-  await mutateRows<AdminCredentials>(CREDENTIALS, (rows) => {
-    if (rows[0]) {
-      seeded = rows[0];
-      return rows;
+  const current = existing[0];
+
+  if (current) {
+    const legacyDefault = verify(current, "lifelineadm");
+    // Credencial dos secrets já aplicada (ou trocada manualmente pelo painel).
+    if (!legacyDefault && (!fingerprint || current.seedFingerprint === fingerprint)) {
+      return current;
     }
-    seeded = makeCredentials(login, password);
-    return [seeded];
-  });
-  return seeded!;
+    // Sem secrets configurados e sem default legado: mantém o registro fechado.
+    if (!fingerprint && !legacyDefault) return current;
+  }
+
+  const login = fingerprint ? seedLogin() : crypto.randomBytes(16).toString("hex");
+  const password = fingerprint ? seedPassword() : crypto.randomBytes(32).toString("hex");
+  const next = makeCredentials(login, password, fingerprint ?? undefined);
+  await mutateRows<AdminCredentials>(CREDENTIALS, () => [next]);
+  // Re-semear invalida sessões antigas.
+  await mutateRows<AdminSession>(SESSIONS, () => []);
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +216,13 @@ export async function changeAdminCredentials(
   if (!(await requireAdminSession(token))) return { ok: false, error: "Sessão expirada." };
   const creds = await getCredentials();
   if (!verify(creds, senhaAtual)) return { ok: false, error: "Senha atual incorreta." };
-  const next = makeCredentials(novoLogin.trim(), novaSenha);
+  // Marca com a fingerprint dos secrets atuais para que a troca manual não
+  // seja sobrescrita pelo re-seed automático.
+  const next = makeCredentials(
+    novoLogin.trim(),
+    novaSenha,
+    adminConfigured() ? currentFingerprint() : undefined,
+  );
   await mutateRows<AdminCredentials>(CREDENTIALS, () => [next]);
   // Trocar credenciais invalida TODAS as sessões — inclusive a atual, que
   // precisa logar de novo com a credencial nova.
