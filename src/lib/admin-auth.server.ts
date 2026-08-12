@@ -17,7 +17,15 @@ import { mutateRows, nowIso, readRows } from "./db.server";
 // localStorage não é visível durante o SSR/loader.
 const ADMIN_COOKIE = "lifeline_admin_session";
 
-type AdminCredentials = { login: string; passHash: string; salt: string; updatedAt: string };
+type AdminCredentials = {
+  login: string;
+  passHash: string;
+  salt: string;
+  updatedAt: string;
+  /** Impressão digital dos secrets que geraram este registro. Quando os
+   *  secrets ADMIN_LOGIN/ADMIN_PASSWORD mudam, o registro é re-semeado. */
+  seedFingerprint?: string;
+};
 type AdminSession = { token: string; login: string; createdAt: string; expiresAt: string };
 
 const CREDENTIALS = "admin_credentials.json";
