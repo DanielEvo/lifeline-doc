@@ -216,7 +216,13 @@ export async function changeAdminCredentials(
   if (!(await requireAdminSession(token))) return { ok: false, error: "Sessão expirada." };
   const creds = await getCredentials();
   if (!verify(creds, senhaAtual)) return { ok: false, error: "Senha atual incorreta." };
-  const next = makeCredentials(novoLogin.trim(), novaSenha);
+  // Marca com a fingerprint dos secrets atuais para que a troca manual não
+  // seja sobrescrita pelo re-seed automático.
+  const next = makeCredentials(
+    novoLogin.trim(),
+    novaSenha,
+    adminConfigured() ? currentFingerprint() : undefined,
+  );
   await mutateRows<AdminCredentials>(CREDENTIALS, () => [next]);
   // Trocar credenciais invalida TODAS as sessões — inclusive a atual, que
   // precisa logar de novo com a credencial nova.
