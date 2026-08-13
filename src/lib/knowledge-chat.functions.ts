@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireDoctor } from "./auth.server";
 import { listAlwaysAppliedCriterios } from "./criterios.server";
+import { generateGeminiText } from "./gemini-client.server";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant", "system"]),
@@ -21,50 +22,6 @@ const SYSTEM_PROMPT = `Você é o assistente de conhecimento clínico do LifeLin
 - Estruture respostas em tópicos curtos quando útil (diagnóstico, conduta, follow-up).
 - Se faltar contexto do paciente, peça o dado específico que precisa.
 - Nunca invente doses; se não tiver certeza, diga.`;
-
-/** Helper puro (não é server fn) — chama o Lovable AI Gateway e devolve o
- *  texto da resposta. Reaproveitado por askKnowledgeAssistant (chat) e por
- *  transcribeConsult (resumo estruturado do ditado) para não duplicar a
- *  chamada HTTP nem o tratamento de erro de créditos/rate-limit. */
-export async function callLovableChat(
-  messages: ChatMessage[],
-  opts: { system?: string } = {},
-): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) {
-    throw new Error("LOVABLE_API_KEY não configurada.");
-  }
-
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Lovable-API-Key": apiKey,
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [{ role: "system", content: opts.system ?? SYSTEM_PROMPT }, ...messages],
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 429) {
-      throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
-    }
-    if (res.status === 402) {
-      throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
-    }
-    throw new Error(`Falha no assistente (${res.status}): ${text.slice(0, 200)}`);
-  }
-
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const reply = json.choices?.[0]?.message?.content?.trim();
-  if (!reply) throw new Error("Resposta vazia do assistente.");
-  return reply;
-}
 
 /** Monta o bloco de "Verdade" (Seção 1.1/5.1 do documento de concepção):
  *  Regra e Estilo são sempre injetados no system prompt, nunca em RAG sob
@@ -106,9 +63,23 @@ export const askKnowledgeAssistant = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return { ok: false as const, error: "unauthorized" as const };
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return { ok: false as const, error: "not_configured" as const };
+
     const context = await buildCriteriosContext(doctor.id);
-    const reply = await callLovableChat(data.messages, {
-      system: context ? `${SYSTEM_PROMPT}${context}` : undefined,
-    });
-    return { ok: true as const, reply };
+    try {
+      const reply = await generateGeminiText({
+        apiKey,
+        system: context ? `${SYSTEM_PROMPT}${context}` : SYSTEM_PROMPT,
+        messages: data.messages,
+      });
+      return { ok: true as const, reply };
+    } catch (err) {
+      return {
+        ok: false as const,
+        error: "generation_failed" as const,
+        detail: err instanceof Error ? err.message : String(err),
+      };
+    }
   });

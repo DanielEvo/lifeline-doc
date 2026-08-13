@@ -65,7 +65,7 @@ export const generateMyTemplateDraft = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    if (!process.env.LOVABLE_API_KEY) {
+    if (!process.env.GEMINI_API_KEY) {
       return { ok: false as const, error: "not_configured" as const };
     }
     try {

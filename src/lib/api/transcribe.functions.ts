@@ -1,56 +1,60 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { callLovableChat } from "../knowledge-chat.functions";
 import { requireDoctor } from "../auth.server";
+import { generateGeminiJson, uploadFileToGemini, GEMINI_MODEL } from "../gemini-client.server";
 
-// Ditado da consulta: áudio real (MediaRecorder no navegador) → transcrição
-// via Lovable AI Gateway (proxy no formato da OpenAI, modelo
-// openai/gpt-4o-mini-transcribe) → resumo estruturado reaproveitando o
-// MESMO gateway de chat já validado pelo assistente de conhecimento.
-// Endpoint de transcrição inferido do padrão /v1/chat/completions já
-// confirmado em produção (mesmo host, mesmo header, contrato OpenAI-shape)
-// — validar contra uma chave real antes de ir a produção (ver PRD).
-//
-// A estrutura do resumo depende do template ativo no front (PRO-02/PRO-03):
-// com seções (Padrão/Anamnese/custom), o resumo sai já dividido por
-// cabeçalho — sem seções ("Texto livre"), sai um único resumo corrido.
+// Ditado da consulta: áudio real (MediaRecorder no navegador) → transcrição +
+// resumo estruturado em UMA chamada multimodal ao Gemini (antes eram duas
+// chamadas via Lovable AI Gateway: transcrição + resumo). A estrutura do
+// resumo depende do template ativo no front (PRO-02/PRO-03): com seções
+// (Padrão/Anamnese/custom), o resumo sai já dividido por cabeçalho — sem
+// seções ("Texto livre"), sai um único resumo corrido.
 
-/** Monta o system prompt pedindo um JSON com uma chave por seção — índice
- *  numérico ("s0", "s1", …) como chave interna pra não depender de
- *  acento/case do label; o label original é reanexado depois em `blocks`. */
-function buildSectionsSystem(sections: string[], templateContent: string): string {
-  const keys = sections.map((_, i) => `s${i}`);
-  const mapping = sections.map((label, i) => `${keys[i]} = "${label}"`).join("; ");
+const INLINE_LIMIT_BYTES = 15_000_000;
+
+const CONVERSATION_NOTICE =
+  "O áudio é uma conversa entre médico e paciente durante a consulta — não um monólogo do médico. Sintetize por conteúdo clínico, não transcreva literalmente seção por seção.";
+
+const FREE_TEXT_PROMPT = `${CONVERSATION_NOTICE}
+Transcreva o áudio literalmente no campo transcricao.
+No campo resumo, produza um resumo corrido em prosa clínica objetiva, cobrindo queixa/avaliação/conduta, sem estrutura fixa.
+Se a transcrição não tiver conteúdo clínico relevante, devolva resumo vazio.
+Nunca invente conteúdo.`;
+
+/** Monta o prompt pedindo um JSON com uma chave por seção — índice numérico
+ *  ("s0", "s1", …) como chave interna pra não depender de acento/case do
+ *  label; o label original é reanexado depois em `blocks`. */
+function buildSectionsPrompt(sections: string[], templateContent: string): string {
+  const mapping = sections.map((label, i) => `s${i} = "${label}"`).join("; ");
   const templateBlock = templateContent.trim()
     ? `\n\nO médico escolheu este template — use-o como instrução de estrutura e de estilo, respeitando qualquer orientação escrita nele:\n"""\n${templateContent.trim()}\n"""`
     : "";
-  return `Você resume transcrições de consultas médicas em português do Brasil, organizando o conteúdo nas seções de um template escolhido pelo médico.
-Devolva SOMENTE um JSON válido (sem markdown, sem texto fora do JSON) com exatamente estas chaves, nesta ordem: ${keys.join(", ")}.
-Cada chave corresponde a uma seção do template: ${mapping}.
-Para cada seção, extraia da transcrição só o que foi efetivamente dito e é relevante para aquele cabeçalho.
-Se uma seção não tiver informação correspondente na transcrição, devolva string vazia "" — nunca invente conteúdo.${templateBlock}`;
+  return `${CONVERSATION_NOTICE}
+Transcreva o áudio literalmente no campo transcricao. Nas demais seções, distribua o conteúdo clínico relevante — cada chave corresponde a uma seção do template: ${mapping}.
+
+REGRA CRÍTICA: seções de avaliação, hipótese, diagnóstico ou conduta só podem conter julgamento clínico verbalizado pelo MÉDICO — nunca uma fala do paciente, mesmo que pareça clinicamente relevante. Seções de queixa/relato podem e devem refletir as palavras do paciente. Se não for possível determinar com segurança quem verbalizou um trecho, classifique-o como relato do paciente (mais seguro).
+
+Para cada seção, devolva também um booleano s{i}_paciente = true se o texto daquela seção contém, ou é derivado de, fala direta do paciente — sinal para o médico revisar com atenção extra antes de aceitar.
+
+Se uma seção não tiver informação correspondente na transcrição, devolva string vazia "" e s{i}_paciente = false — nunca invente conteúdo.${templateBlock}`;
 }
 
-function extractSectionsJson(
-  text: string,
-  sections: string[],
-): { label: string; text: string }[] {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Resumo da IA não veio em formato reconhecível.");
-  const parsed = JSON.parse(match[0]) as Record<string, unknown>;
-  return sections.map((label, i) => {
-    const v = parsed[`s${i}`];
-    return { label, text: typeof v === "string" ? v : "" };
-  });
+function buildSchema(sections: string[]): Record<string, unknown> {
+  const props: Record<string, unknown> = { transcricao: { type: "string" } };
+  const required = ["transcricao"];
+  if (sections.length === 0) {
+    props.resumo = { type: "string" };
+    required.push("resumo");
+  } else {
+    sections.forEach((_, i) => {
+      props[`s${i}`] = { type: "string" };
+      props[`s${i}_paciente`] = { type: "boolean" };
+      required.push(`s${i}`, `s${i}_paciente`);
+    });
+  }
+  return { type: "object", properties: props, required };
 }
-
-// Modo "Texto livre" (sem template com seções) — resumo corrido em prosa,
-// sem se prender a nenhuma estrutura fixa (não há seção nenhuma pra separar por).
-const FREE_TEXT_SYSTEM = `Você resume transcrições de consultas médicas em português do Brasil para uso em texto livre de evolução clínica.
-Produza um resumo corrido, em prosa clínica objetiva, cobrindo o que foi dito de relevante (queixa, avaliação, conduta) sem se prender a uma estrutura fixa de seções.
-Devolva SOMENTE o texto do resumo — sem markdown, sem JSON, sem título.
-Se a transcrição não tiver conteúdo clínico relevante, devolva string vazia.`;
 
 export const transcribeConsult = createServerFn({ method: "POST" })
   .inputValidator(
@@ -73,57 +77,56 @@ export const transcribeConsult = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) throw new Error("Sessão expirada. Entre novamente para usar o ditado.");
 
-    const apiKey = process.env.LOVABLE_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error(
-        "LOVABLE_API_KEY não configurada neste ambiente — ditado por IA indisponível. Configure a chave para ativar.",
-      );
+      throw new Error("GEMINI_API_KEY não configurada neste ambiente — ditado por IA indisponível.");
     }
 
     const audioBuffer = Buffer.from(data.audioBase64, "base64");
     if (audioBuffer.length === 0) throw new Error("Áudio vazio.");
 
-    const ext = data.mimeType.includes("mp4") ? "mp4" : data.mimeType.includes("wav") ? "wav" : "webm";
-    const form = new FormData();
-    form.append("file", new Blob([audioBuffer], { type: data.mimeType }), `consulta.${ext}`);
-    form.append("model", "openai/gpt-4o-mini-transcribe");
-
-    const transcribeRes = await fetch("https://ai.gateway.lovable.dev/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { "Lovable-API-Key": apiKey },
-      body: form,
-    });
-
-    if (!transcribeRes.ok) {
-      const text = await transcribeRes.text().catch(() => "");
-      if (transcribeRes.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
-      if (transcribeRes.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
-      throw new Error(`Falha na transcrição (${transcribeRes.status}): ${text.slice(0, 200)}`);
-    }
-
-    const transcribeJson = (await transcribeRes.json()) as { text?: string };
-    const transcript = transcribeJson.text?.trim();
-    if (!transcript) throw new Error("Transcrição vazia — tente falar mais alto ou perto do microfone.");
+    const mimeType = data.mimeType.split(";")[0].trim() || "audio/webm";
 
     const sections = data.templateSections;
-    let blocks: { label: string; text: string }[];
-    if (sections.length === 0) {
-      const summary = await callLovableChat(
-        [{ role: "user", content: transcript }],
-        { system: FREE_TEXT_SYSTEM },
-      );
-      blocks = [{ label: "Transcrição", text: summary.trim() }];
-    } else {
-      const summaryReply = await callLovableChat(
-        [{ role: "user", content: transcript }],
-        { system: buildSectionsSystem(sections, data.templateContent) },
-      );
-      blocks = extractSectionsJson(summaryReply, sections);
+    const schema = buildSchema(sections);
+    const prompt = sections.length === 0 ? FREE_TEXT_PROMPT : buildSectionsPrompt(sections, data.templateContent);
+
+    const fileUri =
+      audioBuffer.length > INLINE_LIMIT_BYTES ? await uploadFileToGemini(audioBuffer, mimeType, apiKey) : null;
+
+    const audioPart = fileUri
+      ? ({ fileData: { mimeType, fileUri } } as const)
+      : ({ inlineData: { mimeType, data: data.audioBase64 } } as const);
+
+    let json: Record<string, unknown>;
+    try {
+      json = await generateGeminiJson({
+        apiKey,
+        model: GEMINI_MODEL,
+        parts: [{ text: prompt }, audioPart],
+        responseSchema: schema,
+      });
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : "Não consegui transcrever agora.");
     }
 
-    return {
-      durationSec: data.durationSec,
-      transcript,
-      blocks,
-    };
+    const transcript = typeof json.transcricao === "string" ? json.transcricao.trim() : "";
+    if (!transcript) throw new Error("Transcrição vazia — tente falar mais alto ou perto do microfone.");
+
+    const blocks =
+      sections.length === 0
+        ? [
+            {
+              label: "Transcrição",
+              text: typeof json.resumo === "string" ? json.resumo.trim() : "",
+              containsPatientReport: false,
+            },
+          ]
+        : sections.map((label, i) => ({
+            label,
+            text: typeof json[`s${i}`] === "string" ? (json[`s${i}`] as string).trim() : "",
+            containsPatientReport: json[`s${i}_paciente`] === true,
+          }));
+
+    return { durationSec: data.durationSec, transcript, blocks };
   });

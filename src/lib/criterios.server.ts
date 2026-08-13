@@ -8,7 +8,7 @@
 // Postgres, pré-requisito de TECH-20).
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { callLovableChat } from "./knowledge-chat.functions";
+import { generateGeminiText } from "./gemini-client.server";
 
 export type CriterioKind = "regra" | "metrica" | "estilo";
 
@@ -87,8 +87,12 @@ export async function classifyCriterio(
   rawText: string,
 ): Promise<{ kind: CriterioKind; label: string }> {
   try {
-    const reply = await callLovableChat([{ role: "user", content: rawText }], {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY não configurada.");
+    const reply = await generateGeminiText({
+      apiKey,
       system: CLASSIFY_SYSTEM,
+      messages: [{ role: "user", content: rawText }],
     });
     const parsed = parseClassification(reply);
     if (parsed) return parsed;

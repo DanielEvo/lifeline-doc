@@ -5,7 +5,7 @@
 // descrição em linguagem natural do médico.
 
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
-import { callLovableChat } from "./knowledge-chat.functions";
+import { generateGeminiText, GEMINI_MODEL } from "./gemini-client.server";
 
 const FILE = "templates.json";
 
@@ -74,9 +74,10 @@ export async function deleteTemplate(doctorId: string, id: string): Promise<bool
 }
 
 // ---------------------------------------------------------------------------
-// Rascunho de estrutura via IA (PRO-03) — mesmo client (callLovableChat) já
-// usado por transcribe.functions.ts e knowledge-chat.functions.ts, não Gemini
-// direto. Só monta cabeçalhos; nunca preenche conteúdo clínico.
+// Rascunho de estrutura via IA (PRO-03) — mesmo cliente Gemini direto
+// (gemini-client.server.ts) usado por transcribe.functions.ts e
+// knowledge-chat.functions.ts. Só monta cabeçalhos; nunca preenche conteúdo
+// clínico.
 
 const TEMPLATE_DRAFT_SYSTEM = `Você ajuda um médico a montar a ESTRUTURA de um template de evolução clínica em português do Brasil.
 Devolva SOMENTE o texto do template — sem markdown, sem explicações fora do template.
@@ -93,8 +94,13 @@ Regras:
 - Use entre 2 e 8 seções.`;
 
 export async function generateTemplateDraft(descricao: string): Promise<string> {
-  const reply = await callLovableChat([{ role: "user", content: descricao }], {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada.");
+  const reply = await generateGeminiText({
+    apiKey,
+    model: GEMINI_MODEL,
     system: TEMPLATE_DRAFT_SYSTEM,
+    messages: [{ role: "user", content: descricao }],
   });
   return reply.trim();
 }

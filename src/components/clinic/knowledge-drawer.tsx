@@ -214,7 +214,15 @@ export function KnowledgeDrawer({ open, onOpenChange, token, onWidthChange }: Pr
           content: m.text,
         }));
       const result = await askKnowledgeAssistant({ data: { token, messages: payload } });
-      if (!result.ok) throw new Error("Sessão expirada. Recarregue a página.");
+      if (!result.ok) {
+        const msg =
+          result.error === "not_configured"
+            ? "Assistente de IA não configurado neste ambiente."
+            : result.error === "generation_failed"
+              ? "Não consegui consultar o assistente agora. Tente de novo."
+              : "Sessão expirada. Recarregue a página.";
+        throw new Error(msg);
+      }
       setMessages((m) => m.map((x) => (x.id === placeholderId ? { ...x, text: result.reply } : x)));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao consultar assistente.";

@@ -1819,7 +1819,7 @@ function MinhasNotas({
             onChange={(e) => onChange(e.target.value)}
             placeholder="Anotações livres sobre este paciente…"
             maxLength={4000}
-            className="mt-2 min-h-[80px] resize-none bg-background text-sm"
+            className="mt-2 min-h-[80px] max-h-[400px] resize-y bg-background text-sm"
           />
         </>
       )}
@@ -2221,7 +2221,7 @@ function NovaEvolucao({
 // "+ Criar template" (PRO-03) — descrição em linguagem natural → IA monta só
 // a estrutura (cabeçalhos) → rascunho editável → salvar (persiste, vira pill
 // própria) ou usar sem salvar (aplica na evolução atual, não persiste). Sem
-// LOVABLE_API_KEY configurada, cai direto no modo manual (textarea vazio).
+// GEMINI_API_KEY configurada, cai direto no modo manual (textarea vazio).
 // `initialConteudo` pula direto pro passo "estrutura + nome" — usado por
 // "Salvar como template" (semeado com o texto da evolução atual).
 function CreateTemplateDialog({

@@ -1,6 +1,6 @@
 // Ditado da consulta — grava áudio de verdade (MediaRecorder), com
 // pausar/continuar → parar SÓ com confirmação → o áudio vai pro servidor,
-// que transcreve e resume via Lovable AI Gateway → blocos de sugestão que
+// que transcreve e resume via Gemini → blocos de sugestão que
 // o médico aceita, edita ou descarta antes de entrarem na evolução. Nada
 // entra no prontuário sem revisão humana, e nenhum áudio fica gravado no
 // disco — só o texto resultante é persistido.
@@ -20,6 +20,7 @@ type Block = {
   label: string;
   text: string;
   status: "pending" | "accepted" | "discarded";
+  containsPatientReport?: boolean;
 };
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -95,7 +96,13 @@ export function Dictation({
     },
     onSuccess: (r) => {
       setBlocks(
-        r.blocks.map((b, i) => ({ id: String(i), label: b.label, text: b.text, status: "pending" })),
+        r.blocks.map((b, i) => ({
+          id: String(i),
+          label: b.label,
+          text: b.text,
+          status: "pending",
+          containsPatientReport: b.containsPatientReport,
+        })),
       );
       toast.message("Transcrição pronta", {
         description: "Revise os blocos antes de incorporar à evolução.",
@@ -279,6 +286,14 @@ export function Dictation({
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                     {b.label}
                   </span>
+                  {b.containsPatientReport && (
+                    <span
+                      title="Este bloco pode conter fala direta do paciente — revise com atenção antes de aceitar"
+                      className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-900"
+                    >
+                      🗣️ fala do paciente
+                    </span>
+                  )}
                   <div className="flex gap-0.5">
                     <button
                       onClick={() => accept(b)}
