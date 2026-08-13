@@ -1782,11 +1782,28 @@ function MinhasNotas({
 
   const [aberto, setAberto] = useState(false);
 
+  // Altura da caixa fica do jeito que o médico deixou (persistida no navegador).
+  const STORAGE_KEY = "lifeline:minhas-notas:altura";
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const el = taRef.current;
+    if (!el) return;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+    if (saved) el.style.height = saved;
+    const ro = new ResizeObserver(() => {
+      if (el.style.height) window.localStorage.setItem(STORAGE_KEY, el.style.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [aberto]);
+
   const onChange = (v: string) => {
     setTexto(v);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => salvar.mutate(v), 600);
   };
+
 
   return (
     <div className="mt-4 rounded-2xl border border-border bg-card p-4">
@@ -1815,12 +1832,14 @@ function MinhasNotas({
             judicial.
           </p>
           <Textarea
+            ref={taRef}
             value={texto}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Anotações livres sobre este paciente…"
             maxLength={4000}
             className="mt-2 min-h-[80px] max-h-[400px] resize-y bg-background text-sm"
           />
+
         </>
       )}
     </div>
