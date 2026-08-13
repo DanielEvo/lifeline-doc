@@ -1832,12 +1832,14 @@ function MinhasNotas({
             judicial.
           </p>
           <Textarea
+            ref={taRef}
             value={texto}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Anotações livres sobre este paciente…"
             maxLength={4000}
             className="mt-2 min-h-[80px] max-h-[400px] resize-y bg-background text-sm"
           />
+
         </>
       )}
     </div>
