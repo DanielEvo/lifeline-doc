@@ -280,7 +280,7 @@ function PatientAppPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/40 via-background to-muted/20">
-      <header className="border-b border-border/60 bg-background/70 backdrop-blur">
+      <header className="border-b border-border/60 bg-background/95">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient shadow-md shadow-primary/30">

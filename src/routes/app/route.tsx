@@ -214,7 +214,7 @@ function Shell({ clinic }: { clinic: Clinic }) {
 
       {/* Top bar mobile */}
       <div className="md:hidden">
-        <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-background/95 px-3 py-2 backdrop-blur">
+        <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-md brand-gradient">
             <Activity className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2.5} />
           </div>
