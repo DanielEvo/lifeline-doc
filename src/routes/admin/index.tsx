@@ -145,7 +145,7 @@ function Admin() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-5">
           <Link to="/" className="rounded-md p-1.5 hover:bg-muted">
             <ArrowLeft className="h-4 w-4" />
