@@ -112,6 +112,19 @@ export function Dictation({
   });
 
   const start = async () => {
+    // Falhas de microfone têm causas bem diferentes (permissão negada, nenhum
+    // dispositivo, contexto inseguro, navegador embutido). Mensagem genérica
+    // deixava o médico sem saber o que corrigir.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      toast.error("O microfone só funciona em conexão segura (https). Abra o site pelo endereço https://.");
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error(
+        "Este navegador não libera o microfone. Abra o LifeLine no Chrome, Edge ou Safari (fora do navegador interno do WhatsApp/Instagram).",
+      );
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -126,10 +139,27 @@ export function Dictation({
       setPaused(false);
       setSeconds(0);
       setBlocks([]);
-    } catch {
-      toast.error("Não consegui acessar o microfone — verifique a permissão do navegador.");
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        toast.error("Permissão de microfone bloqueada", {
+          description:
+            "Clique no cadeado ao lado do endereço do site → Microfone → Permitir, e tente de novo.",
+        });
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        toast.error("Nenhum microfone encontrado", {
+          description: "Conecte um microfone ou fone com microfone e tente novamente.",
+        });
+      } else if (name === "NotReadableError" || name === "AbortError") {
+        toast.error("O microfone está em uso por outro programa", {
+          description: "Feche chamadas (Meet, Zoom, WhatsApp) e tente de novo.",
+        });
+      } else {
+        toast.error("Não consegui acessar o microfone — verifique a permissão do navegador.");
+      }
     }
   };
+
 
   const requestStop = () => setConfirmStop(true);
   const cancelStop = () => setConfirmStop(false);
