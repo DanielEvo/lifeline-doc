@@ -343,6 +343,9 @@
 .reveal.is-visible {
   opacity: 1;
   transform: translateY(0);
+  /* libera a camada de composição depois da entrada — manter will-change
+     em dezenas de blocos deixa a página pesada no scroll */
+  will-change: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -355,6 +358,23 @@
     animation: none;
   }
 }
+
+/* Desfoques gigantes animados (aurora) custam repintura de tela cheia e
+   deixavam o site "embaçado e lento" em máquinas mais simples e no mobile.
+   Fora do desktop grande, e sempre que o usuário pede menos movimento,
+   os halos ficam estáticos e com desfoque leve. */
+@media (max-width: 1024px), (prefers-reduced-motion: reduce) {
+  .animate-aurora,
+  .animate-aurora-alt,
+  .animate-float {
+    animation: none !important;
+  }
+  .blur-3xl {
+    --tw-blur: blur(28px);
+    filter: blur(28px);
+  }
+}
+
 
 /* Subtle press feedback for any interactive element using this utility */
 @utility press {
