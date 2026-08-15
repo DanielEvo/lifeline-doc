@@ -2242,6 +2242,35 @@ function NovaEvolucao({
         </>
       )}
 
+      <AlertDialog
+        open={pendingTemplate !== null}
+        onOpenChange={(o) => !o && setPendingTemplate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir o texto da evolução?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Já existe texto escrito neste campo. Aplicar o template
+              {pendingTemplate
+                ? ` "${templatesPills.find((t) => t.id === pendingTemplate)?.label ?? ""}"`
+                : ""}{" "}
+              vai apagar tudo o que está escrito. Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter o texto</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingTemplate) trocarTemplate(pendingTemplate);
+                setPendingTemplate(null);
+              }}
+            >
+              Limpar e aplicar template
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <CreateTemplateDialog
         open={createTemplateOpen}
         onOpenChange={setCreateTemplateOpen}
