@@ -94,7 +94,10 @@ async function getCredentials(): Promise<AdminCredentials> {
   const current = existing[0];
 
   if (current) {
-    const legacyDefault = verify(current, "lifelineadm");
+    // Só é "default legado" quando NÃO veio dos secrets atuais. Se o operador
+    // configurou ADMIN_PASSWORD com esse valor, é uma credencial legítima.
+    const legacyDefault =
+      verify(current, "lifelineadm") && (!fingerprint || current.seedFingerprint !== fingerprint);
     // Credencial dos secrets já aplicada (ou trocada manualmente pelo painel).
     if (!legacyDefault && (!fingerprint || current.seedFingerprint === fingerprint)) {
       return current;
