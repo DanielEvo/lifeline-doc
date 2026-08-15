@@ -1997,14 +1997,22 @@ function NovaEvolucao({
     },
   });
 
-  const applyTemplate = (mode: TemplateMode) => {
-    if (mode === template) return;
+  const trocarTemplate = (mode: TemplateMode) => {
     if (mode !== "historico") onActiveHistoricoChange(null);
     setTemplate(mode);
-    // Só preenche se o campo estiver vazio — nunca sobrescreve rascunho.
-    if (mode !== "historico" && texto.trim().length === 0) {
+    if (mode !== "historico") {
       setTexto(contentForTemplate(mode, myTemplates, ephemeralConteudo));
     }
+  };
+
+  const applyTemplate = (mode: TemplateMode) => {
+    if (mode === template) return;
+    // Rascunho em andamento → confirma antes de substituir pelo novo template.
+    if (mode !== "historico" && texto.trim().length > 0) {
+      setPendingTemplate(mode);
+      return;
+    }
+    trocarTemplate(mode);
   };
 
   const selecionarConsulta = (id: string) => {
