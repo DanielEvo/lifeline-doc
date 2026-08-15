@@ -2177,10 +2177,11 @@ function NovaEvolucao({
             />
           </div>
           <Textarea
+            ref={evoRef}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
-            className="mt-1.5 min-h-[140px] resize-none bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
+            className="mt-1.5 min-h-[140px] resize-y bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
           />
           {preview && (
             <div className="mt-2">
