@@ -175,8 +175,9 @@ export async function loginAdmin(
 ): Promise<{ ok: true; token: string } | { ok: false; error: "locked" | "invalid" }> {
   if (isLocked(login)) return { ok: false, error: "locked" };
   const creds = await getCredentials();
-  // Bloqueia qualquer credencial padrão legada gravada antes desta correção.
-  if (verify(creds, "lifelineadm")) return { ok: false, error: "invalid" };
+  // Bloqueia a credencial padrão legada apenas quando ela NÃO veio dos
+  // secrets configurados (registro semeado antes desta correção).
+  if (!adminConfigured() && verify(creds, "lifelineadm")) return { ok: false, error: "invalid" };
   if (attemptKey(login) !== attemptKey(creds.login) || !verify(creds, senha)) {
     registerFailure(login);
     return { ok: false, error: "invalid" };
