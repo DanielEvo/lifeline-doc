@@ -1935,6 +1935,22 @@ function NovaEvolucao({
   // completa na 1ª consulta (isso é o ajuste de UX do PRO-02/PRO-03).
   const [texto, setTexto] = useState<string>(() => TEMPLATE_PADRAO);
   const [template, setTemplate] = useState<TemplateMode>("padrao");
+  // Template aguardando confirmação (o campo já tem texto escrito).
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateMode | null>(null);
+  // Altura da caixa de evolução fica como o médico deixou (persistida).
+  const EVO_HEIGHT_KEY = "lifeline:evolucao:altura";
+  const evoRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = evoRef.current;
+    if (!el) return;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(EVO_HEIGHT_KEY) : null;
+    if (saved) el.style.height = saved;
+    const ro = new ResizeObserver(() => {
+      if (el.style.height) window.localStorage.setItem(EVO_HEIGHT_KEY, el.style.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [template]);
   // Conteúdo de um template gerado via IA e aplicado sem salvar (Dialog
   // "+ Criar template" → "Usar sem salvar") — não persiste, só fica ativo
   // nesta sessão de edição.
@@ -1997,14 +2013,22 @@ function NovaEvolucao({
     },
   });
 
-  const applyTemplate = (mode: TemplateMode) => {
-    if (mode === template) return;
+  const trocarTemplate = (mode: TemplateMode) => {
     if (mode !== "historico") onActiveHistoricoChange(null);
     setTemplate(mode);
-    // Só preenche se o campo estiver vazio — nunca sobrescreve rascunho.
-    if (mode !== "historico" && texto.trim().length === 0) {
+    if (mode !== "historico") {
       setTexto(contentForTemplate(mode, myTemplates, ephemeralConteudo));
     }
+  };
+
+  const applyTemplate = (mode: TemplateMode) => {
+    if (mode === template) return;
+    // Rascunho em andamento → confirma antes de substituir pelo novo template.
+    if (mode !== "historico" && texto.trim().length > 0) {
+      setPendingTemplate(mode);
+      return;
+    }
+    trocarTemplate(mode);
   };
 
   const selecionarConsulta = (id: string) => {
@@ -2153,10 +2177,11 @@ function NovaEvolucao({
             />
           </div>
           <Textarea
+            ref={evoRef}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             placeholder="Paciente relata… Ao exame… Hipótese… Conduta… — ou dite pelo microfone acima"
-            className="mt-1.5 min-h-[140px] resize-none bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
+            className="mt-1.5 min-h-[140px] resize-y bg-background text-sm focus-visible:ring-2 focus-visible:ring-cyan-300"
           />
           {preview && (
             <div className="mt-2">
@@ -2216,6 +2241,35 @@ function NovaEvolucao({
           </div>
         </>
       )}
+
+      <AlertDialog
+        open={pendingTemplate !== null}
+        onOpenChange={(o) => !o && setPendingTemplate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir o texto da evolução?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Já existe texto escrito neste campo. Aplicar o template
+              {pendingTemplate
+                ? ` "${templatesPills.find((t) => t.id === pendingTemplate)?.label ?? ""}"`
+                : ""}{" "}
+              vai apagar tudo o que está escrito. Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter o texto</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingTemplate) trocarTemplate(pendingTemplate);
+                setPendingTemplate(null);
+              }}
+            >
+              Limpar e aplicar template
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <CreateTemplateDialog
         open={createTemplateOpen}
