@@ -1935,6 +1935,22 @@ function NovaEvolucao({
   // completa na 1ª consulta (isso é o ajuste de UX do PRO-02/PRO-03).
   const [texto, setTexto] = useState<string>(() => TEMPLATE_PADRAO);
   const [template, setTemplate] = useState<TemplateMode>("padrao");
+  // Template aguardando confirmação (o campo já tem texto escrito).
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateMode | null>(null);
+  // Altura da caixa de evolução fica como o médico deixou (persistida).
+  const EVO_HEIGHT_KEY = "lifeline:evolucao:altura";
+  const evoRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = evoRef.current;
+    if (!el) return;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(EVO_HEIGHT_KEY) : null;
+    if (saved) el.style.height = saved;
+    const ro = new ResizeObserver(() => {
+      if (el.style.height) window.localStorage.setItem(EVO_HEIGHT_KEY, el.style.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [template]);
   // Conteúdo de um template gerado via IA e aplicado sem salvar (Dialog
   // "+ Criar template" → "Usar sem salvar") — não persiste, só fica ativo
   // nesta sessão de edição.
