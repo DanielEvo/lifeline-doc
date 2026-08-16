@@ -559,12 +559,20 @@ Sem migração de dados: `hasCompletePrescriberProfile` deliberadamente não inc
 Verificação: `tsc --noEmit` limpo no projeto inteiro; gate testado visualmente numa rota isolada (validação, label dinâmico, as 10 opções de conselho) — não foi possível testar o fluxo ponta a ponta com conta real porque este ambiente de dev não tem `SUPABASE_URL`/chaves configuradas (confirmado como limitação pré-existente do ambiente, não regressão: login com e-mail inexistente, que só lê, respondeu corretamente).
   `[Claude Code + Lovable]`
 
-### 8.9 P1 — Busca global (`Buscar paciente`) sem dado real pra validar `[Novo em 2026-08-16]`
+### 8.9 P1 — Busca global (`Buscar paciente`): investigação + card de resultado `[Implementado em 2026-08-16]`
 
-Investigação: `searchPatientGlobal`/`lookupPatientByCode` (`clinic.functions.ts`) e as buscas em `patients-registry.server.ts` (`findRegistryByCpf/Email/PublicCode/Rg`, `searchRegistryByName`) foram revisadas linha a linha — nenhum defeito encontrado. A causa mais provável do relato "não funciona" é `patients_registry` estar vazia: essa tabela só é populada por autocadastro real do paciente, e uma busca contra zero linhas retorna "nenhum paciente encontrado" corretamente, o que parece um bug sem ser um.
+Investigação inicial: `searchPatientGlobal`/`lookupPatientByCode` (`clinic.functions.ts`) e as buscas em `patients-registry.server.ts` (`findRegistryByCpf/Email/PublicCode/Rg`, `searchRegistryByName`) foram revisadas linha a linha — nenhum defeito encontrado. A causa mais provável do relato "não funciona" é `patients_registry` estar vazia: essa tabela só é populada por autocadastro real do paciente, e uma busca contra zero linhas retorna "nenhum paciente encontrado" corretamente, o que parece um bug sem ser um.
 - `scripts/seed-test-patients.ts` (novo, mesmo padrão de `scripts/seed-loinc.ts`) cria registros de teste via `createRegistryEntry` — não executável neste ambiente (sem `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`), precisa rodar em ambiente com credencial real (ex.: terminal do Lovable Cloud).
 - Se a busca continuar vazia mesmo com `patients_registry` populada, aí sim é bug — reabrir com dado real em mãos.
-  `[Claude Code]`
+
+Crítica de design, mesma rodada: com dado real de teste (Seção 8.9 acima), o card de resultado mostrou o problema seguinte — `nomeParcial()` (`"Daniel E."`) sozinho não distingue homônimos. `nomeParcial()` **não foi alterada**: a abreviação é intencional (`clinic.functions.ts`, comentário original — "nunca expõe o sobrenome completo na busca"), espelhando o princípio "Identidade não é acesso" da Seção 3. Em vez de reverter a privacidade, o card ganhou reforço mascarado:
+- CPF: só os últimos 5 dígitos (`maskCpfSuffix`, novo em `clinic.functions.ts` — formato diferente do `maskCpf` já existente em `memed.server.ts`, que mostra prefixo+sufixo; não foram unificados de propósito, contextos diferentes).
+- E-mail: início e fim visíveis, meio mascarado, domínio inteiro (`maskEmailMiddle`, novo).
+- LifeLine ID (`publicCode`): completo, sem máscara — já é público por design (Seção 11, glossário).
+- Idade: já existia (`ageFrom`), só não aparecia por falta de `birthDate` nos dados de teste.
+
+Campos ausentes somem da linha sozinhos (`filter(Boolean)`), sem separador sobrando — os 3 registros de `scripts/seed-test-patients.ts` só têm nome+e-mail, então CPF/idade ficam em branco até esse dado existir (self-preenchido pelo paciente, ou reseed com mais campos).
+  `[Claude Code + Lovable]`
 
 ---
 
@@ -622,7 +630,7 @@ Investigação: `searchPatientGlobal`/`lookupPatientByCode` (`clinic.functions.t
 | Adicionada Seção 0.2 — papel deste documento entre os Projects Discovery/Build/Growth | Processo |
 | App do paciente, admin, e fluxo de assinatura NÃO foram relidos nesta rodada — conteúdo da v6 preservado como herdado, não como confirmado | Escopo |
 | 8.8 implementado: gate de cadastro inicial do prescritor (`sobrenome`/`boardCode`, `PrescriberOnboardingGate`) | Implementação |
-| 8.9 investigado: busca global sem bug encontrado — causa provável é `patients_registry` vazia; `scripts/seed-test-patients.ts` criado pra popular dado de teste | Investigação + tooling |
+| 8.9 investigado + implementado: busca global sem bug encontrado (causa provável é `patients_registry` vazia, `scripts/seed-test-patients.ts` criado); card de resultado ganhou CPF/e-mail mascarados + LifeLine ID como reforço de identificação, sem reverter a abreviação intencional do nome | Investigação + implementação |
 
 ---
 
