@@ -13,6 +13,7 @@ import {
   findDoctorByToken,
   getGoogleConfig,
   googleAuthUrl,
+  hasCompletePrescriberProfile,
   isEmailVerified,
   requireDoctor,
   revokeSession,
@@ -35,7 +36,15 @@ type AuthResult =
   | {
       ok: true;
       token: string;
-      doctor: { nome: string; email: string; avatarUrl: string | null; consentVersion: string | null };
+      doctor: {
+        nome: string;
+        email: string;
+        avatarUrl: string | null;
+        consentVersion: string | null;
+        // Gate de primeiro acesso (PRD 8.8) — route.tsx decide se mostra o
+        // formulário de cadastro do prescritor com base nisto.
+        profileComplete: boolean;
+      };
     }
   | { ok: false; error: string };
 
@@ -44,7 +53,13 @@ type RegisterResult =
   | { ok: false; error: string };
 
 function pub(d: Doctor) {
-  return { nome: d.nome, email: d.email, avatarUrl: d.avatarUrl, consentVersion: d.consentVersion };
+  return {
+    nome: d.nome,
+    email: d.email,
+    avatarUrl: d.avatarUrl,
+    consentVersion: d.consentVersion,
+    profileComplete: hasCompletePrescriberProfile(d),
+  };
 }
 
 const origemSchema = z.string().url().max(300);
@@ -219,7 +234,7 @@ export const googleLogin = createServerFn({ method: "POST" })
     const email = "helena.costa@lifeline.med.br";
     let doctor = await findDoctorByEmail(email);
     if (!doctor) {
-      doctor = await createDoctor({ nome: "Dra. Helena Costa", email, provider: "google" });
+      doctor = await createDoctor({ nome: "Helena Costa", email, provider: "google" });
     }
     const token = await createSession(doctor.id);
     return { ok: true, token, doctor: pub(doctor) };

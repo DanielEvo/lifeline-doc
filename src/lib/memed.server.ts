@@ -5,7 +5,7 @@
 // (not_configured/missing_profile), porque um token falso quebraria o
 // embed real do widget.
 
-import type { Doctor } from "./auth.server";
+import { hasCompletePrescriberProfile, type Doctor } from "./auth.server";
 
 // IMPORTANTE: no runtime de edge as env vars só existem por requisição —
 // ler process.env em escopo de módulo devolve undefined e faria
@@ -246,14 +246,7 @@ async function fetchExistingMemedUser(
 
 export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedTokenResult> {
   if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
-  if (
-    !doctor.crm ||
-    !doctor.crmUf ||
-    !doctor.cpfMedico ||
-    !doctor.especialidade ||
-    !doctor.crmCidade ||
-    !doctor.dataNascimento
-  ) {
+  if (!hasCompletePrescriberProfile(doctor)) {
     return { ok: false, error: "missing_profile" };
   }
 
@@ -277,8 +270,16 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
   }
 
   const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
-  const [nome, ...resto] = doctor.nome.trim().split(/\s+/);
-  const sobrenome = resto.join(" ") || nome;
+  // Caminho normal (pós gate de primeiro acesso, PRD 8.8): doctor.nome já é
+  // só o nome próprio e doctor.sobrenome existe de verdade. Fallback só pra
+  // contas que completaram o cadastro ANTES desses dois campos existirem —
+  // aí `nome` ainda guarda o nome completo numa string só.
+  const [nome, sobrenome] = doctor.sobrenome
+    ? [doctor.nome.trim(), doctor.sobrenome.trim()]
+    : (() => {
+        const [primeiro, ...resto] = doctor.nome.trim().split(/\s+/);
+        return [primeiro, resto.join(" ") || primeiro];
+      })();
 
   // cidade/especialidade viram relationships com ID numérico — sem match,
   // omite o relacionamento em vez de falhar (não estão na lista de campos
@@ -300,7 +301,11 @@ export async function getMemedPrescriberToken(doctor: Doctor): Promise<MemedToke
             nome,
             sobrenome,
             cpf: doctor.cpfMedico.replace(/\D/g, ""),
-            board: { board_code: "CRM", board_number: doctor.crm, board_state: doctor.crmUf },
+            board: {
+              board_code: doctor.boardCode ?? "CRM",
+              board_number: doctor.crm,
+              board_state: doctor.crmUf,
+            },
             data_nascimento: toMemedDate(doctor.dataNascimento),
             email: doctor.email,
             telefone: (doctor.telefoneMedico ?? "").replace(/\D/g, ""),

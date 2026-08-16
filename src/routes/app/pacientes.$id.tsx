@@ -103,6 +103,7 @@ import {
   saveMyTemplate,
 } from "@/lib/api/templates.functions";
 import type { EvolutionTemplate } from "@/lib/templates.server";
+import type { BoardCode } from "@/lib/auth.server";
 import { WhatsAppButton } from "@/components/clinic/wa-button";
 import { BiomarkerPanel, ClinicalTimeline, usePatientHistory } from "@/components/clinic/patient-history";
 import { Dictation } from "@/components/clinic/dictation";
@@ -2918,6 +2919,8 @@ function ReceitaDialog({
   }, [widgetConfig.data]);
 
   const [crmForm, setCrmForm] = useState({
+    sobrenome: "",
+    boardCode: "",
     crm: "",
     crmUf: "",
     cpfMedico: "",
@@ -2928,7 +2931,10 @@ function ReceitaDialog({
     localAtendimento: "",
   });
 
-  // Pré-preenche com o que já está no cadastro do médico (/app/perfil).
+  // Pré-preenche com o que já está no cadastro do médico (/app/perfil). Na
+  // prática, quem chega aqui já passou pelo gate de primeiro acesso (PRD 8.8)
+  // e tem sobrenome/boardCode reais — o fallback abaixo só cobre a conta
+  // legada que completou o CRM antes desses dois campos existirem.
   const doctorProfile = useQuery({
     queryKey: ["doctor-profile"],
     queryFn: () => getDoctorProfile({ data: { token } }),
@@ -2938,7 +2944,10 @@ function ReceitaDialog({
   useEffect(() => {
     if (doctorProfile.data?.ok) {
       const p = doctorProfile.data.profile;
+      const [, ...resto] = p.nome.trim().split(/\s+/);
       setCrmForm({
+        sobrenome: p.sobrenome || resto.join(" ") || p.nome,
+        boardCode: p.boardCode || "CRM",
         crm: p.crm,
         crmUf: p.crmUf,
         cpfMedico: p.cpfMedico,
@@ -2951,7 +2960,8 @@ function ReceitaDialog({
     }
   }, [doctorProfile.data]);
   const saveMemed = useMutation({
-    mutationFn: () => saveMemedProfile({ data: { token, ...crmForm } }),
+    mutationFn: () =>
+      saveMemedProfile({ data: { token, ...crmForm, boardCode: crmForm.boardCode as BoardCode } }),
     onSuccess: (r) => {
       if (!r.ok) return toast.error("Não consegui salvar o CRM.");
       toast.success("CRM salvo — gerando token Memed…");

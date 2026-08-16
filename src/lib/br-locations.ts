@@ -1,6 +1,34 @@
 // Listas de apoio ao cadastro do prescritor.
 // Especialidades conforme a Resolução CFM 2.221/2018 (55 especialidades).
 
+// Tipos de registro profissional aceitos pela Memed (board_code, §11 do
+// handover). Rótulo só pra exibição — o código enviado à Memed é sempre a
+// sigla, nunca o texto depois do travessão.
+export const BOARD_CODE_LABELS: Record<string, string> = {
+  CRM: "Medicina",
+  CRO: "Odontologia",
+  COREN: "Enfermagem",
+  CRMV: "Medicina Veterinária",
+  CRF: "Farmácia",
+  CRN: "Nutrição",
+  CREFITO: "Fisioterapia / Terapia Ocupacional",
+  CRP: "Psicologia",
+  CRFa: "Fonoaudiologia",
+  CREF: "Educação Física",
+};
+
+export const BOARD_CODE_OPTIONS = Object.entries(BOARD_CODE_LABELS).map(
+  ([codigo, label]) => `${codigo} — ${label}`,
+);
+
+export function boardCodeFromOption(option: string): string {
+  return option.split(" — ")[0]?.trim() ?? option;
+}
+
+export function optionFromBoardCode(code: string): string {
+  return code && BOARD_CODE_LABELS[code] ? `${code} — ${BOARD_CODE_LABELS[code]}` : code;
+}
+
 export const UFS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB",
   "PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",

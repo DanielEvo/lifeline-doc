@@ -16,12 +16,16 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getDoctorProfile, saveMemedProfile } from "@/lib/api/clinic.functions";
 import { useClinic } from "@/lib/clinic-context";
 import {
+  BOARD_CODE_OPTIONS,
   ESPECIALIDADES,
   UFS,
+  boardCodeFromOption,
   buscarCep,
   formatarCep,
   municipiosDaUf,
+  optionFromBoardCode,
 } from "@/lib/br-locations";
+import type { BoardCode } from "@/lib/auth.server";
 
 export const Route = createFileRoute("/app/perfil")({
   head: () => ({
@@ -45,6 +49,9 @@ export const Route = createFileRoute("/app/perfil")({
 });
 
 const VAZIO = {
+  nome: "",
+  sobrenome: "",
+  boardOption: "",
   crm: "",
   crmUf: "",
   cpfMedico: "",
@@ -71,6 +78,9 @@ function PerfilPage() {
     if (perfil.data?.ok) {
       const p = perfil.data.profile;
       setForm({
+        nome: p.nome,
+        sobrenome: p.sobrenome,
+        boardOption: p.boardCode ? optionFromBoardCode(p.boardCode) : "",
         crm: p.crm,
         crmUf: p.crmUf,
         cpfMedico: p.cpfMedico,
@@ -83,11 +93,16 @@ function PerfilPage() {
     }
   }, [perfil.data]);
 
+  const boardCode = boardCodeFromOption(form.boardOption);
+
   const salvar = useMutation({
     mutationFn: () =>
       saveMemedProfile({
         data: {
           token,
+          nome: form.nome.trim(),
+          sobrenome: form.sobrenome.trim(),
+          boardCode: boardCode as BoardCode,
           crm: form.crm.trim(),
           crmUf: form.crmUf.trim().toUpperCase(),
           cpfMedico: form.cpfMedico.replace(/\D/g, ""),
@@ -109,8 +124,11 @@ function PerfilPage() {
 
   const cpfDigits = form.cpfMedico.replace(/\D/g, "");
   const erros: string[] = [];
-  if (form.crm.trim().length < 1) erros.push("Informe o número do CRM.");
-  if (form.crmUf.trim().length !== 2) erros.push("Informe a UF do CRM (2 letras).");
+  if (form.nome.trim().length < 1) erros.push("Informe seu nome.");
+  if (form.sobrenome.trim().length < 1) erros.push("Informe seu sobrenome.");
+  if (!boardCode) erros.push("Selecione o tipo de registro profissional.");
+  if (form.crm.trim().length < 1) erros.push("Informe o número do registro.");
+  if (form.crmUf.trim().length !== 2) erros.push("Informe a UF do registro (2 letras).");
   if (cpfDigits.length !== 11) erros.push("O CPF deve ter 11 dígitos.");
   if (form.especialidade.trim().length < 2) erros.push("Informe a especialidade.");
   if (form.crmCidade.trim().length < 2) erros.push("Informe a cidade de atuação.");
@@ -179,11 +197,33 @@ function PerfilPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="crm">CRM</Label>
+            <Label htmlFor="nome">Nome</Label>
+            <Input id="nome" maxLength={120} {...campo("nome")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sobrenome">Sobrenome</Label>
+            <Input id="sobrenome" maxLength={120} {...campo("sobrenome")} />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="registroTipo">Registro profissional</Label>
+            <SearchableSelect
+              id="registroTipo"
+              value={form.boardOption}
+              onChange={(v) => setForm((f) => ({ ...f, boardOption: v }))}
+              options={BOARD_CODE_OPTIONS}
+              allowCustom={false}
+              placeholder="Selecione seu conselho…"
+              searchPlaceholder="Buscar…"
+              emptyText="Não encontrado."
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="crm">Número do registro{boardCode ? ` (${boardCode})` : ""}</Label>
             <Input id="crm" placeholder="123456" maxLength={20} {...campo("crm")} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="crmUf">UF do CRM</Label>
+            <Label htmlFor="crmUf">UF do registro</Label>
             <SearchableSelect
               id="crmUf"
               value={form.crmUf}

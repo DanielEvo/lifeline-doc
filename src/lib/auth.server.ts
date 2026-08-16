@@ -9,9 +9,30 @@ import crypto from "node:crypto";
 import { mutateRows, newId, nowIso, readRows } from "./db.server";
 import type { CalendarSettings } from "./clinic-types";
 
+// Tipos de registro profissional aceitos pela Memed (board_code) — CRM não é
+// mais o único: qualquer categoria habilitada a prescrever pela plataforma
+// (§11 do handover Memed). Valores idênticos aos esperados no payload da
+// Memed, sem tradução.
+export const BOARD_CODES = [
+  "CRM",
+  "CRO",
+  "COREN",
+  "CRMV",
+  "CRF",
+  "CRN",
+  "CREFITO",
+  "CRP",
+  "CRFa",
+  "CREF",
+] as const;
+export type BoardCode = (typeof BOARD_CODES)[number];
+
 export type Doctor = {
   id: string;
   nome: string;
+  // Sobrenome separado do nome — a Memed exige os dois como campos distintos
+  // no cadastro do prescritor (nome/sobrenome), não uma string única.
+  sobrenome: string | null;
   email: string;
   passHash: string | null; // null for Google accounts
   salt: string | null;
@@ -20,6 +41,9 @@ export type Doctor = {
   createdAt: string;
   // Credenciais de prescritor — só usadas para registrar o médico na Memed
   // (real API, ver memed.server.ts). Sem elas o token real não é emitido.
+  // `crm`/`crmUf`/`crmCidade` guardam número/UF/cidade do registro pra
+  // QUALQUER boardCode, não só CRM — nome do campo é histórico.
+  boardCode: BoardCode | null;
   crm: string | null;
   crmUf: string | null;
   cpfMedico: string | null;
@@ -102,12 +126,14 @@ export async function createDoctor(input: {
   const doctor: Doctor = {
     id: newId(),
     nome: input.nome,
+    sobrenome: null,
     email: input.email,
     passHash: input.password && salt ? hashPassword(input.password, salt) : null,
     salt,
     provider: input.provider,
     avatarUrl: input.avatarUrl ?? null,
     createdAt: nowIso(),
+    boardCode: null,
     crm: null,
     crmUf: null,
     cpfMedico: null,
@@ -160,6 +186,9 @@ export async function updateDoctorCalendarSettings(
 export async function updateDoctorMemedProfile(
   doctorId: string,
   input: {
+    nome?: string;
+    sobrenome?: string;
+    boardCode?: BoardCode;
     crm: string;
     crmUf: string;
     cpfMedico: string;
@@ -174,6 +203,9 @@ export async function updateDoctorMemedProfile(
   await mutateRows<Doctor>(DOCTORS, (rows) => {
     const d = rows.find((r) => r.id === doctorId);
     if (!d) return;
+    if (input.nome !== undefined) d.nome = input.nome.trim();
+    if (input.sobrenome !== undefined) d.sobrenome = input.sobrenome.trim();
+    if (input.boardCode !== undefined) d.boardCode = input.boardCode;
     d.crm = input.crm.trim();
     d.crmUf = input.crmUf.trim().toUpperCase();
     d.cpfMedico = input.cpfMedico.replace(/\D/g, "");
@@ -187,6 +219,34 @@ export async function updateDoctorMemedProfile(
     updated = { ...d };
   });
   return updated;
+}
+
+/** Mesma condição que já bloqueava a emissão de token Memed
+ *  (getMemedPrescriberToken, antes desta mudança) — fonte única de verdade
+ *  sobre "perfil de prescritor completo", agora também usada pelo gate de
+ *  primeiro acesso em /app. Deliberadamente NÃO inclui `sobrenome`/`boardCode`:
+ *  médicos que já preencheram os campos antigos (antes deste patch) não podem
+ *  ser pegos de surpresa pelo gate novo por causa de dois campos que não
+ *  existiam quando eles completaram o cadastro (ver PRD 8.8, "Compatibilidade
+ *  com contas existentes"). */
+export function hasCompletePrescriberProfile(
+  d: Doctor,
+): d is Doctor & {
+  crm: string;
+  crmUf: string;
+  cpfMedico: string;
+  especialidade: string;
+  crmCidade: string;
+  dataNascimento: string;
+} {
+  return !!(
+    d.crm &&
+    d.crmUf &&
+    d.cpfMedico &&
+    d.especialidade &&
+    d.crmCidade &&
+    d.dataNascimento
+  );
 }
 
 export function verifyPassword(doctor: Doctor, password: string): boolean {

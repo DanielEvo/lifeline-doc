@@ -280,7 +280,7 @@ function LoginPage() {
                       id="nome"
                       value={nome}
                       onChange={(e) => setNome(e.target.value)}
-                      placeholder="Dra. Ana Beatriz"
+                      placeholder="Ana Beatriz Ribeiro"
                       maxLength={120}
                       className="pl-9"
                     />

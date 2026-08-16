@@ -10,6 +10,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import {
+  BOARD_CODES,
   requireDoctor,
   updateDoctorCalendarSettings,
   updateDoctorMemedProfile,
@@ -991,6 +992,11 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       token,
+      // Opcionais: quem já tem nome/sobrenome não precisa reenviar toda vez
+      // que só está editando telefone/local no /app/perfil.
+      nome: z.string().min(1).max(120).optional(),
+      sobrenome: z.string().min(1).max(120),
+      boardCode: z.enum(BOARD_CODES),
       crm: z.string().min(1).max(20),
       crmUf: z.string().length(2),
       cpfMedico: z.string().min(11).max(14),
@@ -1005,6 +1011,9 @@ export const saveMemedProfile = createServerFn({ method: "POST" })
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
     const updated = await updateDoctorMemedProfile(doctor.id, {
+      nome: data.nome,
+      sobrenome: data.sobrenome,
+      boardCode: data.boardCode,
       crm: data.crm,
       crmUf: data.crmUf,
       cpfMedico: data.cpfMedico,
@@ -1697,6 +1706,10 @@ export const getDoctorProfile = createServerFn({ method: "POST" })
       ok: true as const,
       profile: {
         nome: doctor.nome,
+        // Fallback pra contas que já tinham CRM preenchido antes deste campo
+        // existir — só CRM era suportado até aqui, então é uma inferência segura.
+        sobrenome: doctor.sobrenome ?? "",
+        boardCode: doctor.boardCode ?? (doctor.crm ? "CRM" : ""),
         email: doctor.email,
         crm: doctor.crm ?? "",
         crmUf: doctor.crmUf ?? "",

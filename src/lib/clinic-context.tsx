@@ -13,6 +13,9 @@ export type Clinic = {
   email: string;
   avatarUrl: string | null;
   consentVersion?: string | null;
+  // Gate de primeiro acesso (PRD 8.8) — undefined até getMe responder,
+  // mesmo padrão de consentVersion (ver route.tsx).
+  profileComplete?: boolean;
 };
 
 const ClinicCtx = createContext<Clinic | null>(null);

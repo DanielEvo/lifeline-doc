@@ -24,6 +24,7 @@ import { clearSession, getSession, type DoctorSession } from "@/lib/session";
 import { ClinicProvider, DoctorAvatar, type Clinic } from "@/lib/clinic-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ConsentGate } from "@/components/clinic/consent-gate";
+import { PrescriberOnboardingGate } from "@/components/clinic/prescriber-onboarding-gate";
 import { CONSENT_VERSION } from "@/lib/consent";
 
 import { KnowledgeDrawer } from "@/components/clinic/knowledge-drawer";
@@ -97,6 +98,25 @@ function AppLayout() {
           if (r.ok) setClinic((c) => (c ? { ...c, consentVersion: CONSENT_VERSION } : c));
           return r.ok;
         }}
+        onLogout={() => {
+          clearSession();
+          navigate({ to: "/login" });
+        }}
+      />
+    );
+  }
+
+  // PRD 8.8 — cadastro do prescritor completo é requisito da própria Memed
+  // pra liberar (e não revogar) a chave de produção. Vem depois do consentimento
+  // LGPD de propósito: aceite legal sempre antes de dado de negócio.
+  if (meChecked && !clinic.profileComplete) {
+    return (
+      <PrescriberOnboardingGate
+        token={clinic.token}
+        nomeAtual={clinic.nome}
+        onComplete={(nomeCompleto) =>
+          setClinic((c) => (c ? { ...c, nome: nomeCompleto, profileComplete: true } : c))
+        }
         onLogout={() => {
           clearSession();
           navigate({ to: "/login" });
