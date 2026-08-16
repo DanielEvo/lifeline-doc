@@ -427,9 +427,20 @@ export async function checkMemedKeyPair(): Promise<
 // desta conta. Pode ser sobrescrito por env sem alterar código.
 const SANDBOX_DOCTOR_ID = "lifeline-sandbox-prescritor";
 
-export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
-  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
-  const fakeDoctor = {
+export type SandboxDoctorOverrides = Partial<{
+  externalId: string;
+  nome: string;
+  crm: string;
+  crmUf: string;
+  cpfMedico: string;
+  especialidade: string;
+  crmCidade: string;
+  dataNascimento: string; // yyyy-mm-dd
+  email: string;
+}>;
+
+function defaultSandboxDoctor(): Doctor {
+  return {
     id: process.env["MEMED_SANDBOX_EXTERNAL_ID"] || SANDBOX_DOCTOR_ID,
     nome: "Teste Simulação",
     crm: "483920",
@@ -440,5 +451,303 @@ export async function getMemedSandboxToken(): Promise<MemedTokenResult> {
     dataNascimento: "1990-01-01",
     email: "sandbox@lifeline.doc",
   } as Doctor;
+}
+
+// Overrides vêm da própria bancada (§ editor rápido do prescritor teste):
+// quando a Memed rejeita o cadastro sintético (CPF já usado sob outro
+// external_id, CRM inválido etc.), o médico troca os campos na UI e tenta de
+// novo sem depender de variável de ambiente/redeploy. Nunca persiste em
+// disco — só existe na sessão do navegador e é reenviado a cada tentativa.
+export async function getMemedSandboxToken(
+  overrides?: SandboxDoctorOverrides,
+): Promise<MemedTokenResult> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const base = defaultSandboxDoctor();
+  const fakeDoctor: Doctor = {
+    ...base,
+    id: overrides?.externalId?.trim() || base.id,
+    nome: overrides?.nome?.trim() || base.nome,
+    crm: overrides?.crm?.trim() || base.crm,
+    crmUf: overrides?.crmUf?.trim().toUpperCase() || base.crmUf,
+    cpfMedico: overrides?.cpfMedico?.replace(/\D/g, "") || base.cpfMedico,
+    especialidade: overrides?.especialidade?.trim() || base.especialidade,
+    crmCidade: overrides?.crmCidade?.trim() || base.crmCidade,
+    dataNascimento: overrides?.dataNascimento?.trim() || base.dataNascimento,
+    email: overrides?.email?.trim() || base.email,
+  };
   return getMemedPrescriberToken(fakeDoctor);
+}
+
+// Espelha exatamente os defaults que o servidor usaria sem overrides — a
+// bancada usa isso pra pré-preencher o formulário de edição, sem duplicar a
+// lista de campos no cliente.
+export function sandboxDoctorDefaults(): Required<SandboxDoctorOverrides> {
+  const d = defaultSandboxDoctor();
+  return {
+    externalId: d.id,
+    nome: d.nome,
+    crm: d.crm ?? "",
+    crmUf: d.crmUf ?? "",
+    cpfMedico: d.cpfMedico ?? "",
+    especialidade: d.especialidade ?? "",
+    crmCidade: d.crmCidade ?? "",
+    dataNascimento: d.dataNascimento ?? "",
+    email: d.email ?? "",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Bancada — histórico e gestão de prescrições do prescritor sintético
+// (§7 do handover: GET/DELETE /prescricoes, GET url-document/full).
+// ---------------------------------------------------------------------------
+
+export type MemedPrescriptionSummary = {
+  id: string;
+  data: string | null;
+  medicamentos: string[];
+};
+
+export async function getMemedPrescriptionHistory(
+  prescriberToken: string,
+): Promise<
+  | { ok: true; itens: MemedPrescriptionSummary[] }
+  | { ok: false; error: "memed_error"; detail?: string }
+> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/prescricoes?page%5Blimit%5D=10&token=${encodeURIComponent(prescriberToken)}`,
+      { headers: { Accept: "application/vnd.api+json" } },
+    );
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    }
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    const itens: MemedPrescriptionSummary[] = rows.map((r) => ({
+      id: String(r?.id ?? ""),
+      data: r?.attributes?.date ?? r?.attributes?.data ?? null,
+      medicamentos: (Array.isArray(r?.attributes?.medicamentos) ? r.attributes.medicamentos : [])
+        .map((m: any) => String(m?.nome ?? m?.name ?? ""))
+        .filter(Boolean),
+    }));
+    return { ok: true, itens };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+export async function deleteMemedPrescription(
+  prescriberToken: string,
+  prescriptionId: string,
+): Promise<{ ok: true } | { ok: false; error: "memed_error"; detail?: string }> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/prescricoes/${encodeURIComponent(prescriptionId)}?token=${encodeURIComponent(prescriberToken)}`,
+      { method: "DELETE", headers: { Accept: "application/vnd.api+json" } },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: "memed_error", detail: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+export async function getMemedPrescriptionPdfUrl(
+  prescriberToken: string,
+  prescriptionId: string,
+): Promise<{ ok: true; url: string } | { ok: false; error: "memed_error"; detail?: string }> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/prescricoes/${encodeURIComponent(prescriptionId)}/url-document/full?token=${encodeURIComponent(prescriberToken)}`,
+      { headers: { Accept: "application/vnd.api+json" } },
+    );
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    }
+    const attrs = json?.data?.attributes ?? json?.data ?? json;
+    const url = attrs?.url ?? attrs?.link ?? null;
+    if (!url) return { ok: false, error: "memed_error", detail: "Memed não devolveu a URL do PDF." };
+    return { ok: true, url: String(url) };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bancada — protocolos a nível de parceiro (§8 do handover): visíveis a
+// TODOS os prescritores da conta, não só ao sintético — por isso usam
+// api-key/secret-key (nível de conta), não o token de um prescritor.
+// ---------------------------------------------------------------------------
+
+export type MemedProtocolSummary = { id: string; nome: string; itens: number };
+
+export async function listMemedPartnerProtocols(): Promise<
+  { ok: true; itens: MemedProtocolSummary[] } | { ok: false; error: "not_configured" | "memed_error"; detail?: string }
+> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const { apiKey, secretKey } = memedKeys();
+  try {
+    const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
+    const res = await memedFetch(`${memedApiBase()}/protocolos/parceiros?${qs}`, {
+      headers: { Accept: "application/vnd.api+json" },
+    });
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    return {
+      ok: true,
+      itens: rows.map((r) => ({
+        id: String(r?.id ?? ""),
+        nome: String(r?.attributes?.nome ?? "(sem nome)"),
+        itens: Array.isArray(r?.attributes?.medicamentos) ? r.attributes.medicamentos.length : 0,
+      })),
+    };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+export async function deleteMemedPartnerProtocol(
+  protocolId: string,
+): Promise<{ ok: true } | { ok: false; error: "not_configured" | "memed_error"; detail?: string }> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const { apiKey, secretKey } = memedKeys();
+  try {
+    const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
+    const res = await memedFetch(
+      `${memedApiBase()}/protocolos/parceiros/${encodeURIComponent(protocolId)}?${qs}`,
+      { method: "DELETE", headers: { Accept: "application/vnd.api+json" } },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: "memed_error", detail: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+export async function createMemedPartnerProtocol(
+  nome: string,
+  medicamentos: { nome: string; posologia?: string }[],
+): Promise<{ ok: true; id: string } | { ok: false; error: "not_configured" | "memed_error"; detail?: string }> {
+  if (!isMemedConfigured()) return { ok: false, error: "not_configured" };
+  const { apiKey, secretKey } = memedKeys();
+  try {
+    const qs = `api-key=${encodeURIComponent(apiKey!)}&secret-key=${encodeURIComponent(secretKey!)}`;
+    const res = await memedFetch(`${memedApiBase()}/protocolos/parceiros?${qs}`, {
+      method: "POST",
+      headers: { Accept: "application/vnd.api+json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: { type: "protocolos", attributes: { nome: nome.slice(0, 250), medicamentos } },
+      }),
+    });
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    return { ok: true, id: String(json?.data?.id ?? "") };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bancada — impressão / template de receita própria (§9 do handover):
+// configurações de receituário (fonte, cores, margens, cabeçalho/rodapé) e
+// upload de PDF de timbre. Sempre no token do prescritor SINTÉTICO — nunca
+// aplica configuração de impressão num prescritor real a partir da bancada.
+// ---------------------------------------------------------------------------
+
+export type MemedPrintOptionsValue = string | number | boolean | null;
+
+export async function getMemedPrintOptions(
+  prescriberToken: string,
+): Promise<
+  | { ok: true; options: Record<string, MemedPrintOptionsValue> }
+  | { ok: false; error: "memed_error"; detail?: string }
+> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/opcoes-receituario?token=${encodeURIComponent(prescriberToken)}`,
+      { headers: { Accept: "application/vnd.api+json" } },
+    );
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [json?.data].filter(Boolean);
+    const attrs = (rows[0]?.attributes ?? {}) as Record<string, unknown>;
+    // Normaliza pra um shape serializável e previsível — a Memed pode
+    // devolver aninhados que não interessam à bancada (a tela só lê os
+    // campos de fonte/cor/título/rodapé listados em MemedPrintOptionsInput).
+    const options: Record<string, MemedPrintOptionsValue> = {};
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+        options[k] = v;
+      }
+    }
+    return { ok: true, options };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+export type MemedPrintOptionsInput = Partial<{
+  titulo: string;
+  titulo_cor: string;
+  subtitulo: string;
+  subtitulo_cor: string;
+  fonte: string;
+  tamanho_fonte: number;
+  rodape: string;
+  rodape_cor: string;
+}>;
+
+export async function setMemedPrintOptions(
+  prescriberToken: string,
+  options: MemedPrintOptionsInput,
+): Promise<{ ok: true } | { ok: false; error: "memed_error"; detail?: string }> {
+  try {
+    const res = await memedFetch(
+      `${memedApiBase()}/opcoes-receituario?token=${encodeURIComponent(prescriberToken)}`,
+      {
+        method: "POST",
+        headers: { Accept: "application/vnd.api+json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: { type: "configuracoes-prescricao", attributes: options },
+        }),
+      },
+    );
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
+}
+
+// PDF vem como base64 do cliente (mesmo padrão de transcribe.functions.ts
+// para áudio) — decodificado aqui e reempacotado como multipart/form-data,
+// já que a Memed exige esse content-type pra este endpoint específico.
+export async function uploadMemedPrintTemplate(
+  prescriberToken: string,
+  pdfBase64: string,
+  fileName: string,
+): Promise<{ ok: true } | { ok: false; error: "memed_error"; detail?: string }> {
+  try {
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const form = new FormData();
+    form.append("template", new Blob([buffer], { type: "application/pdf" }), fileName || "timbre.pdf");
+    const res = await memedFetch(
+      `${memedApiBase()}/opcoes-receituario/upload-template?token=${encodeURIComponent(prescriberToken)}`,
+      { method: "POST", headers: { Accept: "application/vnd.api+json" }, body: form },
+    );
+    const json: any = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: "memed_error", detail: JSON.stringify(json)?.slice(0, 300) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "memed_error", detail: String(e) };
+  }
 }

@@ -12,6 +12,18 @@ export type MemedPatientPayload = {
   data_nascimento?: string; // formato dd/mm/aaaa
   telefone?: string;
   email?: string;
+  // Alertas de condição (§12.1/12.3 do handover): 1=Aeronautas, 2=Atletas,
+  // 3=Gestantes, 4=Lactantes. Vai junto do setPaciente inicial — não é um
+  // comando separado.
+  categoriesConditions?: number[];
+};
+
+export type MemedLogEntry = {
+  ts: number;
+  kind: "command" | "event";
+  label: string;
+  ok: boolean;
+  detail: string;
 };
 
 
@@ -45,6 +57,22 @@ export type MemedWidgetApi = {
   addItem: (payload: Record<string, unknown>) => Promise<unknown>;
   newPrescription: () => Promise<unknown>;
   hide: () => Promise<unknown>;
+  // Reimpressão/edição de uma prescrição já emitida (§12.11).
+  viewPrescription: (prescriptionId: string) => Promise<unknown>;
+  // Alergias do paciente por ID de princípio ativo — separado de
+  // categoriesConditions, que vai dentro do setPaciente (§12.2).
+  setAllergy: (principioAtivoIds: number[]) => Promise<unknown>;
+  // Ativa um dos 4 temas de receituário pré-configurados (§12.9).
+  activateReceiptTheme: (themeIndex: 1 | 2 | 3 | 4) => Promise<unknown>;
+  // Linhas extras de cabeçalho/rodapé só para esta sessão do módulo — não
+  // persiste na conta Memed (isso é setMemedPrintOptions, via API REST).
+  setAdditionalData: (payload: { header?: Record<string, string>[]; footer?: string }) => Promise<unknown>;
+  // Renomeia o botão/textos de "Protocolos" só nesta sessão do módulo (§12.8).
+  setDictionary: (payload: {
+    protocolPlural?: string;
+    protocolSingular?: string;
+    protocolSaved?: string;
+  }) => Promise<unknown>;
 };
 
 export function MemedPrescriptionWidget({
@@ -58,6 +86,7 @@ export function MemedPrescriptionWidget({
   openLabel,
   openHint,
   onStatusChange,
+  onCommandLog,
 }: {
   token: string;
   scriptUrl: string;
@@ -75,6 +104,10 @@ export function MemedPrescriptionWidget({
   // Notifica cada transição de status — opcional, usado pela bancada de
   // teste para alimentar o indicador de progresso. Não afeta o fluxo real.
   onStatusChange?: (status: "loading" | "ready-to-show" | "ready" | "error") => void;
+  // Notifica cada comando MdHub enviado e evento recebido — opcional, usado
+  // pelo painel de log da bancada. Sem prop, nenhum overhead extra no fluxo
+  // real de prescrição (ReceitaDialog não passa isso).
+  onCommandLog?: (entry: MemedLogEntry) => void;
 }) {
   // "ready-to-show": módulo inicializado (setPaciente/setWorkplace feitos),
   // mas MdHub.module.show ainda não foi chamado — a doc pede explicitamente
@@ -89,10 +122,15 @@ export function MemedPrescriptionWidget({
   const excluidaRef = useRef(onPrescricaoExcluida);
   const readyRef = useRef(onReady);
   const statusChangeRef = useRef(onStatusChange);
+  const logRef = useRef(onCommandLog);
   impressaRef.current = onPrescricaoImpressa;
   excluidaRef.current = onPrescricaoExcluida;
   readyRef.current = onReady;
   statusChangeRef.current = onStatusChange;
+  logRef.current = onCommandLog;
+  const log = (kind: "command" | "event", label: string, ok: boolean, detail: string) => {
+    logRef.current?.({ ts: Date.now(), kind, label, ok, detail: detail.slice(0, 200) });
+  };
   const setStatus = (next: "loading" | "ready-to-show" | "ready" | "error") => {
     _setStatus(next);
     statusChangeRef.current?.(next);
@@ -123,12 +161,28 @@ export function MemedPrescriptionWidget({
     };
     document.body.appendChild(script);
 
+    // Envia um comando MdHub e loga tentativa + resultado — usado por todo o
+    // resto do componente em vez de chamar window.MdHub!.command.send direto,
+    // pra garantir que NENHUM comando fique de fora do log da bancada.
+    const sendCmd = async (moduleName: string, command: string, payload?: unknown) => {
+      try {
+        const res = await window.MdHub!.command.send(moduleName, command, payload);
+        log("command", command, true, res == null ? "(sem retorno)" : JSON.stringify(res));
+        return res;
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        log("command", command, false, detail);
+        throw e;
+      }
+    };
+
     const eventKey = (name: string, data: unknown) => {
       const d = data as { prescricao?: { id?: string | number } };
       return `${name}:${d?.prescricao?.id ?? JSON.stringify(data)?.slice(0, 80)}`;
     };
     const onImpressa = (data: unknown) => {
       if (cancelled) return;
+      log("event", "prescricaoImpressa", true, JSON.stringify(data));
       const k = eventKey("impressa", data);
       if (handledRef.current.has(k)) return;
       handledRef.current.add(k);
@@ -136,6 +190,7 @@ export function MemedPrescriptionWidget({
     };
     const onExcluida = (data: unknown) => {
       if (cancelled) return;
+      log("event", "prescricaoExcluida", true, JSON.stringify(data));
       const k = eventKey("excluida", data);
       if (handledRef.current.has(k)) return;
       handledRef.current.add(k);
@@ -148,16 +203,16 @@ export function MemedPrescriptionWidget({
       window.MdSinapsePrescricao.event.add("core:moduleInit", async (module) => {
         if (module.name !== "plataforma.prescricao" || cancelled) return;
         try {
-          await window.MdHub!.command.send("plataforma.prescricao", "setPaciente", patient);
+          await sendCmd("plataforma.prescricao", "setPaciente", patient);
           if (workplace) {
-            await window.MdHub!.command.send("plataforma.prescricao", "setWorkplace", workplace);
+            await sendCmd("plataforma.prescricao", "setWorkplace", workplace);
           }
           window.MdHub!.event.add("prescricaoImpressa", onImpressa);
           // Evento marcado como obrigatório pela Memed para autorização das
           // credenciais de produção — precisa estar sempre registrado.
           window.MdHub!.event.add("prescricaoExcluida", onExcluida);
           try {
-            await window.MdHub!.command.send("plataforma.prescricao", "setFeatureToggle", {
+            await sendCmd("plataforma.prescricao", "setFeatureToggle", {
               historyPrescription: false,
               dropdownSync: false,
               guidesOnboarding: false,
@@ -192,11 +247,34 @@ export function MemedPrescriptionWidget({
               clearTimeout(fallbackId);
               setStatus("ready");
               readyRef.current?.({
-                addItem: (payload) =>
-                  window.MdHub!.command.send("plataforma.prescricao", "addItem", payload),
-                newPrescription: () =>
-                  window.MdHub!.command.send("plataforma.prescricao", "newPrescription", {}),
-                hide: () => window.MdHub!.module.hide("plataforma.prescricao"),
+                addItem: (payload) => sendCmd("plataforma.prescricao", "addItem", payload),
+                newPrescription: () => sendCmd("plataforma.prescricao", "newPrescription", {}),
+                hide: async () => {
+                  try {
+                    const res = await window.MdHub!.module.hide("plataforma.prescricao");
+                    log("command", "hide", true, "(ok)");
+                    return res;
+                  } catch (e) {
+                    log("command", "hide", false, e instanceof Error ? e.message : String(e));
+                    throw e;
+                  }
+                },
+                viewPrescription: (prescriptionId) =>
+                  sendCmd("plataforma.prescricao", "viewPrescription", prescriptionId),
+                setAllergy: (ids) => sendCmd("plataforma.prescricao", "setAllergy", ids),
+                // Doc oficial é contraditória sobre módulo/comando de find:
+                // a página de opções de receituário mostra
+                // MdHub.command.send("plataforma.sdk", "find", {...}) — segue
+                // esse exemplo, é o único concreto pra este comando.
+                activateReceiptTheme: (themeIndex) =>
+                  sendCmd("plataforma.sdk", "find", {
+                    resource: `opcoes-receituario/ativar/${themeIndex}`,
+                    cache: false,
+                  }),
+                setAdditionalData: (payload) =>
+                  sendCmd("plataforma.prescricao", "setAdditionalData", payload),
+                setDictionary: (payload) =>
+                  sendCmd("plataforma.prescricao", "setDictionary", payload),
               });
             };
             const fallbackId = setTimeout(seguir, 3_000);

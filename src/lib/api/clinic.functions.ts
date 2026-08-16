@@ -72,6 +72,8 @@ import {
   isMemedLikelyOffline,
   memedScriptUrl,
   memedEnvironment,
+  sandboxDoctorDefaults,
+  type SandboxDoctorOverrides,
 } from "../memed.server";
 import { isWhatsAppApiConfigured, sendWhatsAppTextReal } from "../whatsapp.server";
 import { createStripeCheckoutLink, isStripeConfigured } from "../payments.server";
@@ -1189,12 +1191,40 @@ export const confirmMemedPrescription = createServerFn({ method: "POST" })
 // Config para /app/memed-simulacao — prescritor e paciente sintéticos, nunca
 // gravados em prontuário real. Exige sessão válida só para não deixar a rota
 // anônima; NÃO exige crm/especialidade/etc. do médico logado.
-export const getMemedSandboxConfig = createServerFn({ method: "POST" })
+//
+// `overrides`: editor rápido do prescritor teste na bancada — quando a Memed
+// rejeita o cadastro sintético fixo (CPF já usado sob outro external_id,
+// CRM inválido etc.), o médico ajusta os campos na tela e tenta de novo, sem
+// depender de variável de ambiente/redeploy. Nunca persistido — só existe
+// na sessão do navegador, reenviado a cada chamada.
+const sandboxOverridesSchema = z
+  .object({
+    externalId: z.string().max(100).optional(),
+    nome: z.string().max(120).optional(),
+    crm: z.string().max(20).optional(),
+    crmUf: z.string().max(2).optional(),
+    cpfMedico: z.string().max(20).optional(),
+    especialidade: z.string().max(120).optional(),
+    crmCidade: z.string().max(120).optional(),
+    dataNascimento: z.string().max(10).optional(),
+    email: z.string().max(255).optional(),
+  })
+  .partial();
+
+export const getMemedSandboxDefaults = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token }))
   .handler(async ({ data }) => {
     const doctor = await requireDoctor(data.token);
     if (!doctor) return UNAUTH;
-    const result = await getMemedSandboxToken();
+    return { ok: true as const, defaults: sandboxDoctorDefaults() };
+  });
+
+export const getMemedSandboxConfig = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token, overrides: sandboxOverridesSchema.optional() }))
+  .handler(async ({ data }) => {
+    const doctor = await requireDoctor(data.token);
+    if (!doctor) return UNAUTH;
+    const result = await getMemedSandboxToken(data.overrides as SandboxDoctorOverrides | undefined);
     if (!result.ok)
       return {
         ok: false as const,
