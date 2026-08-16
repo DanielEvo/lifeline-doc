@@ -155,6 +155,31 @@ function nomeParcial(fullName: string): string {
   return `${parts[0]} ${parts[parts.length - 1][0]?.toUpperCase() ?? ""}.`;
 }
 
+// Sinais de desambiguação pro resultado de busca (crítica de design,
+// 2026-08-16): "Daniel E." sozinho não distingue homônimos. Em vez de expor
+// nome/CPF/e-mail completos — o que reabriria o vazamento de metadado que
+// nomeParcial() foi desenhada pra evitar — cada campo mostra só o suficiente
+// pra confirmar "é essa pessoa mesmo" sem devolver o dado inteiro. LifeLine
+// ID (publicCode) é a exceção: já é um identificador público por design
+// (glossário do PRD), não precisa de máscara.
+
+/** "12345678910" → "•••.•••.789-10" — só os últimos 5 dígitos (grupo final + verificador). */
+function maskCpfSuffix(cpf: string): string | null {
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11) return null;
+  return `•••.•••.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+/** "daniel.rdg.evo@gmail.com" → "da**********vo@gmail.com" — mascara só a parte local, domínio fica visível. */
+function maskEmailMiddle(email: string): string | null {
+  const [local, domain] = email.trim().split("@");
+  if (!local || !domain) return null;
+  if (local.length <= 4) return `${local[0]}${"*".repeat(Math.max(local.length - 1, 1))}@${domain}`;
+  const visible = 2;
+  const middle = "*".repeat(local.length - visible * 2);
+  return `${local.slice(0, visible)}${middle}${local.slice(-visible)}@${domain}`;
+}
+
 async function hasProfileAccess(
   doctorId: string,
   patient: Patient,
@@ -181,6 +206,10 @@ async function toSearchResult(doctorId: string, r: PatientRegistry) {
     globalId: r.globalId,
     nomeParcial: nomeParcial(r.fullName),
     idade: ageFrom(r.birthDate ?? null),
+    cpfMasked: r.cpf ? maskCpfSuffix(r.cpf) : null,
+    emailMasked: r.email ? maskEmailMiddle(r.email) : null,
+    // Público por design (LifeLine ID) — sem máscara, ver comentário acima.
+    publicCode: r.publicCode,
     // Distingue um registry de conta real do paciente (já usa o app) de um
     // shell criado por outro médico via pré-cadastro.
     jaTemPerfil: r.createdBy.type === "patient",

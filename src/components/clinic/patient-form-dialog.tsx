@@ -441,10 +441,20 @@ export function PatientFormDialog({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <span className="font-medium">{r.nomeParcial}</span>
-                          {r.idade !== null && (
-                            <span className="text-muted-foreground"> · {r.idade} anos</span>
-                          )}
+                          <div>
+                            <span className="font-medium">{r.nomeParcial}</span>
+                            {r.idade !== null && (
+                              <span className="text-muted-foreground"> · {r.idade} anos</span>
+                            )}
+                          </div>
+                          {/* Sinais de desambiguação — nome sozinho não distingue
+                              homônimos. CPF/e-mail vêm mascarados (nunca expõem o
+                              dado inteiro); LifeLine ID é público por design. */}
+                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            {[r.cpfMasked, r.emailMasked, `LifeLine ID ${r.publicCode}`]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
                         </div>
                         {status === "com_acesso" && (
                           <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -878,6 +888,9 @@ type GlobalSearchResult = {
   globalId: string;
   nomeParcial: string;
   idade: number | null;
+  cpfMasked: string | null;
+  emailMasked: string | null;
+  publicCode: string;
   jaTemPerfil: boolean;
   vinculoStatus: VinculoStatus;
 };
