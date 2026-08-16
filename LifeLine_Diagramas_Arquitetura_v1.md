@@ -1,6 +1,8 @@
 # LifeLine — Diagramas de Arquitetura (gerados a partir do código)
 
 > Gerado por leitura direta de `src/lib/*.server.ts` e `src/routes/app/**` (+ um passo dentro de `src/components/clinic/*` sempre que um componente de tela chamava uma `*.functions.ts` diretamente — sem isso, várias arestas reais teriam ficado de fora). Nenhuma relação abaixo foi desenhada sem um `import` ou `.from("...")` correspondente no código. Rodada: 2026-08-16, commit `6edb185`.
+>
+> **Atualização incremental (2026-08-16, mesmo dia):** nó `memedBenchFn` (`src/lib/api/memed-bench.functions.ts`) adicionado ao diagrama da Seção 1 — server functions exclusivas da bancada `memed-simulacao.tsx` (histórico/protocolos/impressão da Memed), sempre via prescritor sintético. Resto do diagrama não reverificado nesta atualização.
 
 ---
 
@@ -24,6 +26,7 @@ flowchart TB
         servicesFn["services.functions"]
         templatesFn["templates.functions"]
         memedCatFn["memed-catalog.functions"]
+        memedBenchFn["memed-bench.functions"]
         categoriesFn["categories.functions"]
         apptTypesFn["appointment-types.functions"]
         transcribeFn["transcribe.functions"]
@@ -105,6 +108,7 @@ flowchart TB
 
     memedSim --> clinicFn
     memedSim --> memedCatFn
+    memedSim --> memedBenchFn
 
     perfil --> clinicFn
 
@@ -147,6 +151,8 @@ flowchart TB
     memedCatFn --> authSrv
     memedCatFn --> memedCatSrv
     memedCatFn --> memedSrv
+    memedBenchFn --> authSrv
+    memedBenchFn --> memedSrv
     transcribeFn --> authSrv
     transcribeFn --> geminiClientSrv
     criteriosFn --> authSrv
@@ -207,7 +213,7 @@ flowchart TB
     classDef ext fill:#666,color:#fff,stroke:#333
 
     class route,idx,pacIdx,pacId,memedSim,perfil,produtos tela
-    class authFn,clinicFn,servicesFn,templatesFn,memedCatFn,categoriesFn,apptTypesFn,criteriosFn,docsFn,pubFn serverfn
+    class authFn,clinicFn,servicesFn,templatesFn,memedCatFn,memedBenchFn,categoriesFn,apptTypesFn,criteriosFn,docsFn,pubFn serverfn
     class transcribeFn shared
     class authSrv,patientsSrv,registrySrv,accessSrv,categoriesSrv,apptTypesSrv,boardSrv,agendaSrv,billingSrv,memedSrv,memedCatSrv,whatsappSrv,paymentsSrv,recordsSrv,servicesSrv,templatesSrv,criteriosSrv,docsSrv,pubSrv,emailSrv,rateLimitSrv,accessLogSrv,resilientSrv,triageSrv lib
     class measurementsSrv,ocrSrv,geminiClientSrv,loincSrv,dbSrv,storeSrv shared

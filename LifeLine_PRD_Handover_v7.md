@@ -72,6 +72,7 @@ flowchart TB
         servicesFn["services.functions"]
         templatesFn["templates.functions"]
         memedCatFn["memed-catalog.functions"]
+        memedBenchFn["memed-bench.functions"]
         categoriesFn["categories.functions"]
         apptTypesFn["appointment-types.functions"]
         transcribeFn["transcribe.functions"]
@@ -152,6 +153,7 @@ flowchart TB
 
     memedSim --> clinicFn
     memedSim --> memedCatFn
+    memedSim --> memedBenchFn
 
     perfil --> clinicFn
 
@@ -193,6 +195,8 @@ flowchart TB
     memedCatFn --> authSrv
     memedCatFn --> memedCatSrv
     memedCatFn --> memedSrv
+    memedBenchFn --> authSrv
+    memedBenchFn --> memedSrv
     transcribeFn --> authSrv
     transcribeFn --> geminiClientSrv
     criteriosFn --> authSrv
@@ -248,7 +252,7 @@ flowchart TB
     classDef ext fill:#666,color:#fff,stroke:#333
 
     class route,idx,pacIdx,pacId,memedSim,perfil,produtos tela
-    class authFn,clinicFn,servicesFn,templatesFn,memedCatFn,categoriesFn,apptTypesFn,criteriosFn,docsFn,pubFn serverfn
+    class authFn,clinicFn,servicesFn,templatesFn,memedCatFn,memedBenchFn,categoriesFn,apptTypesFn,criteriosFn,docsFn,pubFn serverfn
     class transcribeFn shared
     class authSrv,patientsSrv,registrySrv,accessSrv,categoriesSrv,apptTypesSrv,boardSrv,agendaSrv,billingSrv,memedSrv,memedCatSrv,whatsappSrv,paymentsSrv,recordsSrv,servicesSrv,templatesSrv,criteriosSrv,docsSrv,pubSrv,emailSrv,rateLimitSrv,accessLogSrv,resilientSrv,triageSrv lib
     class measurementsSrv,ocrSrv,geminiClientSrv,loincSrv,dbSrv,storeSrv shared
@@ -438,9 +442,11 @@ Conteúdo mantido da v6 sem alteração — esta rodada não releu `auth.functio
 
 `ocr-extraction.server.ts` chama o Gemini pra ler PDF/imagem e devolver biomarcadores candidatos — nunca grava. **Divergência de manutenção nova**: este arquivo tem sua própria implementação de upload/poll/generateContent, paralela à de `gemini-client.server.ts` (que é reusada por `templates.server.ts` e `criterios.server.ts`). Corrigir uma sem a outra é um risco silencioso.
 
-### 5.4 Prescrição digital — Memed `[Verificado v7]`
+### 5.4 Prescrição digital — Memed `[Verificado v7, ampliado em 2026-08-16 — ver 8.11]`
 
 `memed.server.ts` resolve ambiente (sandbox/live) e host de API por variável de ambiente, nunca simula token — sem credencial ou perfil incompleto, cai em erro explícito (`not_configured`/`missing_profile`). `memed-catalog.server.ts` mantém um cache local do catálogo de medicamentos por médico. Consumido por `clinic.functions.ts` (fluxo de prescrição em `pacientes.$id.tsx`) e `memed-catalog.functions.ts` (tela `memed-simulacao.tsx`).
+
+**Novo em 2026-08-16**: `memed-bench.functions.ts` — server functions exclusivas da bancada (`memed-simulacao.tsx`), sempre resolvidas a partir do prescritor SINTÉTICO (`getMemedSandboxToken`, agora com overrides editáveis), nunca do token de um médico real. Cobre histórico/exclusão de prescrição, link+código de desbloqueio, PDF, protocolos de parceiro (listar/criar/excluir) e impressão (configurar + importar timbre PDF). Detalhe completo em 8.11.
 
 ### 5.5 Base de conhecimento clínico `[Verificado v7]`
 
@@ -573,6 +579,44 @@ Crítica de design, mesma rodada: com dado real de teste (Seção 8.9 acima), o 
 
 Campos ausentes somem da linha sozinhos (`filter(Boolean)`), sem separador sobrando — os 3 registros de `scripts/seed-test-patients.ts` só têm nome+e-mail, então CPF/idade ficam em branco até esse dado existir (self-preenchido pelo paciente, ou reseed com mais campos).
   `[Claude Code + Lovable]`
+
+### 8.10 P0 — Requisitos mínimos pra liberação das chaves de produção Memed `[Novo — 2026-08-16, cruzamento HANDOVER_QA_Auditoria_Completa_v1.md × LifeLine_Referencia_Memed.md §11]`
+
+Backlog, ainda não iniciado. Sem estes itens, os critérios de revogação de chave de produção da Memed (`LifeLine_Referencia_Memed.md` §11.5) têm violação ativa confirmada em código nesta data. Dois dos dois ambientes de prescrição do produto são afetados: o da bancada de teste (`/app/memed-simulacao`) e o do prontuário ao final da consulta (`ReceitaDialog` em `pacientes.$id.tsx`) — este último ainda sem layout definitivo (ver decisão de design em aberto, item extra abaixo).
+
+- **Guard de ambiente na bancada de simulação** (QA-95/96) — `getMemedSandboxToken`/`getMemedSandboxConfig` (`memed.server.ts:430-444`, `clinic.functions.ts:1192-1204`) não checam `memedEnvironment() === "live"` antes de rodar; o link "Simulação Memed (QA)" (`route.tsx:225-231`) fica visível a qualquer médico logado, sem gate de admin. Com chave de produção configurada, abrir a bancada cria/usa um prescritor real na Memed produção sob CRM sintético fixo.
+  `[Claude Code]`
+- **Migrar `prescriptions.json`/`consultations.json` de `store.server.ts` pra Postgres** (QA-56/57/58) — mesmo padrão já usado 8x no código. Protege o fluxo de captura de prescrição (`prescricaoImpressa`) contra perda silenciosa de referência assinada pela Memed em caso de cold start.
+  `[Claude Code]`
+- **Reescopar a "receita local"** (QA-90/91) — nunca oferecer o fallback quando `getMemedWidgetConfig` retornar `missing_cpf` (nesse caso o problema é cadastro do paciente, não indisponibilidade da Memed); exigir CPF/passaporte também no caminho local, se ele for mantido.
+  `[Claude Code]`
+- **Selo visual explícito de documento sem assinatura ICP-Brasil real** (QA-92/99) — tanto no dialog de emissão quanto na página pública `/receita/$code`, sempre que o caminho não passar pelo widget oficial Memed.
+  `[Claude Code]`
+- **Guard de auth (ou remoção) em `sealConsultation`/`prescribe`** (`prontuario.functions.ts:16-72`, QA-101) — hoje gerável sem autenticação nenhuma.
+  `[Claude Code]`
+- **Auditar os `setFeatureToggle` enviados hoje** (`memed-prescription-widget.tsx:160`) contra a intenção de produto — confirmar que `editPatient`/`deletePatient`/`removePatient` etc. não deixam a Memed como fonte de verdade paralela do cadastro do paciente. Não coberto pela auditoria de QA original.
+  `[Claude Code]`
+- **Smoke test end-to-end do onboarding do prescritor com conta real** — `hasCompletePrescriberProfile`/`PrescriberOnboardingGate` (item 8.8) só foi validado por `tsc --noEmit` e visualmente; nunca testado ponta a ponta por falta de credenciais Supabase no ambiente de dev.
+  `[Claude Code]`
+
+**Decisão de design em aberto (não é código, é pré-requisito pro item da receita local acima):** layout do `ReceitaDialog` — hoje mistura, na mesma tela, o widget oficial Memed, sugestões de catálogo e o fallback de receita local num único componente de ~300 linhas. Ainda não decidido se o redesenho vira um fluxo de caminho único (widget como tela principal, fallback como estado secundário visualmente distinto, nunca oferecido para `missing_cpf`) ou outra estrutura. Ver conversa de 2026-08-16 pra contexto da recomendação inicial. **Nota**: este item é sobre o `ReceitaDialog` do prontuário (fluxo real) — não se confunde com o redesenho da bancada de teste (8.11), que é uma tela separada e já foi implementado.
+
+### 8.11 P2 — Bancada de prescrição ampliada para cobrir toda a superfície documentada da Memed `[Implementado em 2026-08-16]`
+
+Motivação: usar a bancada (`/app/memed-simulacao`) como ambiente único de teste/depuração de praticamente todo comando/endpoint documentado em `LifeLine_Referencia_Memed.md`, não só `setPaciente`/`addItem`. Redesenho aprovado via `design:design-critique` antes da implementação (ver conversa de 2026-08-16).
+
+- **Editor rápido do prescritor de teste** — `getMemedSandboxToken`/`getMemedSandboxConfig` (`memed.server.ts`, `clinic.functions.ts`) agora aceitam overrides; a bancada expõe os campos do prescritor sintético editáveis e visíveis (nunca mascarados), rotulados como dados fictícios, para corrigir na hora quando a Memed rejeita o cadastro sintético (CPF já usado sob outro `external_id`, CRM inválido etc.) sem precisar mexer em variável de ambiente.
+  `[Claude Code]`
+- **Log unificado de comandos/eventos MdHub** — `MemedPrescriptionWidget` ganhou `onCommandLog` opcional (aditivo, não afeta o `ReceitaDialog` real); a bancada mostra um painel colapsado por padrão que abre sozinho ao primeiro erro, com contador de falhas.
+  `[Claude Code]`
+- **Novo arquivo `src/lib/api/memed-bench.functions.ts`** — histórico/exclusão de prescrição, link+código de desbloqueio, PDF, protocolos de parceiro (listar/criar/excluir) e impressão/template de receita (configurar + importar PDF de timbre). Todas as funções resolvem o token a partir do prescritor SINTÉTICO — nunca do token de um médico real, mesmo que a sessão logada seja de um médico com Memed configurada.
+  `[Claude Code]`
+- Comandos frontend antes não exercitados: `setAllergy`, `categoriesConditions`, `viewPrescription`, `find`/ativar tema de receituário, `setAdditionalData`, `setDictionary` — todos agora expostos em `MemedWidgetApi` e testáveis na bancada.
+  `[Claude Code]`
+- Verificação: `tsc --noEmit` limpo (3 erros de tipo reais corrigidos — retorno não serializável de `getMemedPrintOptions`, acesso a campo ausente em união discriminada). Dev server serviu todos os arquivos novos/editados sem erro de transform/import. Não foi possível validar o fluxo ponta a ponta com a Memed real neste ambiente — mesma limitação de falta de `SUPABASE_URL` já documentada em 8.8.
+  `[Claude Code]`
+
+**Atenção — amplia o raio de alcance de QA-95/96 (8.10)**: a bancada agora também cria/exclui protocolo institucional e sobe template de impressão, e nenhuma dessas funções novas checa `memedEnvironment() === "live"` — o guard de ambiente do item 8.10 segue igualmente pendente, mas cobre mais superfície do que antes.
 
 ---
 
