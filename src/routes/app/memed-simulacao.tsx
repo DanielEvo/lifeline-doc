@@ -30,7 +30,6 @@ import {
   RotateCcw,
   Search,
   Trash2,
-  Upload,
   Wrench,
   X,
 } from "lucide-react";
@@ -773,6 +772,10 @@ function MemedSimulacao() {
             </span>
           )}
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Confere se o par API-KEY/SECRET-KEY configurado no ambiente está ativo na Memed — rode
+          isso primeiro se a simulação não carregar.
+        </p>
 
         {/* ── EDITOR RÁPIDO DO PRESCRITOR DE TESTE ────────────────────── */}
         <Card className="space-y-3 border-l-4 border-l-amber-500 p-4">
@@ -799,8 +802,10 @@ function MemedSimulacao() {
             )}
           </div>
           <p className="text-[11px] leading-snug text-muted-foreground">
-            Se a Memed rejeitar o cadastro sintético (CPF já usado sob outro ID, CRM inválido etc.),
-            ajuste os campos abaixo e recarregue — não precisa mexer em variável de ambiente.
+            É a identidade que a bancada usa pra se autenticar na Memed como se fosse um médico de
+            verdade — sem ela, nada abre. Se a Memed rejeitar o cadastro sintético (CPF já usado
+            sob outro ID, CRM inválido etc.), ajuste os campos abaixo e clique em "Recarregar" —
+            não precisa mexer em variável de ambiente nem reimplantar.
           </p>
           <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             {(
@@ -866,6 +871,11 @@ function MemedSimulacao() {
                 />
               </button>
             </CollapsibleTrigger>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Registra, em ordem, cada comando enviado ao módulo (setPaciente, addItem,
+              setFeatureToggle etc.) e cada evento recebido (prescricaoImpressa, prescricaoExcluida)
+              — abra quando algo não se comportar como esperado; abre sozinho ao primeiro erro.
+            </p>
             <CollapsibleContent className="mt-3">
               {logEntries.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
@@ -897,6 +907,10 @@ function MemedSimulacao() {
           {/* ── COLUNA A — cenário ─────────────────────────────────────── */}
           <Card className="space-y-3 p-4">
             <Label className="text-xs">Cenário</Label>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Escolha um cenário clínico pronto — ao abrir o módulo Memed ao lado, todos os itens
+              dele são injetados automaticamente, sem precisar adicionar um por um.
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {SCENARIOS.map((s, i) => (
                 <Button
@@ -954,6 +968,10 @@ function MemedSimulacao() {
             {/* Alergias e condições — fazem parte do setPaciente/setAllergy */}
             <div className="space-y-2 border-t pt-3">
               <Label className="text-xs">Alergias do paciente teste</Label>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Busque o princípio ativo e adicione — enviado via setAllergy assim que o módulo
+                abrir, pra testar o alerta de alergia da Memed. Recarregue os itens para reenviar.
+              </p>
               <div className="flex gap-2">
                 <Input
                   value={alergiaTermo}
@@ -1014,11 +1032,13 @@ function MemedSimulacao() {
                   ))}
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground">
-                Enviadas via setAllergy assim que o módulo abre — recarregue os itens para reenviar.
-              </p>
 
               <Label className="mt-2 block text-xs">Condições especiais</Label>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Marque quando quiser testar os alertas específicos da Memed (ex.: contraindicação
+                em gestante) — vai junto do setPaciente inicial; mude e recarregue a simulação pra
+                aplicar.
+              </p>
               <div className="space-y-1.5">
                 {CONDICOES.map((c) => (
                   <label key={c.id} className="flex items-center gap-2 text-[11px]">
@@ -1032,9 +1052,6 @@ function MemedSimulacao() {
                   </label>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Vai junto do setPaciente inicial — mude e recarregue a simulação para aplicar.
-              </p>
             </div>
           </Card>
 
@@ -1152,7 +1169,15 @@ function MemedSimulacao() {
 
                 {/* Toolbar de ações do módulo — desabilitada até o widget
                     estar pronto, mesmo padrão de "Recarregar itens" acima. */}
-                <div className="flex flex-wrap items-center gap-1.5 border-y py-2">
+                <div className="space-y-1.5 border-y py-2">
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    Ações do módulo aberto — <strong>Nova prescrição</strong> limpa o formulário sem
+                    fechar; <strong>Fechar módulo</strong> esconde o embed sem perder o que já foi
+                    enviado; <strong>Reabrir por ID</strong> reabre uma prescrição já emitida (cole
+                    o ID que aparece no resultado ao lado); <strong>Ativar tema</strong> troca entre
+                    os 4 modelos de impressão pré-configurados na conta.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1210,6 +1235,7 @@ function MemedSimulacao() {
                     >
                       Ativar tema de receituário
                     </Button>
+                  </div>
                   </div>
                 </div>
 
@@ -1270,10 +1296,20 @@ function MemedSimulacao() {
                 Exportar
               </Button>
             </div>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Aparece assim que a Memed emitir a prescrição no módulo ao lado (evento
+              prescricaoImpressa) — mostra como ela dividiu os documentos (receita simples,
+              controle especial, exame...). "Exportar" salva previsão + resultado num JSON.
+            </p>
             <ResultadoReal data={resultado} />
 
             {resultadoId && (
-              <div className="flex flex-wrap gap-1.5 border-t pt-2.5">
+              <div className="space-y-1.5 border-t pt-2.5">
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Busca o link que o paciente usaria pra ver a receita (com o código de
+                  desbloqueio) e o PDF pronto pra impressão desta prescrição.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1294,6 +1330,7 @@ function MemedSimulacao() {
                   <FileDown className="mr-1.5 h-3 w-3" />
                   Baixar PDF
                 </Button>
+                </div>
               </div>
             )}
             {linkRx.data && (
@@ -1359,6 +1396,10 @@ function MemedSimulacao() {
                 />
               </button>
             </CollapsibleTrigger>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Consulte e limpe dados de teste direto na conta Memed — prescrições emitidas pelo
+              prescritor sintético e protocolos (modelos de receita) cadastrados nesta conta.
+            </p>
             <CollapsibleContent className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1374,6 +1415,10 @@ function MemedSimulacao() {
                     Buscar histórico
                   </Button>
                 </div>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Lista as últimas prescrições emitidas pelo prescritor de teste na Memed — exclua
+                  as que sobraram de teste pra não acumular lixo na conta.
+                </p>
                 {historico.data?.ok && historico.data.itens.length === 0 && (
                   <p className="text-[11px] text-muted-foreground">Nenhuma prescrição encontrada.</p>
                 )}
@@ -1426,6 +1471,12 @@ function MemedSimulacao() {
                     Listar protocolos
                   </Button>
                 </div>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Protocolo é um modelo de receita salvo (nome + lista de itens) que aparece no
+                  botão "Protocolos" dentro do módulo Memed — pra QUALQUER prescritor que use este
+                  mesmo par de chaves, não só o sintético. Liste pra ver o que já existe na conta,
+                  ou exclua os que sobraram de teste.
+                </p>
                 {protocolos.data?.ok && (
                   <ul className="space-y-1.5">
                     {protocolos.data.itens.map((p) => (
@@ -1447,6 +1498,10 @@ function MemedSimulacao() {
                 )}
                 <div className="space-y-1.5 border-t pt-2.5">
                   <Label className="text-[10px] text-muted-foreground">Criar protocolo institucional</Label>
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    Cria um protocolo direto pela API, sem precisar montá-lo dentro do módulo — um
+                    item por linha abaixo. Fica visível a todos os prescritores assim que salvo.
+                  </p>
                   <Input
                     value={novoProtocolo.nome}
                     onChange={(e) => setNovoProtocolo({ ...novoProtocolo, nome: e.target.value })}
@@ -1491,10 +1546,16 @@ function MemedSimulacao() {
                 />
               </button>
             </CollapsibleTrigger>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Configure a aparência da receita impressa (fonte, cores, cabeçalho/rodapé) e importe
+              um timbre próprio — aplicado à conta do prescritor sintético, nunca num médico real.
+            </p>
             <CollapsibleContent className="mt-4 space-y-4">
-              <p className="text-[11px] text-muted-foreground">
-                Aplica no prescritor SINTÉTICO da bancada — nunca num médico real. Fica salvo na
-                conta Memed de teste até ser trocado de novo.
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Como usar: clique em "Carregar configuração atual" pra ver o que já está salvo,
+                ajuste os campos abaixo e "Salvar" grava na conta Memed de teste — a configuração
+                fica valendo até ser trocada de novo (não é por sessão, nem reseta ao recarregar a
+                bancada).
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -1537,6 +1598,11 @@ function MemedSimulacao() {
 
               <div className="space-y-1.5 border-t pt-3">
                 <Label className="text-xs">Importar timbre próprio (PDF de cabeçalho/rodapé)</Label>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Envie um PDF contendo só o cabeçalho e/ou rodapé (sem o corpo da receita) — a
+                  Memed recorta automaticamente e usa como fundo. Precisa ser feito uma vez por
+                  prescritor.
+                </p>
                 <input
                   type="file"
                   accept="application/pdf"
@@ -1552,13 +1618,15 @@ function MemedSimulacao() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
                   </p>
                 )}
-                <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Upload className="h-3 w-3" /> A Memed recorta cabeçalho/rodapé automaticamente do PDF enviado.
-                </p>
               </div>
 
               <div className="space-y-1.5 border-t pt-3">
                 <Label className="text-xs">Renomear "Protocolos" no módulo aberto (setDictionary)</Label>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Troca só os textos do botão "Protocolos" dentro do módulo já aberto — dura
+                  enquanto essa sessão do módulo estiver aberta; recarregar a simulação volta ao
+                  padrão da Memed.
+                </p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Input
                     value={dictForm.protocolPlural}
@@ -1617,9 +1685,17 @@ function MemedSimulacao() {
                 />
               </button>
             </CollapsibleTrigger>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Seu catálogo pessoal de medicamentos/exames com o ID real da Memed — usado pra
+              sugerir itens rápido sem precisar buscar toda vez que for montar um cenário.
+            </p>
             <CollapsibleContent className="mt-4 grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label className="text-xs">Sugestões (mais usados)</Label>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Clique num item pra adicionar direto no módulo aberto — só aparece aqui o que já
+                  está no seu catálogo (colhido de um protocolo ou salvo manualmente ao lado).
+                </p>
                 {entries.length === 0 ? (
                   <p className="text-[11px] text-muted-foreground">
                     Catálogo vazio — colha os IDs dos protocolos ou salve um medicamento seu.
@@ -1671,6 +1747,11 @@ function MemedSimulacao() {
 
               <div className="space-y-2">
                 <Label className="text-xs">Não encontrei o item</Label>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Busque por princípio ativo na base real da Memed quando um medicamento do
+                  cenário não tiver ID salvo no catálogo — útil pra conferir o nome exato antes de
+                  cadastrar.
+                </p>
                 <div className="flex gap-2">
                   <Input
                     value={termo}
@@ -1713,6 +1794,11 @@ function MemedSimulacao() {
 
               <div className="space-y-2">
                 <Label className="text-xs">Salvar um medicamento seu</Label>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Cadastre manualmente um item de texto livre no seu catálogo, sem ID da Memed —
+                  útil pra fórmulas ou itens que a busca não encontrou. "Conferir classe" abre uma
+                  busca pronta sobre a classificação de controlado na Anvisa.
+                </p>
                 <Input
                   value={novo.nome}
                   onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
